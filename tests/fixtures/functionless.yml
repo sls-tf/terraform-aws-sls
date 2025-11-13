@@ -1,0 +1,11 @@
+service: infrastructure-only
+
+provider:
+  name: aws
+  region: us-east-1
+  runtime: nodejs18.x
+
+resources:
+  Resources:
+    MyBucket:
+      Type: AWS::S3::Bucket

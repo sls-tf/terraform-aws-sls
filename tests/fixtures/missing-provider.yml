@@ -1,0 +1,6 @@
+service: test-service
+
+functions:
+  hello:
+    handler: handler.hello
+    runtime: nodejs18.x

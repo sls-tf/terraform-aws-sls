@@ -1,0 +1,15 @@
+service: invalid-action-format-service
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: dev
+  region: us-east-1
+
+functions:
+  hello:
+    handler: hello.handler
+    iamRoleStatements:
+      - Effect: Allow
+        Action: InvalidActionFormat
+        Resource: "arn:aws:s3:::test-bucket/*"

@@ -1,0 +1,20 @@
+service: custom-domain-basepath
+
+provider:
+  name: aws
+  runtime: python3.11
+  region: eu-west-1
+  stage: dev
+  customDomain:
+    domainName: shared.example.com
+    basePath: v1
+    certificateArn: arn:aws:acm:us-east-1:123456789012:certificate/ghi789
+    endpointType: EDGE
+
+functions:
+  endpoint:
+    handler: handler.main
+    events:
+      - http:
+          path: /endpoint
+          method: get

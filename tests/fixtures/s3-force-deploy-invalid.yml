@@ -1,0 +1,12 @@
+service: force-deploy-invalid
+provider:
+  name: aws
+  runtime: nodejs18.x
+
+functions:
+  handler:
+    handler: index.handler
+    events:
+      - s3:
+          bucket: mybucket
+          forceDeploy: true

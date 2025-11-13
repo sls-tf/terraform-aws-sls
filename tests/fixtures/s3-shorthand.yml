@@ -1,0 +1,11 @@
+service: photo-service
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: dev
+
+functions:
+  resize:
+    handler: resize.handler
+    events:
+      - s3: photos

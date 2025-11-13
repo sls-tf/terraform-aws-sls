@@ -1,0 +1,10 @@
+service: memory-max-test
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  memorySize: 10240
+
+functions:
+  hello:
+    handler: handler.hello

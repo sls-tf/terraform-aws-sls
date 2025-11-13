@@ -1,0 +1,16 @@
+service: image-processor
+provider:
+  name: aws
+  runtime: python3.11
+  stage: prod
+
+functions:
+  processImage:
+    handler: app.process_handler
+    events:
+      - s3:
+          bucket: user-uploads
+          event: s3:ObjectCreated:Put
+          rules:
+            - prefix: images/
+            - suffix: .jpg

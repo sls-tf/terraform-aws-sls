@@ -1,0 +1,20 @@
+service: data-pipeline
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: dev
+
+functions:
+  onCreate:
+    handler: onCreate.handler
+    events:
+      - s3:
+          bucket: data-lake
+          event: s3:ObjectCreated:*
+
+  onDelete:
+    handler: onDelete.handler
+    events:
+      - s3:
+          bucket: data-lake
+          event: s3:ObjectRemoved:*

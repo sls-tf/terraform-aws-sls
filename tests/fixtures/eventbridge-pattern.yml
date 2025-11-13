@@ -1,0 +1,18 @@
+service: eventbridge-test
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: eu-west-1
+  stage: dev
+
+functions:
+  ec2Handler:
+    handler: handler.handleEC2
+    events:
+      - eventBridge:
+          pattern:
+            source:
+              - aws.ec2
+            detail-type:
+              - EC2 Instance State-change Notification

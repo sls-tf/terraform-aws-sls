@@ -1,0 +1,11 @@
+service: test-service
+
+provider:
+  name: aws
+  region: us-east-1
+
+functions:
+  hello:
+    handler: handler.hello
+  world:
+    handler: handler.world

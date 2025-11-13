@@ -1,0 +1,25 @@
+service: custom-resources-s3
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+functions:
+  uploader:
+    handler: handler.upload
+
+resources:
+  Resources:
+    UploadBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: my-upload-bucket-${self:provider.stage}
+
+    DataBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        AccessControl: Private
+        VersioningConfiguration:
+          Status: Enabled

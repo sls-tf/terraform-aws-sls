@@ -1,0 +1,20 @@
+service: mixed-service
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: dev
+
+functions:
+  handler1:
+    handler: h1.handler
+    events:
+      - http:
+          path: /test
+          method: get
+      - s3: bucket1
+  handler2:
+    handler: h2.handler
+    events:
+      - http:
+          path: /other
+          method: post

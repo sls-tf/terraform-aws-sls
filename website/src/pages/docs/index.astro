@@ -1,0 +1,211 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="Documentation - sls.tf">
+  <div class="container">
+    <div class="docs-header">
+      <h1>Documentation</h1>
+      <p class="docs-description">
+        Complete guide to using sls.tf for Serverless Framework to Terraform conversion
+      </p>
+    </div>
+
+    <div class="docs-grid">
+      <div class="doc-section">
+        <h2>Getting Started</h2>
+        <div class="doc-links">
+          <a href="/docs/quick-start" class="doc-link">
+            <h3>🚀 Quick Start</h3>
+            <p>Get up and running in 5 minutes with your first conversion</p>
+          </a>
+          <a href="/docs/installation" class="doc-link">
+            <h3>📦 Installation</h3>
+            <p>How to install and set up sls.tf in your project</p>
+          </a>
+          <a href="/docs/configuration" class="doc-link">
+            <h3>⚙️ Configuration</h3>
+            <p>Advanced configuration options and best practices</p>
+          </a>
+        </div>
+      </div>
+
+      <div class="doc-section">
+        <h2>API Reference</h2>
+        <div class="doc-links">
+          <a href="/docs/api/variables" class="doc-link">
+            <h3>🔧 Variables</h3>
+            <p>Understanding variable resolution and interpolation</p>
+          </a>
+          <a href="/docs/api/outputs" class="doc-link">
+            <h3>📤 Outputs</h3>
+            <p>Accessing generated resource outputs</p>
+          </a>
+          <a href="/docs/api/resource-types" class="doc-link">
+            <h3>🏗️ Resource Types</h3>
+            <p>Supported AWS resources and configurations</p>
+          </a>
+        </div>
+      </div>
+
+      <div class="doc-section">
+        <h2>Features</h2>
+        <div class="doc-links">
+          <a href="/docs/features/lambda-functions" class="doc-link">
+            <h3>⚡ Lambda Functions</h3>
+            <p>Complete Lambda function support with all configurations</p>
+          </a>
+          <a href="/docs/features/typescript" class="doc-link">
+            <h3>📘 TypeScript Support</h3>
+            <p>Using TypeScript configurations with async exports</p>
+          </a>
+        </div>
+      </div>
+
+      <div class="doc-section">
+        <h2>Examples</h2>
+        <div class="doc-links">
+          <a href="/docs/examples/basic-service" class="doc-link">
+            <h3>🏠 Basic Service</h3>
+            <p>Simple HTTP API with Lambda functions</p>
+          </a>
+          <a href="/docs/examples/typescript-config" class="doc-link">
+            <h3>📘 TypeScript Config</h3>
+            <p>Advanced configuration using TypeScript</p>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="quick-start">
+      <h2>Quick Start Example</h2>
+      <div class="example-code">
+        <h3>1. Add sls.tf to your project</h3>
+        <p>Add the sls.tf submodule to your project and initialize it.</p>
+
+        <h3>2. Create your Terraform configuration</h3>
+        <p>Create a simple Terraform configuration file that references your serverless.yml.</p>
+
+        <h3>3. Deploy with Terraform</h3>
+        <p>Run the standard Terraform commands to deploy your infrastructure.</p>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+
+  .docs-header {
+    text-align: center;
+    margin-bottom: 4rem;
+  }
+
+  .docs-header h1 {
+    font-size: 3rem;
+    font-weight: 700;
+    color: #1a202c;
+    margin-bottom: 1rem;
+  }
+
+  .docs-description {
+    font-size: 1.2rem;
+    color: #4a5568;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .docs-grid {
+    display: grid;
+    gap: 3rem;
+    margin-bottom: 4rem;
+  }
+
+  .doc-section h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #1a202c;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #e2e8f0;
+  }
+
+  .doc-links {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .doc-link {
+    display: block;
+    padding: 1.5rem;
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.2s ease;
+  }
+
+  .doc-link:hover {
+    background: white;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    transform: translateY(-2px);
+  }
+
+  .doc-link h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 0.5rem;
+  }
+
+  .doc-link p {
+    color: #4a5568;
+    line-height: 1.5;
+  }
+
+  .quick-start {
+    background: #f7fafc;
+    padding: 2rem;
+    border-radius: 1rem;
+    border: 1px solid #e2e8f0;
+  }
+
+  .quick-start h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #1a202c;
+    margin-bottom: 2rem;
+  }
+
+  .example-code {
+    display: grid;
+    gap: 2rem;
+  }
+
+  .example-code h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1a202c;
+    margin-bottom: 1rem;
+  }
+
+  
+  @media (max-width: 768px) {
+    .container {
+      padding: 1rem;
+    }
+
+    .docs-header h1 {
+      font-size: 2rem;
+    }
+
+    .doc-links {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

@@ -1,0 +1,5 @@
+    # Type validation: {{{path}}} must be {{{type}}}
+    # Schema path: {{{schemaPath}}}
+    try(local.parsed_config{{{accessor}}}, null) != null && !{{{typeCheck}}} ? [
+      "Field '{{{field}}}' must be of type '{{{type}}}', got: ${type(try(local.parsed_config{{{accessor}}}, null))}. {{#if description}}{{{description}}}. {{/if}}(Schema: {{{schemaPath}}})"
+    ] : []

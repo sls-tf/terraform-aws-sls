@@ -1,0 +1,10 @@
+service: test-framework-invalid
+frameworkVersion: '1.83.0'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+
+functions:
+  hello:
+    handler: handler.hello

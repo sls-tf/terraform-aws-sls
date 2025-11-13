@@ -1,0 +1,9 @@
+service: test-service
+
+provider:
+  name: gcp
+  runtime: nodejs18.x
+
+functions:
+  hello:
+    handler: handler.hello

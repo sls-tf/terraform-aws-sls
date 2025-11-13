@@ -1,0 +1,14 @@
+service: invalid-batch-size
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: dev
+
+functions:
+  processStream:
+    handler: stream.handler
+    events:
+      - stream:
+          type: dynamodb
+          arn: arn:aws:dynamodb:us-east-1:123456789012:table/MyTable/stream/2024-01-01T00:00:00.000
+          batchSize: 15000  # Invalid: exceeds 10000 limit

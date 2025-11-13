@@ -1,0 +1,43 @@
+service: custom-resources-mixed
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: eu-west-1
+  stage: dev
+
+functions:
+  api:
+    handler: index.handler
+
+resources:
+  Resources:
+    MyBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: my-data-bucket
+
+    MyTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: my-table
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        BillingMode: PROVISIONED
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
+
+    MyQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: my-queue
+
+    MyTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: my-topic

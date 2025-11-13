@@ -1,0 +1,28 @@
+service: custom-resources-sqs
+
+provider:
+  name: aws
+  runtime: python3.11
+  region: us-west-2
+  stage: prod
+
+functions:
+  processor:
+    handler: handler.process
+
+resources:
+  Resources:
+    TaskQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: task-queue-prod
+        DelaySeconds: 5
+        VisibilityTimeout: 300
+        MessageRetentionPeriod: 1209600  # 14 days
+
+    FifoQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: fifo-queue-prod.fifo
+        FifoQueue: true
+        ContentBasedDeduplication: true

@@ -1,0 +1,10 @@
+    # Range validation: {{{field}}}
+    # Schema path: {{{schemaPath}}}
+{{#if minimum}}    # Minimum: {{{minimum}}}{{#if exclusiveMinimum}} (exclusive){{/if}}
+{{/if}}{{#if maximum}}    # Maximum: {{{maximum}}}{{#if exclusiveMaximum}} (exclusive){{/if}}
+{{/if}}    try(local.parsed_config{{{accessor}}}, null) != null && (
+{{#if minimum}}      {{#if exclusiveMinimum}}try(tonumber(local.parsed_config{{{accessor}}}), 0) <= {{{minimum}}}{{else}}try(tonumber(local.parsed_config{{{accessor}}}), 0) < {{{minimum}}}{{/if}}{{#if maximum}} || {{/if}}
+{{/if}}{{#if maximum}}      {{#if exclusiveMaximum}}try(tonumber(local.parsed_config{{{accessor}}}), 0) >= {{{maximum}}}{{else}}try(tonumber(local.parsed_config{{{accessor}}}), 0) > {{{maximum}}}{{/if}}
+{{/if}}    ) ? [
+      "{{{field}}} must be {{#if minimum}}{{#if exclusiveMinimum}}greater than{{else}}at least{{/if}} {{{minimum}}}{{/if}}{{#if minimum}}{{#if maximum}} and {{/if}}{{/if}}{{#if maximum}}{{#if exclusiveMaximum}}less than{{else}}at most{{/if}} {{{maximum}}}{{/if}}, got: ${try(local.parsed_config{{{accessor}}}, "")}. {{#if description}}{{{description}}}. {{/if}}(Schema: {{{schemaPath}}})"
+    ] : []

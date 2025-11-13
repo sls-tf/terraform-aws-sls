@@ -1,0 +1,6 @@
+    # Enum validation: {{{field}}}
+    # Schema path: {{{schemaPath}}}
+    # Allowed values: {{{allowedValues}}}
+    try(local.parsed_config{{{accessor}}}, null) != null && !contains([{{#each values}}"{{{this}}}"{{#unless @last}}, {{/unless}}{{/each}}], try(local.parsed_config{{{accessor}}}, "")) ? [
+      "Invalid {{{field}}}. Must be one of: [{{{allowedValues}}}], got: '${try(local.parsed_config{{{accessor}}}, "")}'.{{#if suggestion}} {{{suggestion}}}.{{/if}} {{#if description}}{{{description}}}. {{/if}}(Schema: {{{schemaPath}}})"
+    ] : []

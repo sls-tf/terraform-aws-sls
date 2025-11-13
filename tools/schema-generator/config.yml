@@ -1,0 +1,27 @@
+# Schema Generator Configuration
+#
+# This file controls which parts of the Serverless Framework schema
+# are included in the generated Terraform validation code.
+
+# Paths to include from the schema (JSON pointer format)
+# Only constraints from these paths will be generated
+included_paths:
+  - /properties/service          # Service identifier
+  - /properties/provider         # Cloud provider configuration
+  - /properties/functions        # Lambda function definitions
+  # Add more paths as roadmap features are implemented:
+  # - /properties/resources      # CloudFormation resources
+  # - /properties/custom         # Custom configuration
+
+# Paths to exclude from the schema (JSON pointer format)
+# Constraints from these paths will NOT be generated
+excluded_paths:
+  - /properties/plugins          # Plugin configuration (too variable)
+  - /properties/package          # Packaging options (not yet implemented)
+  # Add more exclusions as needed
+
+# Notes:
+# - Paths use JSON Pointer format: /properties/field/subfield
+# - Wildcards are supported: /properties/functions/*
+# - Update this file as you implement more roadmap features
+# - Run 'npm run generate:validation:all' after updating

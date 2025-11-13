@@ -1,0 +1,42 @@
+service: cloudfront-s3-simple
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+resources:
+  Resources:
+    StaticSiteBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: static-site-bucket
+
+    StaticSiteDistribution:
+      Type: AWS::CloudFront::Distribution
+      Properties:
+        DistributionConfig:
+          Origins:
+            - DomainName: static-site-bucket.s3.amazonaws.com
+              Id: S3Origin
+              S3OriginConfig:
+                OriginAccessIdentity: origin-access-identity/cloudfront/ABCDEFG1234567
+          Enabled: true
+          DefaultRootObject: index.html
+          DefaultCacheBehavior:
+            TargetOriginId: S3Origin
+            ForwardedValues:
+              QueryString: false
+              Cookies:
+                Forward: none
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - GET
+              - HEAD
+            CachedMethods:
+              - GET
+              - HEAD
+          ViewerCertificate:
+            CloudFrontDefaultCertificate: true

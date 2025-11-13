@@ -1,0 +1,14 @@
+service: existing-bucket-service
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: prod
+
+functions:
+  processUploads:
+    handler: process.handler
+    events:
+      - s3:
+          bucket: existing-uploads-bucket
+          event: s3:ObjectCreated:*
+          existing: true

@@ -1,0 +1,21 @@
+service: custom-domain-regional
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-west-2
+  stage: prod
+  customDomain:
+    domainName: api-regional.example.com
+    certificateArn: arn:aws:acm:us-west-2:123456789012:certificate/def456
+    endpointType: REGIONAL
+    createRoute53Record: false
+    stage: production
+
+functions:
+  api:
+    handler: index.handler
+    events:
+      - http:
+          path: /api
+          method: post

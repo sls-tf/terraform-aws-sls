@@ -1,0 +1,18 @@
+service: test-variables
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: ${self:custom.defaultStage}
+  region: us-east-1
+
+custom:
+  defaultStage: dev
+  bucketName: ${self:service}-${self:provider.stage}-bucket
+
+functions:
+  hello:
+    handler: handler.hello
+    environment:
+      STAGE: ${self:provider.stage}
+      BUCKET: ${self:custom.bucketName}

@@ -1,0 +1,18 @@
+service: duplicate-config
+provider:
+  name: aws
+  runtime: nodejs18.x
+
+functions:
+  handler1:
+    handler: h1.handler
+    events:
+      - s3:
+          bucket: mybucket
+          event: s3:ObjectCreated:*
+  handler2:
+    handler: h2.handler
+    events:
+      - s3:
+          bucket: mybucket
+          event: s3:ObjectCreated:*

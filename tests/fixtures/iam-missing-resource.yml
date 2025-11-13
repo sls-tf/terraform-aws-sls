@@ -1,0 +1,14 @@
+service: missing-resource-service
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: dev
+  region: us-east-1
+
+functions:
+  hello:
+    handler: hello.handler
+    iamRoleStatements:
+      - Effect: Allow
+        Action: s3:GetObject

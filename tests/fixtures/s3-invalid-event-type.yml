@@ -1,0 +1,12 @@
+service: invalid-event
+provider:
+  name: aws
+  runtime: nodejs18.x
+
+functions:
+  handler:
+    handler: index.handler
+    events:
+      - s3:
+          bucket: mybucket
+          event: s3:InvalidEventType

@@ -1,0 +1,10 @@
+service: test-framework-2
+frameworkVersion: '2.72.3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+
+functions:
+  hello:
+    handler: handler.hello

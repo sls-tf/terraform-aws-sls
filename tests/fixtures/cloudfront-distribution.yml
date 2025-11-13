@@ -1,0 +1,122 @@
+service: cloudfront-test
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+functions:
+  api:
+    handler: index.handler
+
+resources:
+  Resources:
+    # S3 bucket for static website hosting
+    WebAppBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: my-cloudfront-webapp-${self:provider.stage}
+        AccessControl: Private
+
+    # CloudFront distribution for the web app
+    WebAppCloudFrontDistribution:
+      Type: AWS::CloudFront::Distribution
+      Properties:
+        DistributionConfig:
+          Origins:
+            - DomainName: my-cloudfront-webapp-${self:provider.stage}.s3.amazonaws.com
+              Id: WebApp
+              CustomOriginConfig:
+                HTTPPort: 80
+                HTTPSPort: 443
+                OriginProtocolPolicy: https-only
+          Enabled: true
+          DefaultRootObject: index.html
+          Comment: CloudFront distribution for web app
+          CustomErrorResponses:
+            - ErrorCode: 404
+              ResponseCode: 200
+              ResponsePagePath: /index.html
+            - ErrorCode: 403
+              ResponseCode: 200
+              ResponsePagePath: /index.html
+          DefaultCacheBehavior:
+            AllowedMethods:
+              - DELETE
+              - GET
+              - HEAD
+              - OPTIONS
+              - PATCH
+              - POST
+              - PUT
+            TargetOriginId: WebApp
+            ForwardedValues:
+              QueryString: false
+              Cookies:
+                Forward: none
+            ViewerProtocolPolicy: redirect-to-https
+            Compress: true
+            MinTTL: 0
+            DefaultTTL: 86400
+            MaxTTL: 31536000
+          ViewerCertificate:
+            CloudFrontDefaultCertificate: true
+          PriceClass: PriceClass_100
+
+    # CloudFront distribution with custom SSL certificate
+    ApiCloudFrontDistribution:
+      Type: AWS::CloudFront::Distribution
+      Properties:
+        DistributionConfig:
+          Origins:
+            - DomainName: api.example.com
+              Id: ApiGateway
+              CustomOriginConfig:
+                HTTPPort: 80
+                HTTPSPort: 443
+                OriginProtocolPolicy: https-only
+                OriginSSLProtocols:
+                  - TLSv1.2
+              CustomHeaders:
+                - HeaderName: X-Custom-Header
+                  HeaderValue: CustomValue
+          Enabled: true
+          Aliases:
+            - cdn.example.com
+          DefaultCacheBehavior:
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+            CachedMethods:
+              - GET
+              - HEAD
+            TargetOriginId: ApiGateway
+            ForwardedValues:
+              QueryString: true
+              Headers:
+                - Authorization
+                - Accept
+              Cookies:
+                Forward: none
+            ViewerProtocolPolicy: https-only
+            Compress: true
+          ViewerCertificate:
+            AcmCertificateArn: arn:aws:acm:us-east-1:123456789012:certificate/12345678-1234-1234-1234-123456789012
+            MinimumProtocolVersion: TLSv1.2_2021
+            SslSupportMethod: sni-only
+          PriceClass: PriceClass_All
+          WebACLId: arn:aws:wafv2:us-east-1:123456789012:global/webacl/test/a1b2c3d4
+          Logging:
+            Bucket: my-logs.s3.amazonaws.com
+            Prefix: cloudfront/
+            IncludeCookies: false
+          Restrictions:
+            GeoRestriction:
+              RestrictionType: whitelist
+              Locations:
+                - US
+                - GB
+                - DE

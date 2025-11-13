@@ -1,0 +1,19 @@
+service: invalid-basepath
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+  customDomain:
+    domainName: api.example.com
+    basePath: /invalid/path  # Invalid: has slashes
+    certificateArn: arn:aws:acm:us-east-1:123456789012:certificate/abc123
+
+functions:
+  hello:
+    handler: index.handler
+    events:
+      - http:
+          path: /hello
+          method: get

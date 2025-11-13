@@ -1,0 +1,13 @@
+service: invalid-sqs-batch
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: dev
+
+functions:
+  processQueue:
+    handler: queue.handler
+    events:
+      - sqs:
+          arn: arn:aws:sqs:us-east-1:123456789012:my-queue
+          batchSize: 15  # Invalid: standard queue max is 10

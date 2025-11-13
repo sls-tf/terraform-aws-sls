@@ -1,0 +1,11 @@
+service: test-service
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  memorySize: 512
+  timeout: 10
+
+functions:
+  hello:
+    handler: handler.hello

@@ -1,0 +1,15 @@
+service: invalid-effect-service
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: dev
+  region: us-east-1
+  iamRoleStatements:
+    - Effect: Invalid
+      Action: s3:GetObject
+      Resource: "arn:aws:s3:::test-bucket/*"
+
+functions:
+  hello:
+    handler: hello.handler

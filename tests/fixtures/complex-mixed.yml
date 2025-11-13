@@ -1,0 +1,24 @@
+service: complex-mixed-test
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  memorySize: 512
+  timeout: 10
+
+functions:
+  inherits_all:
+    handler: handler.inheritsAll
+    description: Inherits all provider defaults
+
+  overrides_runtime:
+    handler: handler.overridesRuntime
+    runtime: python3.9
+    description: Overrides runtime only
+
+  overrides_all:
+    handler: handler.overridesAll
+    runtime: python3.11
+    memorySize: 2048
+    timeout: 60
+    description: Overrides all properties

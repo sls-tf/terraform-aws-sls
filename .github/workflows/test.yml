@@ -1,0 +1,223 @@
+name: Terraform Tests
+
+on:
+  pull_request:
+    branches: ["*"]
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      test_mode:
+        description: 'Test mode'
+        required: true
+        default: 'localstack'
+        type: choice
+        options:
+          - localstack
+          - aws
+          - both
+
+jobs:
+  localstack-tests:
+    name: LocalStack Tests
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.test_mode == 'localstack' ||
+      github.event.inputs.test_mode == 'both'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.5"
+
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.terraform.d/plugin-cache
+          key: ${{ runner.os }}-terraform-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: |
+            ${{ runner.os }}-terraform-
+
+      - name: Start LocalStack
+        run: |
+          make localstack-start
+
+      - name: Verify LocalStack health
+        run: |
+          make localstack-health
+
+      - name: Run Terraform tests with LocalStack
+        id: test
+        run: |
+          terraform init
+          terraform test -var="use_localstack=true" -json | tee test-results.json
+        continue-on-error: true
+
+      - name: Parse test results
+        if: always()
+        run: |
+          echo "## LocalStack Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Count test results
+          PASSED=$(grep -c '"status":"pass"' test-results.json || echo "0")
+          FAILED=$(grep -c '"status":"fail"' test-results.json || echo "0")
+          SKIPPED=$(grep -c '"status":"skip"' test-results.json || echo "0")
+
+          echo "- ✅ Passed: $PASSED" >> $GITHUB_STEP_SUMMARY
+          echo "- ❌ Failed: $FAILED" >> $GITHUB_STEP_SUMMARY
+          echo "- ⏭️  Skipped: $SKIPPED" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Show failures if any
+          if [ "$FAILED" != "0" ]; then
+            echo "### Failed Tests" >> $GITHUB_STEP_SUMMARY
+            grep '"status":"fail"' test-results.json | jq -r '.test_file' | sort -u >> $GITHUB_STEP_SUMMARY || true
+          fi
+
+      - name: Show LocalStack logs on failure
+        if: failure()
+        run: |
+          echo "LocalStack container logs:"
+          make localstack-logs
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: localstack-test-results
+          path: test-results.json
+          retention-days: 30
+
+      - name: Cleanup LocalStack
+        if: always()
+        run: |
+          make localstack-clean
+
+      - name: Fail if tests failed
+        if: steps.test.outcome == 'failure'
+        run: exit 1
+
+  aws-tests:
+    name: AWS Tests (Manual)
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      (github.event.inputs.test_mode == 'aws' || github.event.inputs.test_mode == 'both')
+
+    # Only run with explicit AWS credentials
+    environment: aws-testing
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.5"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.terraform.d/plugin-cache
+          key: ${{ runner.os }}-terraform-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: |
+            ${{ runner.os }}-terraform-
+
+      - name: Run Terraform tests with AWS
+        id: test
+        run: |
+          terraform init
+          terraform test -var="use_localstack=false" -json | tee test-results-aws.json
+        continue-on-error: true
+
+      - name: Parse test results
+        if: always()
+        run: |
+          echo "## AWS Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Count test results
+          PASSED=$(grep -c '"status":"pass"' test-results-aws.json || echo "0")
+          FAILED=$(grep -c '"status":"fail"' test-results-aws.json || echo "0")
+          SKIPPED=$(grep -c '"status":"skip"' test-results-aws.json || echo "0")
+
+          echo "- ✅ Passed: $PASSED" >> $GITHUB_STEP_SUMMARY
+          echo "- ❌ Failed: $FAILED" >> $GITHUB_STEP_SUMMARY
+          echo "- ⏭️  Skipped: $SKIPPED" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Show failures if any
+          if [ "$FAILED" != "0" ]; then
+            echo "### Failed Tests" >> $GITHUB_STEP_SUMMARY
+            grep '"status":"fail"' test-results-aws.json | jq -r '.test_file' | sort -u >> $GITHUB_STEP_SUMMARY || true
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aws-test-results
+          path: test-results-aws.json
+          retention-days: 30
+
+      - name: Fail if tests failed
+        if: steps.test.outcome == 'failure'
+        run: exit 1
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [localstack-tests]
+    if: always()
+
+    steps:
+      - name: Download LocalStack test results
+        uses: actions/download-artifact@v4
+        with:
+          name: localstack-test-results
+        continue-on-error: true
+
+      - name: Download AWS test results
+        uses: actions/download-artifact@v4
+        with:
+          name: aws-test-results
+        continue-on-error: true
+
+      - name: Generate summary
+        run: |
+          echo "# Test Execution Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Test run completed for commit ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f test-results.json ]; then
+            echo "## LocalStack Results" >> $GITHUB_STEP_SUMMARY
+            PASSED=$(grep -c '"status":"pass"' test-results.json || echo "0")
+            FAILED=$(grep -c '"status":"fail"' test-results.json || echo "0")
+            echo "- Passed: $PASSED" >> $GITHUB_STEP_SUMMARY
+            echo "- Failed: $FAILED" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -f test-results-aws.json ]; then
+            echo "## AWS Results" >> $GITHUB_STEP_SUMMARY
+            PASSED=$(grep -c '"status":"pass"' test-results-aws.json || echo "0")
+            FAILED=$(grep -c '"status":"fail"' test-results-aws.json || echo "0")
+            echo "- Passed: $PASSED" >> $GITHUB_STEP_SUMMARY
+            echo "- Failed: $FAILED" >> $GITHUB_STEP_SUMMARY
+          fi

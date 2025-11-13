@@ -1,0 +1,10 @@
+service: invalid-bucket-name
+provider:
+  name: aws
+  runtime: nodejs18.x
+
+functions:
+  handler:
+    handler: index.handler
+    events:
+      - s3: INVALID_BUCKET_NAME_UPPERCASE

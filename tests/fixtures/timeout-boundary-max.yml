@@ -1,0 +1,10 @@
+service: timeout-max-test
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  timeout: 900
+
+functions:
+  hello:
+    handler: handler.hello

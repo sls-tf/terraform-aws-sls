@@ -1,0 +1,296 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Installation - sls.tf">
+  <div class="container">
+    <div class="docs-header">
+      <h1>Installation</h1>
+      <p class="docs-description">
+        How to install and set up sls.tf in your project
+      </p>
+    </div>
+
+    <div class="content">
+      <section class="section">
+        <h2>Prerequisites</h2>
+        <p>
+          Before you begin, make sure you have the following tools installed:
+        </p>
+        <ul>
+          <li><strong>Terraform (v1.0+)</strong> - For infrastructure deployment</li>
+          <li><strong>Node.js (v16+)</strong> - For development and testing</li>
+          <li><strong>Git</strong> - For version control</li>
+          <li><strong>AWS CLI</strong> - Configured with appropriate credentials</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>Quick Start</h2>
+        <p>
+          The fastest way to get started with sls.tf is to add it as a submodule to your existing project:
+        </p>
+
+        <div class="code-block">
+          <h4>Add sls.tf submodule</h4>
+          <pre><code># Add the sls.tf submodule to your project
+git submodule add https://github.com/your-org/sls.tf.git modules/sls.tf
+git submodule update --init --recursive</code></pre>
+        </div>
+
+        <div class="code-block">
+          <h4>Initialize Terraform</h4>
+          <pre><code># Navigate to your project directory
+cd your-project
+
+# Initialize Terraform
+terraform init
+
+# Plan your infrastructure
+terraform plan
+
+# Apply the changes
+terraform apply</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Manual Installation</h2>
+        <p>
+          If you prefer not to use Git submodules, you can manually download and include sls.tf:
+        </p>
+
+        <div class="code-block">
+          <h4>Download and setup</h4>
+          <pre><code># Clone the repository
+git clone https://github.com/your-org/sls.tf.git
+
+# Copy to your project modules directory
+cp -r sls.tf /path/to/your-project/modules/
+
+# Navigate to your project
+cd /path/to/your-project
+
+# Initialize Terraform
+terraform init</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Basic Configuration</h2>
+        <p>
+          Create a simple Terraform configuration to use sls.tf:
+        </p>
+
+        <div class="code-block">
+          <h4>main.tf</h4>
+          <pre><code>terraform {'{'}
+  required_version = ">= 1.0"
+  required_providers {'{'}
+    aws = {'{'}
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    {'}'}
+  {'}'}
+{'}'}
+
+provider "aws" {'{'}
+  region = "us-east-1"
+{'}'}
+
+module "serverless" {'{'}
+  source = "./modules/sls.tf"
+
+  # Path to your serverless.yml file
+  config_file = "${path.root}/serverless.yml"
+
+  # AWS region for deployment
+  region = "us-east-1"
+
+  # Environment variables
+  environment = "production"
+{'}'}</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Configuration File</h2>
+        <p>
+          Make sure you have a serverless.yml file in your project root:
+        </p>
+
+        <div class="code-block">
+          <h4>serverless.yml</h4>
+          <pre><code>service: my-api
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+
+functions:
+  hello:
+    handler: handler.hello
+    events:
+      - http:
+          path: hello
+          method: get</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Verification</h2>
+        <p>
+          After installation, verify everything is working correctly:
+        </p>
+
+        <div class="code-block">
+          <h4>Test the installation</h4>
+          <pre><code># Check Terraform configuration
+terraform validate
+
+# See what will be created
+terraform plan
+
+# If everything looks good, apply
+terraform apply</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Next Steps</h2>
+        <p>
+          Once you have sls.tf installed and working, check out these guides:
+        </p>
+        <ul>
+          <li><a href="/docs/configuration">Configuration Guide</a> - Advanced configuration options</li>
+          <li><a href="/docs/examples/basic-service">Basic Example</a> - Complete working example</li>
+          <li><a href="/docs/features/typescript">TypeScript Support</a> - Using TypeScript configurations</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+
+  .docs-header {
+    text-align: center;
+    margin-bottom: 4rem;
+  }
+
+  .docs-header h1 {
+    font-size: 3rem;
+    font-weight: 700;
+    color: #1a202c;
+    margin-bottom: 1rem;
+  }
+
+  .docs-description {
+    font-size: 1.2rem;
+    color: #4a5568;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .content {
+    line-height: 1.7;
+  }
+
+  .section {
+    margin-bottom: 3rem;
+  }
+
+  .section h2 {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #1a202c;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 0.5rem;
+  }
+
+  .section h4 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin: 1.5rem 0 0.5rem 0;
+  }
+
+  .section p {
+    color: #4a5568;
+    margin-bottom: 1rem;
+  }
+
+  .section ul {
+    margin: 1rem 0;
+    padding-left: 2rem;
+  }
+
+  .section li {
+    color: #4a5568;
+    margin-bottom: 0.5rem;
+  }
+
+  .section a {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .section a:hover {
+    text-decoration: underline;
+  }
+
+  .code-block {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+  }
+
+  .code-block pre {
+    background: #1a202c;
+    color: #e2e8f0;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: 0;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .code-block code {
+    background: none;
+    padding: 0;
+    color: inherit;
+  }
+
+  @media (max-width: 768px) {
+    .container {
+      padding: 1rem;
+    }
+
+    .docs-header h1 {
+      font-size: 2rem;
+    }
+
+    .section h2 {
+      font-size: 1.5rem;
+    }
+
+    .code-block {
+      padding: 1rem;
+    }
+
+    .code-block pre {
+      font-size: 0.8rem;
+    }
+  }
+</style>

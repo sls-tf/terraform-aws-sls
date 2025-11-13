@@ -1,0 +1,238 @@
+name: Schema Update Detection
+
+# This workflow automatically checks for updates to Serverless Framework schemas
+# and creates a pull request when new versions are detected.
+
+on:
+  schedule:
+    # Run weekly on Mondays at 9 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force schema update even if no changes detected'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-schema-updates:
+    name: Check for Schema Updates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    outputs:
+      has_changes: ${{ steps.detect_changes.outputs.has_changes }}
+      pr_number: ${{ steps.create_pr.outputs.pr_number }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: tools/schema-generator/package-lock.json
+
+      - name: Install dependencies
+        working-directory: tools/schema-generator
+        run: npm ci
+
+      - name: Fetch Serverless Framework releases
+        id: fetch_releases
+        run: |
+          echo "Fetching latest Serverless Framework releases..."
+
+          # Fetch latest v2.x release
+          V2_LATEST=$(curl -s https://api.github.com/repos/serverless/serverless/releases | \
+            jq -r '.[] | select(.tag_name | startswith("v2.")) | .tag_name' | \
+            head -1)
+
+          # Fetch latest v3.x release
+          V3_LATEST=$(curl -s https://api.github.com/repos/serverless/serverless/releases | \
+            jq -r '.[] | select(.tag_name | startswith("v3.")) | .tag_name' | \
+            head -1)
+
+          # Fetch latest v4.x release
+          V4_LATEST=$(curl -s https://api.github.com/repos/serverless/serverless/releases | \
+            jq -r '.[] | select(.tag_name | startswith("v4.")) | .tag_name' | \
+            head -1)
+
+          echo "Latest versions:"
+          echo "  v2: $V2_LATEST"
+          echo "  v3: $V3_LATEST"
+          echo "  v4: $V4_LATEST"
+
+          echo "v2_latest=$V2_LATEST" >> $GITHUB_OUTPUT
+          echo "v3_latest=$V3_LATEST" >> $GITHUB_OUTPUT
+          echo "v4_latest=$V4_LATEST" >> $GITHUB_OUTPUT
+
+      - name: Download updated schemas
+        run: |
+          echo "Downloading schemas from Serverless Framework repository..."
+
+          # Schema URLs (from the official JSON schema repository)
+          V2_SCHEMA_URL="https://raw.githubusercontent.com/serverless/serverless/main/lib/configSchema/schema.json"
+          V3_SCHEMA_URL="https://raw.githubusercontent.com/serverless/serverless/main/lib/configSchema/schema.json"
+          V4_SCHEMA_URL="https://raw.githubusercontent.com/serverless/serverless/main/lib/configSchema/schema.json"
+
+          # Download to temporary location
+          mkdir -p /tmp/schemas
+          curl -s "$V2_SCHEMA_URL" > /tmp/schemas/v2.x.json || echo "Failed to download v2 schema"
+          curl -s "$V3_SCHEMA_URL" > /tmp/schemas/v3.x.json || echo "Failed to download v3 schema"
+          curl -s "$V4_SCHEMA_URL" > /tmp/schemas/v4.x.json || echo "Failed to download v4 schema"
+
+          echo "✓ Schemas downloaded"
+
+      - name: Compute schema checksums
+        id: checksums
+        run: |
+          echo "Computing checksums..."
+
+          # Current checksums
+          CURRENT_V2=$(sha256sum schemas/serverless-framework/v2.x.json | awk '{print $1}')
+          CURRENT_V3=$(sha256sum schemas/serverless-framework/v3.x.json | awk '{print $1}')
+          CURRENT_V4=$(sha256sum schemas/serverless-framework/v4.x.json | awk '{print $1}')
+
+          # New checksums
+          NEW_V2=$(sha256sum /tmp/schemas/v2.x.json | awk '{print $1}')
+          NEW_V3=$(sha256sum /tmp/schemas/v3.x.json | awk '{print $1}')
+          NEW_V4=$(sha256sum /tmp/schemas/v4.x.json | awk '{print $1}')
+
+          echo "Current checksums:"
+          echo "  v2: $CURRENT_V2"
+          echo "  v3: $CURRENT_V3"
+          echo "  v4: $CURRENT_V4"
+
+          echo "New checksums:"
+          echo "  v2: $NEW_V2"
+          echo "  v3: $NEW_V3"
+          echo "  v4: $NEW_V4"
+
+          echo "current_v2=$CURRENT_V2" >> $GITHUB_OUTPUT
+          echo "current_v3=$CURRENT_V3" >> $GITHUB_OUTPUT
+          echo "current_v4=$CURRENT_V4" >> $GITHUB_OUTPUT
+          echo "new_v2=$NEW_V2" >> $GITHUB_OUTPUT
+          echo "new_v3=$NEW_V3" >> $GITHUB_OUTPUT
+          echo "new_v4=$NEW_V4" >> $GITHUB_OUTPUT
+
+      - name: Detect changes
+        id: detect_changes
+        run: |
+          FORCE="${{ github.event.inputs.force }}"
+
+          if [ "${{ steps.checksums.outputs.current_v2 }}" != "${{ steps.checksums.outputs.new_v2 }}" ] || \
+             [ "${{ steps.checksums.outputs.current_v3 }}" != "${{ steps.checksums.outputs.new_v3 }}" ] || \
+             [ "${{ steps.checksums.outputs.current_v4 }}" != "${{ steps.checksums.outputs.new_v4 }}" ] || \
+             [ "$FORCE" == "true" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "✓ Schema changes detected (or forced update)"
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "✓ No schema changes detected"
+          fi
+
+      - name: Update vendored schemas
+        if: steps.detect_changes.outputs.has_changes == 'true'
+        run: |
+          echo "Updating vendored schemas..."
+          cp /tmp/schemas/v2.x.json schemas/serverless-framework/v2.x.json
+          cp /tmp/schemas/v3.x.json schemas/serverless-framework/v3.x.json
+          cp /tmp/schemas/v4.x.json schemas/serverless-framework/v4.x.json
+
+          # Update README with current date
+          DATE=$(date +%Y-%m-%d)
+          sed -i "s/Last Updated: .*/Last Updated: $DATE/" schemas/serverless-framework/README.md
+
+          echo "✓ Schemas updated"
+
+      - name: Regenerate validation files
+        if: steps.detect_changes.outputs.has_changes == 'true'
+        run: |
+          echo "Regenerating validation files..."
+          npm run generate:validation
+          echo "✓ Validation files regenerated"
+
+      - name: Create schema diff summary
+        if: steps.detect_changes.outputs.has_changes == 'true'
+        id: diff_summary
+        run: |
+          echo "Creating diff summary..."
+
+          # Count validation rule changes
+          git diff --stat generated/ > /tmp/diff_stats.txt
+          cat /tmp/diff_stats.txt
+
+          # Create summary
+          {
+            echo "## Schema Update Summary"
+            echo ""
+            echo "### Latest Versions"
+            echo "- v2.x: ${{ steps.fetch_releases.outputs.v2_latest }}"
+            echo "- v3.x: ${{ steps.fetch_releases.outputs.v3_latest }}"
+            echo "- v4.x: ${{ steps.fetch_releases.outputs.v4_latest }}"
+            echo ""
+            echo "### Changed Files"
+            echo '```'
+            cat /tmp/diff_stats.txt
+            echo '```'
+            echo ""
+            echo "### Review Checklist"
+            echo "- [ ] Verify all tests pass"
+            echo "- [ ] Review validation rule changes"
+            echo "- [ ] Check for breaking changes in schema"
+            echo "- [ ] Update documentation if needed"
+          } > /tmp/pr_body.md
+
+          cat /tmp/pr_body.md
+
+      - name: Create Pull Request
+        if: steps.detect_changes.outputs.has_changes == 'true'
+        id: create_pr
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            Update Serverless Framework schemas
+
+            - v2.x: ${{ steps.fetch_releases.outputs.v2_latest }}
+            - v3.x: ${{ steps.fetch_releases.outputs.v3_latest }}
+            - v4.x: ${{ steps.fetch_releases.outputs.v4_latest }}
+
+            Regenerated validation files with schema-generator v0.1.0
+          branch: schema-update-${{ github.run_number }}
+          delete-branch: true
+          title: 'chore: Update Serverless Framework schemas'
+          body-path: /tmp/pr_body.md
+          labels: |
+            automated
+            schema-update
+            dependencies
+
+      - name: Report results
+        run: |
+          echo "## Schema Update Check Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.detect_changes.outputs.has_changes }}" == "true" ]; then
+            echo "✅ **Changes Detected:** Yes" >> $GITHUB_STEP_SUMMARY
+            echo "📝 **Pull Request:** #${{ steps.create_pr.outputs.pull-request-number }}" >> $GITHUB_STEP_SUMMARY
+            echo "🔗 **URL:** ${{ steps.create_pr.outputs.pull-request-url }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ **Changes Detected:** No" >> $GITHUB_STEP_SUMMARY
+            echo "📋 **Status:** Schemas are up to date" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Latest Versions:**" >> $GITHUB_STEP_SUMMARY
+          echo "- v2.x: ${{ steps.fetch_releases.outputs.v2_latest }}" >> $GITHUB_STEP_SUMMARY
+          echo "- v3.x: ${{ steps.fetch_releases.outputs.v3_latest }}" >> $GITHUB_STEP_SUMMARY
+          echo "- v4.x: ${{ steps.fetch_releases.outputs.v4_latest }}" >> $GITHUB_STEP_SUMMARY

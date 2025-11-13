@@ -1,0 +1,16 @@
+service: versioned-storage
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: prod
+  s3:
+    archiveBucket:
+      name: my-archive-bucket-prod-unique
+      versioningConfiguration:
+        Status: Enabled
+
+functions:
+  archiver:
+    handler: archive.handler
+    events:
+      - s3: archiveBucket

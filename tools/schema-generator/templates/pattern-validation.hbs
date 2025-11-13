@@ -1,0 +1,6 @@
+    # Pattern validation: {{{field}}}
+    # Schema path: {{{schemaPath}}}
+    # Pattern: {{{pattern}}}
+    try(local.parsed_config{{{accessor}}}, null) != null && !can(regex("{{{pattern}}}", try(local.parsed_config{{{accessor}}}, ""))) ? [
+      "Field '{{{field}}}' does not match required pattern: {{{pattern}}}. Got: '${try(local.parsed_config{{{accessor}}}, "")}'. {{#if description}}{{{description}}}. {{/if}}(Schema: {{{schemaPath}}})"
+    ] : []

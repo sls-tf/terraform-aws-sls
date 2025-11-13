@@ -1,0 +1,20 @@
+service: invalid-cert-region
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+  customDomain:
+    domainName: api.example.com
+    # EDGE endpoint requires us-east-1, but this cert is in us-west-2
+    certificateArn: arn:aws:acm:us-west-2:123456789012:certificate/wrong123
+    endpointType: EDGE
+
+functions:
+  hello:
+    handler: index.handler
+    events:
+      - http:
+          path: /hello
+          method: get

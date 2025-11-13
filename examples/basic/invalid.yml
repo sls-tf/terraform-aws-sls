@@ -1,0 +1,8 @@
+service: invalid-service
+provider:
+  name: aws
+  runtime: nodejs18.x
+  this is invalid YAML syntax
+functions:
+  test:
+    handler: index.test

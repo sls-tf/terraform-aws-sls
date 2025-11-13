@@ -1,0 +1,16 @@
+service: stream-processor
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: dev
+  region: us-east-1
+
+functions:
+  processStream:
+    handler: stream.handler
+    events:
+      - stream:
+          type: dynamodb
+          arn: arn:aws:dynamodb:us-east-1:123456789012:table/MyTable/stream/2024-01-01T00:00:00.000
+          batchSize: 100
+          startingPosition: TRIM_HORIZON

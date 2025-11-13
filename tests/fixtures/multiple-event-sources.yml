@@ -1,0 +1,18 @@
+service: multi-event-service
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: dev
+
+functions:
+  processor:
+    handler: processor.handler
+    events:
+      - stream:
+          type: dynamodb
+          arn: arn:aws:dynamodb:us-east-1:123456789012:table/Table1/stream/2024-01-01T00:00:00.000
+      - sqs:
+          arn: arn:aws:sqs:us-east-1:123456789012:queue1
+      - http:
+          path: /api
+          method: get

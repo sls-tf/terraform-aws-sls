@@ -1,0 +1,9 @@
+service: test-service
+provider:
+  name: aws
+  runtime: nodejs18.x
+functions:
+  getPosts:
+    handler: posts.get
+    events:
+      - http: GET /users/{id}/posts/{postId}

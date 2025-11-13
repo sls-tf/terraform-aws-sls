@@ -1,0 +1,26 @@
+service: custom-resources-unsupported
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+functions:
+  handler:
+    handler: index.handler
+
+resources:
+  Resources:
+    MyBucket:
+      Type: AWS::S3::Bucket
+
+    MyLambda:
+      Type: AWS::Lambda::Function
+      Properties:
+        FunctionName: some-function
+
+    MyPolicy:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: some-role

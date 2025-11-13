@@ -1,0 +1,8 @@
+service: test-service
+provider:
+  name: aws
+  runtime: nodejs18.x
+  invalid indentation here
+functions:
+  hello:
+    handler: handler.hello

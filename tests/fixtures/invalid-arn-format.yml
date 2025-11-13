@@ -1,0 +1,13 @@
+service: invalid-arn
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: dev
+
+functions:
+  processStream:
+    handler: stream.handler
+    events:
+      - stream:
+          type: dynamodb
+          arn: not-a-valid-arn  # Invalid ARN format

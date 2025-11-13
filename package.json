@@ -1,0 +1,52 @@
+{
+  "name": "sls-tf",
+  "version": "0.1.0",
+  "description": "Serverless Framework to Terraform converter - A pure Terraform module that converts serverless.yml/ts configurations into native AWS resources",
+  "main": "scripts/typescript-parser.js",
+  "private": true,
+  "scripts": {
+    "install-deps": "cd scripts && npm install",
+    "test-parser": "node scripts/typescript-parser.js",
+    "generate:validation": "node tools/schema-generator/bin/schema-generator.js --schema-version=all",
+    "generate:validation:v2": "node tools/schema-generator/bin/schema-generator.js --schema-version=2",
+    "generate:validation:v3": "node tools/schema-generator/bin/schema-generator.js --schema-version=3",
+    "generate:validation:v4": "node tools/schema-generator/bin/schema-generator.js --schema-version=4",
+    "test:schema-generator": "cd tools/schema-generator && npm test",
+    "website:dev": "cd website && npm run dev",
+    "website:build": "cd website && npm run build",
+    "website:preview": "cd website && npm run preview",
+    "website:test": "cd website && npm run test"
+  },
+  "keywords": [
+    "serverless",
+    "terraform",
+    "aws",
+    "lambda",
+    "api-gateway",
+    "infrastructure-as-code",
+    "serverless-framework",
+    "typescript"
+  ],
+  "author": "sls.tf contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sls-tf/sls.tf.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sls-tf/sls.tf/issues"
+  },
+  "homepage": "https://sls.tf",
+  "files": [
+    "*.tf",
+    "scripts/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "peerDependencies": {
+    "terraform": ">=1.0"
+  }
+}

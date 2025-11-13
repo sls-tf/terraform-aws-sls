@@ -1,0 +1,10 @@
+service: memory-min-test
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  memorySize: 128
+
+functions:
+  hello:
+    handler: handler.hello

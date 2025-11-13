@@ -1,0 +1,10 @@
+service: simple-function
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: dev
+
+functions:
+  simpleFunc:
+    handler: index.handler
+    # No events defined

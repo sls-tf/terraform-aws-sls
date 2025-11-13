@@ -1,0 +1,19 @@
+service: custom-bus-test
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+functions:
+  customHandler:
+    handler: handler.process
+    events:
+      - eventBridge:
+          eventBus: custom-event-bus
+          pattern:
+            source:
+              - my.custom.source
+          description: Custom event bus handler
+          enabled: true

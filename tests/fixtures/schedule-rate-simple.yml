@@ -1,0 +1,13 @@
+service: schedule-test
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+functions:
+  cronJob:
+    handler: handler.run
+    events:
+      - schedule: rate(5 minutes)

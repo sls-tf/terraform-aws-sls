@@ -1,0 +1,30 @@
+service: infrastructure-only-service
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-west-2
+  stage: prod
+
+resources:
+  Resources:
+    MyBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: my-serverless-bucket
+    MyTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: my-serverless-table
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+
+custom:
+  bucketName: my-serverless-bucket
+  tableName: my-serverless-table

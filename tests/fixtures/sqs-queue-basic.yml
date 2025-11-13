@@ -1,0 +1,14 @@
+service: queue-consumer
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: dev
+  region: us-east-1
+
+functions:
+  processQueue:
+    handler: queue.handler
+    events:
+      - sqs:
+          arn: arn:aws:sqs:us-east-1:123456789012:my-queue
+          batchSize: 10

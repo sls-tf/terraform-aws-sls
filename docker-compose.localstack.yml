@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  localstack:
+    container_name: sls-tf-localstack
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566"  # LocalStack gateway
+    environment:
+      # Services to enable
+      - SERVICES=lambda,apigateway,s3,iam,dynamodb,sqs,sns,events,route53
+      # Performance optimizations
+      - LAMBDA_EXECUTOR=docker-reuse
+      - PERSISTENCE=0
+      - EAGER_SERVICE_LOADING=1
+      - DEBUG=0
+      # Docker configuration
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "./.localstack:/etc/localstack/init/ready.d"
+    networks:
+      - localstack-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+networks:
+  localstack-network:
+    driver: bridge

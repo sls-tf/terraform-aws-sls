@@ -1,0 +1,10 @@
+service: timeout-min-test
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  timeout: 1
+
+functions:
+  hello:
+    handler: handler.hello

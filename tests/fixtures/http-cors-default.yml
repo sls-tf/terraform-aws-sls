@@ -1,0 +1,12 @@
+service: test-service
+provider:
+  name: aws
+  runtime: nodejs18.x
+functions:
+  createUser:
+    handler: users.create
+    events:
+      - http:
+          path: /users
+          method: POST
+          cors: true

@@ -1,0 +1,5 @@
+# LocalStack Configuration
+# This file is optional and can be used for future customization
+
+# For now, we rely on environment variables in docker-compose.localstack.yml
+# See: https://docs.localstack.cloud/references/configuration/

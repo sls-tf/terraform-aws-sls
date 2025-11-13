@@ -1,0 +1,26 @@
+service: custom-resources-sns
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+functions:
+  notifier:
+    handler: handler.notify
+
+resources:
+  Resources:
+    AlertTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: alert-topic-dev
+        DisplayName: Alert Notifications
+
+    EventTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: event-topic-dev.fifo
+        FifoTopic: true
+        ContentBasedDeduplication: true

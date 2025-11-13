@@ -1,0 +1,354 @@
+{
+	"title": "JSON Schema for serverless framework v4.x",
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"type": "object",
+	"required": ["service", "provider"],
+	"properties": {
+		"service": {
+			"oneOf": [
+				{
+					"type": "string",
+					"description": "Unique service identifier"
+				},
+				{
+					"type": "object",
+					"description": "Service configuration object",
+					"required": ["name"],
+					"properties": {
+						"name": {
+							"type": "string",
+							"description": "Service name"
+						}
+					}
+				}
+			]
+		},
+		"frameworkVersion": {
+			"type": "string",
+			"description": "Serverless framework version constraint (e.g., '4', '>=4.0.0 <5.0.0')"
+		},
+		"useDotenv": {
+			"type": "boolean",
+			"description": "Enable dotenv file loading",
+			"default": false
+		},
+		"custom": {
+			"type": "object",
+			"description": "Custom service configuration for plugins and user-defined values",
+			"additionalProperties": true
+		},
+		"functions": {
+			"type": "object",
+			"description": "Function definitions",
+			"patternProperties": {
+				"^[a-zA-Z0-9_-]+$": {
+					"type": "object",
+					"description": "Function definition",
+					"required": ["handler"],
+					"properties": {
+						"handler": {
+							"type": "string",
+							"description": "Function entry point. Syntax varies by runtime"
+						},
+						"runtime": {
+							"type": "string",
+							"description": "Function-specific runtime override"
+						},
+						"memorySize": {
+							"type": "number",
+							"description": "Memory allocation in MB",
+							"minimum": 128,
+							"maximum": 10240
+						},
+						"timeout": {
+							"type": "number",
+							"description": "Function timeout in seconds",
+							"minimum": 1,
+							"maximum": 900
+						},
+						"architecture": {
+							"type": "string",
+							"description": "Function-specific architecture",
+							"enum": ["x86_64", "arm64"]
+						},
+						"environment": {
+							"type": "object",
+							"description": "Function-specific environment variables",
+							"additionalProperties": {
+								"type": "string"
+							}
+						},
+						"events": {
+							"type": "array",
+							"description": "List of event triggers",
+							"items": {
+								"type": "object",
+								"description": "Event configuration"
+							}
+						},
+						"layers": {
+							"type": "array",
+							"description": "Lambda layers",
+							"items": {
+								"type": "string",
+								"description": "Layer ARN"
+							}
+						},
+						"url": {
+							"oneOf": [
+								{
+									"type": "boolean",
+									"description": "Enable function URL"
+								},
+								{
+									"type": "object",
+									"description": "Function URL configuration",
+									"properties": {
+										"cors": {
+											"type": "boolean",
+											"description": "Enable CORS"
+										}
+									}
+								}
+							]
+						}
+					}
+				}
+			}
+		},
+		"resources": {
+			"type": "object",
+			"description": "CloudFormation resources",
+			"properties": {
+				"Resources": {
+					"type": "object",
+					"description": "CloudFormation Resources section"
+				},
+				"Outputs": {
+					"type": "object",
+					"description": "CloudFormation Outputs section"
+				},
+				"extensions": {
+					"type": "object",
+					"description": "CloudFormation resource extensions"
+				}
+			}
+		},
+		"package": {
+			"type": "object",
+			"description": "Function packaging configuration",
+			"properties": {
+				"individually": {
+					"type": "boolean",
+					"description": "Package each function individually",
+					"default": false
+				},
+				"patterns": {
+					"type": "array",
+					"description": "Package patterns (prefix with ! for exclusion)",
+					"items": {
+						"type": "string",
+						"description": "Pattern"
+					}
+				},
+				"artifact": {
+					"type": "string",
+					"description": "Path to pre-packaged artifact"
+				}
+			}
+		},
+		"plugins": {
+			"type": "array",
+			"description": "Serverless framework plugins",
+			"items": {
+				"type": "string",
+				"description": "Plugin identifier"
+			}
+		},
+		"provider": {
+			"type": "object",
+			"description": "Cloud provider settings",
+			"required": ["name"],
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "Cloud provider name",
+					"enum": ["aws", "azure", "google", "cloudflare", "kubernetes"],
+					"default": "aws"
+				},
+				"runtime": {
+					"type": "string",
+					"description": "Default Lambda runtime",
+					"enum": [
+						"nodejs20.x", "nodejs18.x",
+						"python3.12", "python3.11", "python3.10",
+						"ruby3.3", "ruby3.2",
+						"java21", "java17", "java11",
+						"go1.x",
+						"dotnet8", "dotnet6",
+						"provided.al2023", "provided.al2"
+					]
+				},
+				"stage": {
+					"type": "string",
+					"description": "Deployment stage",
+					"default": "dev"
+				},
+				"region": {
+					"type": "string",
+					"description": "AWS region",
+					"default": "us-east-1"
+				},
+				"memorySize": {
+					"type": "number",
+					"description": "Default memory allocation in MB",
+					"minimum": 128,
+					"maximum": 10240,
+					"default": 1024
+				},
+				"timeout": {
+					"type": "number",
+					"description": "Default function timeout in seconds",
+					"minimum": 1,
+					"maximum": 900,
+					"default": 6
+				},
+				"architecture": {
+					"type": "string",
+					"description": "Default Lambda architecture",
+					"enum": ["x86_64", "arm64"],
+					"default": "x86_64"
+				},
+				"stackName": {
+					"type": "string",
+					"description": "Custom CloudFormation stack name"
+				},
+				"apiName": {
+					"type": "string",
+					"description": "Custom API Gateway name"
+				},
+				"profile": {
+					"type": "string",
+					"description": "AWS CLI profile"
+				},
+				"logRetentionInDays": {
+					"type": "number",
+					"description": "CloudWatch Logs retention in days",
+					"enum": [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653]
+				},
+				"deploymentPrefix": {
+					"type": "string",
+					"description": "S3 prefix for deployment artifacts",
+					"default": "serverless"
+				},
+				"deploymentBucket": {
+					"oneOf": [
+						{
+							"type": "string",
+							"description": "S3 bucket name for deployments"
+						},
+						{
+							"type": "object",
+							"description": "Deployment bucket configuration",
+							"properties": {
+								"name": {
+									"type": "string",
+									"description": "Bucket name"
+								},
+								"serverSideEncryption": {
+									"type": "string",
+									"description": "Encryption type",
+									"enum": ["AES256", "aws:kms"]
+								}
+							}
+						}
+					]
+				},
+				"versionFunctions": {
+					"type": "boolean",
+					"description": "Enable function versioning",
+					"default": true
+				},
+				"environment": {
+					"type": "object",
+					"description": "Service-wide environment variables",
+					"additionalProperties": {
+						"type": "string"
+					}
+				},
+				"httpApi": {
+					"type": "object",
+					"description": "HTTP API (API Gateway v2) configuration",
+					"properties": {
+						"cors": {
+							"type": "boolean",
+							"description": "Enable CORS"
+						}
+					}
+				},
+				"endpointType": {
+					"type": "string",
+					"description": "API Gateway endpoint type",
+					"enum": ["EDGE", "REGIONAL", "PRIVATE"],
+					"default": "EDGE"
+				},
+				"stackTags": {
+					"type": "object",
+					"description": "CloudFormation stack tags",
+					"additionalProperties": {
+						"type": "string"
+					}
+				},
+				"tags": {
+					"type": "object",
+					"description": "Resource tags",
+					"additionalProperties": {
+						"type": "string"
+					}
+				},
+				"iam": {
+					"type": "object",
+					"description": "IAM configuration",
+					"properties": {
+						"role": {
+							"oneOf": [
+								{
+									"type": "string",
+									"description": "ARN of existing IAM role"
+								},
+								{
+									"type": "object",
+									"description": "IAM role configuration",
+									"properties": {
+										"statements": {
+											"type": "array",
+											"description": "IAM policy statements"
+										}
+									}
+								}
+							]
+						},
+						"deploymentRole": {
+							"type": "string",
+							"description": "IAM role for CloudFormation deployment"
+						}
+					}
+				},
+				"tracing": {
+					"type": "object",
+					"description": "X-Ray tracing configuration",
+					"properties": {
+						"lambda": {
+							"type": "boolean",
+							"description": "Enable Lambda tracing"
+						},
+						"apiGateway": {
+							"type": "boolean",
+							"description": "Enable API Gateway tracing"
+						}
+					}
+				}
+			}
+		}
+	}
+}

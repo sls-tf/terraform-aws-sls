@@ -1,0 +1,8 @@
+provider:
+  name: gcp
+  memorySize: 99999
+  timeout: -5
+
+functions:
+  badFunction:
+    runtime: nodejs18.x

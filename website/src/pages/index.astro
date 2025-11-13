@@ -1,0 +1,324 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="sls.tf - Serverless Framework to Terraform Conversion">
+  <div class="container">
+    <!-- Hero Section -->
+    <section class="hero">
+      <div class="hero-content">
+        <h1>sls.tf</h1>
+        <h2>Serverless Framework to Terraform Conversion</h2>
+        <p class="hero-description">
+          Transform your Serverless Framework applications into production-ready Terraform infrastructure
+          with a single module. Deploy AWS resources with confidence using infrastructure as code best practices.
+        </p>
+        <div class="hero-buttons">
+          <a href="/docs" class="btn btn-primary">Get Started</a>
+          <a href="https://github.com/your-org/sls.tf" target="_blank" class="btn btn-secondary">View on GitHub</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features">
+      <div class="section-header">
+        <h2>Powerful Features</h2>
+        <p>Everything you need to convert and deploy serverless applications</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">📋</div>
+          <h3>Configuration Parsing</h3>
+          <p>Support for both YAML and TypeScript configurations with comprehensive validation and intelligent error handling.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>Auto-Generation</h3>
+          <p>Automatically creates Lambda functions, API Gateway, DynamoDB tables, and all necessary AWS resources with proper IAM roles.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🔧</div>
+          <h3>Advanced Support</h3>
+          <p>Variable resolution, custom CloudFormation resources, EventBridge integration, and TypeScript async exports.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🛡️</div>
+          <h3>Production Ready</h3>
+          <p>Built-in best practices, security hardening, monitoring integration, and disaster recovery capabilities.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Getting Started Section -->
+    <section class="getting-started">
+      <div class="section-header">
+        <h2>Getting Started</h2>
+        <p>Convert your Serverless Framework application in minutes</p>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">1</div>
+          <div class="step-content">
+            <h3>Add sls.tf Module</h3>
+            <p>Add the sls.tf submodule to your project and initialize it.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-number">2</div>
+          <div class="step-content">
+            <h3>Create Terraform Config</h3>
+            <p>Create a simple Terraform configuration that references your serverless.yml file.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-number">3</div>
+          <div class="step-content">
+            <h3>Deploy Infrastructure</h3>
+            <p>Run Terraform commands to deploy your converted infrastructure to AWS.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</Layout>
+
+<style>
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  /* Hero Section */
+  .hero {
+    padding: 6rem 0;
+    text-align: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    margin: 0 -2rem;
+    color: white;
+  }
+
+  .hero-content h1 {
+    font-size: 5rem;
+    font-weight: 800;
+    margin-bottom: 1rem;
+    line-height: 1;
+  }
+
+  .hero-content h2 {
+    font-size: 1.8rem;
+    font-weight: 300;
+    margin-bottom: 1.5rem;
+    opacity: 0.9;
+  }
+
+  .hero-description {
+    font-size: 1.2rem;
+    margin-bottom: 2rem;
+    line-height: 1.6;
+    opacity: 0.8;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .hero-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  /* Button Styles */
+  .btn {
+    padding: 0.75rem 2rem;
+    border-radius: 0.5rem;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    display: inline-block;
+    border: 2px solid transparent;
+  }
+
+  .btn-primary {
+    background: white;
+    color: #667eea;
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  }
+
+  .btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border-color: rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(10px);
+  }
+
+  .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+  }
+
+  /* Section Styles */
+  .section-header {
+    text-align: center;
+    margin-bottom: 3rem;
+  }
+
+  .section-header h2 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #1a202c;
+    margin-bottom: 1rem;
+  }
+
+  .section-header p {
+    font-size: 1.2rem;
+    color: #4a5568;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  /* Features Section */
+  .features {
+    padding: 6rem 0;
+    background: #f7fafc;
+    margin: 0 -2rem;
+  }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+  }
+
+  .feature-card {
+    background: white;
+    padding: 2rem;
+    border-radius: 1rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    border: 1px solid #e2e8f0;
+  }
+
+  .feature-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  }
+
+  .feature-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .feature-card h3 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: #1a202c;
+    margin-bottom: 1rem;
+  }
+
+  .feature-card p {
+    color: #4a5568;
+    line-height: 1.6;
+  }
+
+  /* Getting Started Section */
+  .getting-started {
+    padding: 6rem 0;
+  }
+
+  .steps {
+    display: grid;
+    gap: 2rem;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .step {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 2rem;
+    align-items: start;
+  }
+
+  .step-number {
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+
+  .step-content h3 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: #1a202c;
+    margin-bottom: 1rem;
+  }
+
+  .step-content p {
+    color: #4a5568;
+    line-height: 1.6;
+  }
+
+  /* Responsive Design */
+  @media (max-width: 768px) {
+    .container {
+      padding: 0 1rem;
+    }
+
+    .hero {
+      padding: 4rem 0;
+      margin: 0 -1rem;
+    }
+
+    .hero-content h1 {
+      font-size: 3rem;
+    }
+
+    .hero-content h2 {
+      font-size: 1.4rem;
+    }
+
+    .hero-buttons {
+      justify-content: center;
+    }
+
+    .features,
+    .getting-started {
+      padding: 4rem 0;
+      margin: 0 -1rem;
+    }
+
+    .section-header h2 {
+      font-size: 2rem;
+    }
+
+    .step {
+      grid-template-columns: 1fr;
+      text-align: center;
+      gap: 1rem;
+    }
+
+    .step-number {
+      margin: 0 auto;
+    }
+  }
+</style>

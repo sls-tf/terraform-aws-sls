@@ -1,0 +1,12 @@
+# Generated validation for Serverless Framework v{{{schemaVersion}}}
+
+locals {
+  # Validation errors from schema constraints
+  {{{blockName}}}_validation_errors = concat(
+{{#each validations}}
+    # {{{this.description}}}
+    {{{this.expression}}},
+{{/each}}
+    [] # Empty list to ensure concat always has valid input
+  )
+}

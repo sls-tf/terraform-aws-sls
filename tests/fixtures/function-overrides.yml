@@ -1,0 +1,16 @@
+service: test-service
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  memorySize: 512
+  timeout: 10
+
+functions:
+  default:
+    handler: handler.default
+  custom:
+    handler: handler.custom
+    runtime: python3.9
+    memorySize: 2048
+    timeout: 30

@@ -1,0 +1,24 @@
+service: iam-function-test
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: dev
+  region: us-east-1
+
+functions:
+  hello:
+    handler: handler.hello
+    iamRoleStatements:
+      - Effect: Allow
+        Action: dynamodb:Query
+        Resource: arn:aws:dynamodb:us-east-1:123456789012:table/FunctionTable
+
+  world:
+    handler: handler.world
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - s3:PutObject
+          - s3:DeleteObject
+        Resource: arn:aws:s3:::function-bucket/*

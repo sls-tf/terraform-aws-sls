@@ -1,0 +1,14 @@
+service: runtime-inheritance-test
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-west-2
+
+functions:
+  func1:
+    handler: handler.func1
+  func2:
+    handler: handler.func2
+  func3:
+    handler: handler.func3

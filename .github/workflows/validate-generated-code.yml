@@ -1,0 +1,163 @@
+name: Validate Generated Code
+
+# This workflow ensures that auto-generated validation code is kept in sync
+# with the schema generator tool. It fails if manual edits are detected.
+
+on:
+  pull_request:
+    branches: ["**"]
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  validate-sync:
+    name: Check Generated Code Sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: tools/schema-generator/package-lock.json
+
+      - name: Install schema generator dependencies
+        working-directory: tools/schema-generator
+        run: npm ci
+
+      - name: Store current generated files checksum
+        run: |
+          echo "Computing checksums of existing generated files..."
+          find generated -name "validation-*.tf" -type f -exec sha256sum {} \; | sort > /tmp/before.txt
+          cat /tmp/before.txt
+
+      - name: Regenerate validation code
+        run: |
+          echo "Regenerating validation code from schemas..."
+          npm run generate:validation
+        env:
+          NODE_ENV: test
+
+      - name: Compute new checksums
+        run: |
+          echo "Computing checksums of regenerated files..."
+          find generated -name "validation-*.tf" -type f -exec sha256sum {} \; | sort > /tmp/after.txt
+          cat /tmp/after.txt
+
+      - name: Check for differences
+        run: |
+          echo "Comparing checksums..."
+          if ! diff -u /tmp/before.txt /tmp/after.txt; then
+            echo ""
+            echo "❌ ERROR: Generated files are out of sync!"
+            echo ""
+            echo "The validation files in generated/ have been manually edited"
+            echo "or the schema generator tool has been updated without regenerating."
+            echo ""
+            echo "To fix this issue:"
+            echo "  1. Run: npm run generate:validation"
+            echo "  2. Review the changes with: git diff generated/"
+            echo "  3. Commit the regenerated files"
+            echo ""
+            echo "Files should NEVER be manually edited in the generated/ directory."
+            echo "Update the templates in tools/schema-generator/templates/ instead."
+            exit 1
+          fi
+          echo "✓ Generated files are in sync!"
+
+      - name: Verify Terraform formatting
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.0"
+
+      - name: Check generated code formatting
+        run: |
+          echo "Verifying Terraform formatting..."
+          cd generated
+          terraform fmt -check -recursive .
+          echo "✓ All generated files are properly formatted!"
+
+  performance-check:
+    name: Generator Performance Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: tools/schema-generator/package-lock.json
+
+      - name: Install dependencies
+        working-directory: tools/schema-generator
+        run: npm ci
+
+      - name: Measure generation performance
+        run: |
+          echo "Measuring generator performance..."
+          START_TIME=$(date +%s%N)
+          npm run generate:validation
+          END_TIME=$(date +%s%N)
+
+          DURATION_NS=$((END_TIME - START_TIME))
+          DURATION_MS=$((DURATION_NS / 1000000))
+          DURATION_S=$((DURATION_MS / 1000))
+
+          echo "Generation completed in ${DURATION_MS}ms (${DURATION_S}s)"
+
+          # Fail if generation takes longer than 10 seconds (performance regression)
+          if [ $DURATION_S -gt 10 ]; then
+            echo "❌ ERROR: Generator performance regression detected!"
+            echo "Generation took ${DURATION_S}s, expected < 10s"
+            exit 1
+          fi
+
+          echo "✓ Performance check passed (${DURATION_S}s < 10s target)"
+
+      - name: Measure validation overhead
+        run: |
+          echo "Measuring validation overhead..."
+          echo "Validation overhead check: Would require Terraform plan with actual config"
+          echo "Skipping in CI - manual testing recommended for validation performance"
+
+  summary:
+    name: Validation Summary
+    runs-on: ubuntu-latest
+    needs: [validate-sync, performance-check]
+    if: always()
+
+    steps:
+      - name: Report status
+        run: |
+          echo "## Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.validate-sync.result }}" == "success" ]; then
+            echo "✅ **Generated Code Sync:** Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Generated Code Sync:** Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.performance-check.result }}" == "success" ]; then
+            echo "✅ **Performance Check:** Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Performance Check:** Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "See job logs for details." >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail if any check failed
+        if: needs.validate-sync.result != 'success' || needs.performance-check.result != 'success'
+        run: exit 1

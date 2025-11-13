@@ -1,0 +1,24 @@
+{
+  "name": "sls.tf-typescript-parser",
+  "version": "1.0.0",
+  "description": "TypeScript configuration parser for sls.tf Terraform module",
+  "main": "typescript-parser.js",
+  "scripts": {
+    "test": "node typescript-parser.js"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "keywords": [
+    "serverless",
+    "terraform",
+    "typescript",
+    "parser"
+  ],
+  "author": "sls.tf"
+}

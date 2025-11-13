@@ -1,0 +1,28 @@
+service: combined-service
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: dev
+  region: us-east-1
+  iamRoleStatements:
+    - Effect: Allow
+      Action: logs:CreateLogGroup
+      Resource: "arn:aws:logs:*:*:*"
+
+functions:
+  uploader:
+    handler: upload.handler
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - s3:PutObject
+          - s3:PutObjectAcl
+        Resource: "arn:aws:s3:::uploads-bucket/*"
+
+  downloader:
+    handler: download.handler
+    iamRoleStatements:
+      - Effect: Allow
+        Action: s3:GetObject
+        Resource: "arn:aws:s3:::uploads-bucket/*"

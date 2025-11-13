@@ -1,0 +1,48 @@
+service: complete-service
+frameworkVersion: '3.38.0'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-west-2
+  stage: prod
+  memorySize: 1024
+  timeout: 30
+
+functions:
+  api:
+    handler: src/api.handler
+    description: API handler
+
+  worker:
+    handler: src/worker.handler
+    runtime: python3.9
+    memorySize: 2048
+    timeout: 300
+    description: Background worker
+
+custom:
+  webpack:
+    webpackConfig: ./webpack.config.js
+  domains:
+    - api.example.com
+  settings:
+    logLevel: info
+
+resources:
+  Resources:
+    ApiLogGroup:
+      Type: AWS::Logs::LogGroup
+      Properties:
+        LogGroupName: /aws/lambda/api
+        RetentionInDays: 7
+    DataBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: my-data-bucket
+
+package:
+  individually: true
+  patterns:
+    - '!node_modules/**'
+    - '!.git/**'

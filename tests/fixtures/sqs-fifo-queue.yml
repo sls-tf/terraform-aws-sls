@@ -1,0 +1,13 @@
+service: fifo-consumer
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: dev
+
+functions:
+  processFifoQueue:
+    handler: fifo.handler
+    events:
+      - sqs:
+          arn: arn:aws:sqs:us-east-1:123456789012:my-queue.fifo
+          batchSize: 100

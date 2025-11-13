@@ -1,0 +1,9 @@
+service: test-service
+provider:
+  name: aws
+  runtime: nodejs18.x
+functions:
+  getUser:
+    handler: users.get
+    events:
+      - http: GET /users/{id}

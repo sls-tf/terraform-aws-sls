@@ -1,0 +1,5 @@
+    # Required field: {{{field}}}
+    # Schema path: {{{schemaPath}}}
+    try(local.parsed_config{{{accessor}}}, null) == null ? [
+      "Required field '{{{field}}}' is missing. {{#if description}}{{{description}}}. {{/if}}See: https://www.serverless.com/framework/docs/providers/aws/guide/serverless.yml#{{{field}}} (Schema: {{{schemaPath}}})"
+    ] : []
