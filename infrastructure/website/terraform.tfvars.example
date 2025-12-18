@@ -1,0 +1,28 @@
+# ============================================================================
+# Example Terraform Variables for sls.tf Website
+# ============================================================================
+# Copy this file to terraform.tfvars and fill in your values
+
+# GitHub repository (format: owner/repo)
+git_repository = "sls-tf/sls.tf"
+
+# Git branch to deploy from
+git_branch = "main"
+
+# Name of existing CodeStar connection for GitHub
+# The connection named "main" will be looked up automatically
+# To list connections: aws codestar-connections list-connections --region us-east-1
+codestar_connection_name = "main"
+
+# Domain name for the website
+domain_name = "sls.tf"
+
+# Route 53 hosted zone ID
+# Find this: aws route53 list-hosted-zones-by-name --dns-name sls.tf
+route53_zone_id = "Z1234567890ABC"
+
+# Environment (production or staging)
+environment = "production"
+
+# AWS Region (must be us-east-1 for CloudFront certificates)
+aws_region = "us-east-1"

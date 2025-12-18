@@ -1,13 +1,11 @@
+# ============================================================================
+# Variables for sls.tf website infrastructure
+# ============================================================================
+
 variable "aws_region" {
-  description = "AWS region for resources"
+  description = "AWS region for S3 bucket"
   type        = string
   default     = "us-east-1"
-}
-
-variable "domain_name" {
-  description = "Domain name for the website"
-  type        = string
-  default     = "sls.tf"
 }
 
 variable "environment" {
@@ -21,13 +19,8 @@ variable "environment" {
   }
 }
 
-variable "route53_zone_id" {
-  description = "Route 53 hosted zone ID for the domain"
+variable "bucket_name" {
+  description = "S3 bucket name for website hosting (must be globally unique)"
   type        = string
-}
-
-variable "tags" {
-  description = "Additional tags for resources"
-  type        = map(string)
-  default     = {}
+  default     = "sls-tf-website"
 }

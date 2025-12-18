@@ -3,6 +3,9 @@
 *.tfstate
 *.tfstate.backup
 *.tfplan
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl
 
 # Lambda ZIP files
 .terraform/lambda-*.zip
