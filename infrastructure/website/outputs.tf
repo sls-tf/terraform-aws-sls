@@ -1,34 +1,34 @@
-output "website_url" {
-  description = "URL of the deployed website"
-  value       = "https://${var.domain_name}"
-}
-
-output "staging_url" {
-  description = "URL of the staging website"
-  value       = "https://sls-tf-staging.s3.amazonaws.com"
-}
-
-output "cloudfront_distribution_id" {
-  description = "CloudFront distribution ID"
-  value       = aws_cloudfront_distribution.website.id
-}
-
-output "cloudfront_distribution_id_staging" {
-  description = "CloudFront distribution ID for staging"
-  value       = aws_cloudfront_distribution.website_staging.id
-}
+# ============================================================================
+# Outputs for sls.tf website infrastructure
+# ============================================================================
 
 output "s3_bucket_name" {
-  description = "S3 bucket name for the website"
-  value       = aws_s3_bucket.website.bucket
+  description = "S3 bucket name"
+  value       = aws_s3_bucket.website.id
 }
 
-output "s3_bucket_name_staging" {
-  description = "S3 bucket name for staging"
-  value       = aws_s3_bucket.website_staging.bucket
+output "s3_bucket_website_endpoint" {
+  description = "S3 website endpoint - use this as CloudFlare origin"
+  value       = aws_s3_bucket_website_configuration.website.website_endpoint
 }
 
-output "acm_certificate_arn" {
-  description = "ACM certificate ARN"
-  value       = aws_acm_certificate_validation.website.certificate_arn
+output "s3_bucket_website_domain" {
+  description = "S3 website domain"
+  value       = aws_s3_bucket_website_configuration.website.website_domain
+}
+
+output "github_deployer_access_key_id" {
+  description = "AWS Access Key ID for GitHub Actions (add to GitHub secrets)"
+  value       = aws_iam_access_key.github_deployer.id
+}
+
+output "github_deployer_secret_access_key" {
+  description = "AWS Secret Access Key for GitHub Actions (add to GitHub secrets)"
+  value       = aws_iam_access_key.github_deployer.secret
+  sensitive   = true
+}
+
+output "bucket_arn" {
+  description = "S3 bucket ARN"
+  value       = aws_s3_bucket.website.arn
 }

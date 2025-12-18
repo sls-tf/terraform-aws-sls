@@ -1,300 +1,229 @@
 # sls.tf Website Infrastructure
 
-This directory contains the Terraform configuration for deploying the sls.tf documentation website infrastructure, completely separate from the main sls.tf module.
+This directory contains Terraform configuration for deploying the sls.tf documentation website using the [static-website-pipeline](https://github.com/ThomasRedstone/static-website-pipeline) module.
 
-## Architecture
+## Overview
 
-The website infrastructure consists of:
+The infrastructure provisions:
 
-- **S3 Buckets**: Static website hosting for production and staging
-- **CloudFront**: CDN with SSL/TLS, security headers, and caching
-- **Route 53**: DNS management and domain configuration
-- **ACM**: SSL certificate management
-- **CI/CD**: GitHub Actions for automated deployment
+- **S3 Bucket**: Static website hosting storage
+- **CloudFront**: CDN with SSL/TLS termination
+- **Route53**: DNS records for the domain
+- **ACM Certificate**: SSL/TLS certificate for HTTPS
+- **CodePipeline**: Automated CI/CD deployment from GitHub
+- **CodeBuild**: Builds the Astro website on each commit
 
-## Quick Start
+## Prerequisites
 
-### 1. Prerequisites
+1. **AWS Account** with appropriate permissions
+2. **AWS CLI** configured with credentials
+3. **Terraform** >= 1.0 installed
+4. **Route53 Hosted Zone** for your domain
+5. **AWS CodeStar Connection** to GitHub (see setup below)
 
-- Terraform >= 1.0
-- AWS CLI configured with appropriate permissions
-- Route 53 hosted zone for your domain
-- ACM certificate (will be created automatically)
+## Setup
 
-### 2. Configure Variables
+### 1. Verify CodeStar Connection
 
-Create a `terraform.tfvars` file:
-
-```hcl
-aws_region        = "us-east-1"
-domain_name       = "sls.tf"
-environment       = "production"
-route53_zone_id   = "Z1D633PEXAMPLE"
-```
-
-### 3. Initialize and Deploy
+Check if you have an existing CodeStar connection to GitHub:
 
 ```bash
-# Initialize Terraform
+aws codestar-connections list-connections --region us-east-1
+```
+
+If you don't have one, create it:
+
+```bash
+aws codestar-connections create-connection \
+  --provider-type GitHub \
+  --connection-name main \
+  --region us-east-1
+```
+
+Then complete the connection in the AWS Console:
+
+1. Go to **Developer Tools > Connections**
+2. Find your connection and click **Update pending connection**
+3. Authorize GitHub access
+
+**Note**: The default configuration looks for a connection named "main". If yours has a different name, update `codestar_connection_name` in your `terraform.tfvars`.
+
+### 2. Create terraform.tfvars
+
+Copy the example and update with your values:
+
+```bash
+cp terraform.tfvars.example terraform.tfvars
+```
+
+Then edit `terraform.tfvars`:
+
+```hcl
+# terraform.tfvars
+git_repository           = "sls-tf/sls.tf"
+git_branch               = "main"
+codestar_connection_name = "main"  # Name of your CodeStar connection
+domain_name              = "sls.tf"
+route53_zone_id          = "Z1234567890ABC"  # Your Route53 hosted zone ID
+environment              = "production"
+```
+
+### 3. Initialize Terraform
+
+```bash
+cd infrastructure/website
 terraform init
+```
 
-# Plan the deployment
+### 4. Review the Plan
+
+```bash
 terraform plan
+```
 
-# Deploy the infrastructure
+### 5. Apply the Configuration
+
+```bash
 terraform apply
 ```
 
-### 4. Configure GitHub Actions
+## Usage
 
-Add the following secrets to your GitHub repository:
+### Deploy Changes
 
-- `AWS_ACCESS_KEY_ID`: AWS access key with S3, CloudFront, and Route 53 permissions
-- `AWS_SECRET_ACCESS_KEY`: AWS secret key
-- `CLOUDFRONT_DISTRIBUTION_ID_PRODUCTION`: Production CloudFront distribution ID
-- `CLOUDFRONT_DISTRIBUTION_ID_STAGING`: Staging CloudFront distribution ID
-- `SLACK_WEBHOOK_URL`: (Optional) Slack webhook for deployment notifications
+Once set up, the CodePipeline will automatically:
 
-## Infrastructure Details
-
-### Production Environment
-
-#### S3 Bucket
-- **Name**: `sls.tf`
-- **Features**: Versioning, encryption, public access blocked
-- **Access**: Only via CloudFront OAI
-
-#### CloudFront Distribution
-- **Domain**: `sls.tf`
-- **SSL**: Custom certificate with TLS 1.2+
-- **Security**: Security headers, HTTPS redirect
-- **Caching**: Optimized for static assets
-- **Geo-restriction**: None (global access)
-
-#### Route 53
-- **A Record**: `sls.tf` → CloudFront distribution
-- **CNAME Record**: `staging.sls.tf` → Staging CloudFront
-
-### Staging Environment
-
-#### S3 Bucket
-- **Name**: `sls-tf-staging`
-- **Features**: Versioning, encryption
-- **Caching**: Disabled (immediate updates)
-
-#### CloudFront Distribution
-- **Domain**: CloudFront default domain
-- **SSL**: Default CloudFront certificate
-- **IPv6**: Disabled (cost optimization)
-- **Caching**: Disabled (for testing)
-
-## Security Features
-
-### CloudFront Security Headers
-```javascript
-{
-  "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-  "x-content-type-options": "nosniff",
-  "x-frame-options": "DENY",
-  "x-xss-protection": "1; mode=block",
-  "referrer-policy": "strict-origin-when-cross-origin",
-  "permissions-policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()"
-}
-```
-
-### S3 Security
-- Server-side encryption with AES-256
-- Versioning enabled for backup and recovery
-- Public access blocked, only CloudFront access
-- Bucket policies enforce least privilege
-
-### Network Security
-- HTTPS-only with TLS 1.2+
-- CloudFront provides DDoS protection
-- Origin Access Identity (OAI) restricts S3 access
-- Security headers at CDN level
-
-## Deployment Process
-
-### Automatic Deployment (Production)
-1. Push to `main` branch
-2. GitHub Actions workflow triggers
-3. Astro website is built
-4. Assets uploaded to S3
-5. CloudFront cache invalidated
-6. DNS updated (if needed)
-7. Deployment notifications sent
-
-### Preview Deployment (Staging)
-1. Pull request created
-2. GitHub Actions workflow triggers
-3. Website built and deployed to staging
-4. Preview URL available for review
-5. Merge to main triggers production deployment
+1. Detect pushes to the `main` branch
+2. Pull the latest code from GitHub
+3. Build the Astro website (`npm ci && npm run build`)
+4. Deploy to S3
+5. Invalidate CloudFront cache
 
 ### Manual Deployment
-```bash
-# Deploy to staging
-gh workflow run website-deploy.yml -f environment=staging
 
-# Deploy to production
-gh workflow run website-deploy.yml -f environment=production
+You can manually trigger a deployment:
+
+```bash
+aws codepipeline start-pipeline-execution \
+  --name sls-tf-website-production \
+  --region us-east-1
 ```
 
-## Monitoring and Maintenance
+### Invalidate CloudFront Cache
 
-### Performance Monitoring
-- CloudWatch metrics for S3 and CloudFront
-- Lighthouse CI audits on deployment
-- Real User Monitoring (RUM) data
-- Core Web Vitals tracking
+To manually invalidate the CloudFront cache:
 
-### Security Monitoring
-- Trivy vulnerability scanning
-- Link checking and broken link detection
-- SSL certificate monitoring
-- Security headers validation
+```bash
+# Get the distribution ID from Terraform output
+DIST_ID=$(terraform output -raw cloudfront_distribution_id)
 
-### Cost Optimization
-- S3 Intelligent-Tiering
-- CloudFront price class optimization
-- Staging environment cost controls
-- Automatic cleanup of old versions
+# Create invalidation
+aws cloudfront create-invalidation \
+  --distribution-id $DIST_ID \
+  --paths "/*"
+```
 
-## Backup and Disaster Recovery
+## Outputs
 
-### S3 Versioning
-- All file versions retained
-- Can restore any previous version
-- Protects against accidental deletion
+After applying, you can view the outputs:
 
-### CloudFront Cache
-- Multiple edge locations globally
-- Automatic failover capabilities
-- DDoS protection included
+```bash
+terraform output
+```
 
-### Route 53
-- DNS-level health checks
-- Automatic failover routing
-- Global load balancing
+Key outputs:
+- `website_url`: The CloudFront URL for your website
+- `cloudfront_distribution_id`: For cache invalidation
+- `s3_bucket_name`: Where the website files are stored
+- `codepipeline_name`: The CI/CD pipeline name
+
+## Updating
+
+To update the infrastructure:
+
+```bash
+terraform plan   # Review changes
+terraform apply  # Apply updates
+```
+
+## Destroying
+
+To tear down the infrastructure:
+
+```bash
+terraform destroy
+```
+
+**Warning**: This will delete all website infrastructure including the S3 bucket and CloudFront distribution.
 
 ## Troubleshooting
 
-### Common Issues
+### Certificate Validation Stuck
 
-**Website not updating**
-- Check CloudFront cache invalidation
-- Verify S3 upload completed
-- Check DNS propagation
+If ACM certificate validation is stuck:
 
-**SSL certificate issues**
-- Verify ACM certificate validation
-- Check Route 53 CNAME records
-- Ensure certificate is attached to CloudFront
+1. Check Route53 records were created correctly
+2. Ensure the Route53 zone ID is correct
+3. DNS propagation can take up to 30 minutes
 
-**Build failures**
-- Check GitHub Actions logs
-- Verify Node.js version compatibility
-- Check dependency installation
+### CodePipeline Failing
 
-**Permission errors**
-- Verify AWS credentials and permissions
-- Check S3 bucket policies
-- Validate CloudFront OAI configuration
-
-### Debug Commands
+Check the build logs:
 
 ```bash
-# Check S3 bucket contents
-aws s3 ls s3://sls.tf --recursive
+# Get pipeline name from output
+PIPELINE=$(terraform output -raw codepipeline_name)
 
-# Check CloudFront distribution status
-aws cloudfront get-distribution --id DISTRIBUTION_ID
-
-# Invalidate CloudFront cache
-aws cloudfront create-invalidation --distribution-id DISTRIBUTION_ID --paths "/*"
-
-# Check ACM certificate status
-aws acm describe-certificate --certificate-arn CERT_ARN
-
-# Test website accessibility
-curl -I https://sls.tf
+# View latest execution
+aws codepipeline get-pipeline-execution \
+  --pipeline-name $PIPELINE \
+  --region us-east-1
 ```
 
-## Cost Estimates
+### Build Errors
 
-### Monthly Costs (USD)
-- **S3 Storage**: ~$5 (for ~1GB of content)
-- **S3 Data Transfer**: ~$10 (for 100GB transfer)
-- **CloudFront**: ~$20 (for 500GB transfer)
-- **Route 53**: ~$1 (for hosted zone)
-- **ACM**: Free (AWS provided certificate)
-- **Total**: ~$36/month
+Common issues:
 
-### Cost Optimization Tips
-- Use S3 lifecycle policies for old versions
-- Optimize CloudFront price class based on audience
-- Compress images and assets
-- Enable CloudFront compression
-- Monitor usage regularly
+- **Node version**: Ensure buildspec uses Node 20
+- **Build path**: Website must be in `/website` directory
+- **Dependencies**: Check `package-lock.json` is committed
 
-## Security Best Practices
+## Architecture
 
-### Regular Reviews
-- Review AWS IAM policies quarterly
-- Update security headers as needed
-- Monitor access logs and patterns
-- Keep dependencies updated
-
-### Compliance
-- GDPR compliance considerations
-- Security headers implementation
-- Data retention policies
-- Access logging and monitoring
-
-### Automation
-- Automated security scanning
-- Regular dependency updates
-- Infrastructure as code reviews
-- Continuous compliance checks
-
-## API Reference
-
-### Terraform Outputs
-
-```hcl
-output "website_url" {
-  description = "URL of the deployed website"
-  value       = "https://sls.tf"
-}
-
-output "cloudfront_distribution_id" {
-  description = "CloudFront distribution ID"
-  value       = aws_cloudfront_distribution.website.id
-}
-
-output "s3_bucket_name" {
-  description = "S3 bucket name for the website"
-  value       = aws_s3_bucket.website.bucket
-}
+```
+GitHub (main branch)
+    ↓
+CodePipeline (triggered on push)
+    ↓
+CodeBuild (npm ci && npm run build)
+    ↓
+S3 Bucket (static files)
+    ↓
+CloudFront (CDN)
+    ↓
+Route53 (DNS: sls.tf → CloudFront)
 ```
 
-### Environment Variables
+## Cost Estimate
 
-| Variable | Description | Default |
-|-----------|-------------|---------|
-| `aws_region` | AWS region | `us-east-1` |
-| `domain_name` | Website domain | `sls.tf` |
-| `environment` | Environment | `production` |
-| `route53_zone_id` | Route 53 zone ID | Required |
+- **S3**: ~$0.023/GB storage + $0.09/GB transfer
+- **CloudFront**: First 10TB $0.085/GB
+- **Route53**: $0.50/month per hosted zone
+- **CodePipeline**: First pipeline free, $1/month each additional
+- **CodeBuild**: First 100 build minutes free/month, then $0.005/min
+- **ACM Certificate**: Free
+
+Estimated monthly cost: **$5-15/month** (depending on traffic)
+
+## Security
+
+- S3 bucket is private (no public access)
+- CloudFront uses HTTPS only (TLS 1.2+)
+- ACM certificate auto-renews
+- CodeBuild runs in isolated environment
 
 ## Support
 
-- 📖 **Documentation**: [Website Documentation](../../website/)
-- 🐛 **Issues**: [GitHub Issues](https://github.com/your-org/sls.tf/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/your-org/sls.tf/discussions)
-- 📧 **Email**: support@sls.tf
-
-## License
-
-This website infrastructure is licensed under the same terms as the main sls.tf project.
+For issues related to:
+- **This configuration**: Open issue at sls-tf/sls.tf
+- **static-website-pipeline module**: Open issue at ThomasRedstone/static-website-pipeline
