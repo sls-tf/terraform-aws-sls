@@ -22,6 +22,22 @@ A Terraform module that parses and validates Serverless Framework configuration 
 - **Multiple Runtimes**: Deploy functions with different runtimes in the same service
 - **Change Detection**: Uses source code hashing for automatic redeployment on code changes
 
+### Event Source Integration
+- **API Gateway REST API**: HTTP event triggers with CORS support and path-based routing
+- **S3 Event Notifications**: Object created/removed triggers with prefix/suffix filtering
+- **EventBridge & CloudWatch Rules**: Schedule (cron/rate) and event pattern triggers
+- **DynamoDB Streams & SQS**: Event source mappings with batch processing configuration
+
+### Advanced Features
+- **IAM Role & Policy Management**: Custom `iamRoleStatements` translated to IAM policies
+- **Custom Resource Provisioning**: CloudFormation-style S3, DynamoDB, SNS, SQS, and CloudFront resources from the `resources:` section
+- **CloudFront Lambda@Edge**: `cloudFront` event type support for Lambda@Edge associations with viewer/origin request/response triggers
+- **TypeScript Configuration**: Parses `serverless.ts` files including async exports
+- **Variable Resolution**: Resolves `${self:}` and `${env:}` variable syntax
+- **Custom Domains**: Route 53 and API Gateway custom domain management
+- **AWS SAM Support**: Parses `template.yaml` files with `Transform: AWS::Serverless-2016-10-31`
+- **LocalStack Support**: Dual-mode testing with LocalStack for local development
+
 ## Requirements
 
 - Terraform >= 1.0.0
@@ -81,6 +97,60 @@ output "service_name" {
 
 output "functions" {
   value = module.serverless_parser.functions
+}
+```
+
+### CloudFront Lambda@Edge
+
+Use the `cloudFront` event type to attach Lambda functions to CloudFront as Lambda@Edge:
+
+```yaml
+# serverless.yml
+service: my-edge-service
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1  # Lambda@Edge requires us-east-1
+
+functions:
+  viewerAuth:
+    handler: edge/auth.handler
+    memorySize: 128  # Viewer functions: max 128 MB
+    timeout: 5       # Viewer functions: max 5 seconds
+    events:
+      - cloudFront:
+          eventType: viewer-request
+          origin: https://www.example.com
+          behavior:
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD, OPTIONS]
+
+  apiTransform:
+    handler: edge/transform.handler
+    memorySize: 512
+    timeout: 30      # Origin functions: max 30 seconds
+    events:
+      - cloudFront:
+          eventType: origin-request
+          origin: https://api.example.com
+          pathPattern: /api/*
+          behavior:
+            ViewerProtocolPolicy: https-only
+            ForwardedValues:
+              QueryString: true
+              Headers: [Authorization]
+```
+
+```hcl
+module "serverless" {
+  source      = "path/to/sls.tf"
+  config_path = "${path.module}/serverless.yml"
+}
+
+output "edge_distribution_domains" {
+  value = module.serverless.lambda_edge_distribution_domain_names
 }
 ```
 
@@ -242,14 +312,76 @@ The module will automatically:
 - Deploy Lambda functions with the specified configuration
 - Apply environment variables to functions
 
+## AWS SAM Support
+
+Use `config_format = "sam"` to deploy from an AWS SAM `template.yaml`:
+
+```hcl
+module "serverless" {
+  source        = "path/to/sls.tf"
+  config_path   = "${path.module}/template.yaml"
+  config_format = "sam"
+
+  # Optional: override SAM template Parameters
+  sam_template_parameters = {
+    Stage = "prod"
+  }
+}
+```
+
+### Supported SAM Resource Types
+
+| SAM Type | Terraform Output |
+|---|---|
+| `AWS::Serverless::Function` | `aws_lambda_function` + IAM role |
+| `AWS::Serverless::SimpleTable` | `aws_dynamodb_table` (PAY_PER_REQUEST) |
+| `AWS::S3::Bucket` | `aws_s3_bucket` |
+| `AWS::DynamoDB::Table` | `aws_dynamodb_table` |
+| `AWS::SNS::Topic` | `aws_sns_topic` |
+| `AWS::SQS::Queue` | `aws_sqs_queue` |
+| `AWS::CloudFront::Distribution` | `aws_cloudfront_distribution` |
+
+### Supported SAM Event Types
+
+| SAM Event | SLS Equivalent | Notes |
+|---|---|---|
+| `Api` / `HttpApi` | `http` | Path and method routing |
+| `S3` | `s3` | Object created/removed triggers |
+| `DynamoDB` | `stream` | Stream event source mappings |
+| `SQS` | `sqs` | Queue event source mappings |
+| `Schedule` | `schedule` | cron/rate expressions |
+| `EventBridgeRule` | `eventBridge` | Event pattern rules |
+
+### SAM Globals Section
+
+`Globals.Function` settings (Runtime, MemorySize, Timeout, Environment) are applied to
+all functions and can be overridden per-function. `Globals.Api` is recognized but
+route configuration is driven by per-function events.
+
+### CloudFormation Intrinsic Functions
+
+Terraform's `yamldecode` resolves YAML tags as their scalar values:
+- `!Ref MyBucket` → the string `"MyBucket"`
+- `!GetAtt Table.StreamArn` → the string `"Table.StreamArn"`
+
+For `DynamoDB` and `SQS` events that use `!GetAtt`/`!Ref` to reference stream ARNs or
+queue ARNs, these string values are passed through to the event source mapping resource
+and resolved at apply time by AWS. ARN format validation is skipped for SAM format.
+
+### Unsupported SAM Types
+
+`AWS::Serverless::LayerVersion` and `AWS::Serverless::Application` are not yet
+translated. Resources of these types are excluded from the Terraform plan silently.
+
 ## Input Variables
 
 | Name | Type | Default | Required | Description |
 |------|------|---------|----------|-------------|
-| `config_path` | string | - | yes | Path to the Serverless Framework configuration file (serverless.yml or serverless.ts) |
-| `config_format` | string | `"yaml"` | no | Format of the configuration file. Options: `"yaml"` or `"typescript"`. |
+| `config_path` | string | - | yes | Path to the configuration file (serverless.yml, serverless.ts, or SAM template.yaml) |
+| `config_format` | string | `"yaml"` | no | Format of the configuration file. Options: `"yaml"`, `"typescript"`, or `"sam"`. |
 | `lambda_code_path` | string | `"."` | no | Path to Lambda function code directory to package. Defaults to current directory. |
-| `aws_region` | string | `null` | no | Optional AWS region override. If set and differs from serverless.yml region, a warning will be displayed. |
+| `aws_region` | string | `null` | no | Optional AWS region override. If set and differs from the config region, a warning will be displayed. |
+| `sam_template_parameters` | map(string) | `{}` | no | Parameter values for SAM templates. Keys must match names in the template `Parameters` section. |
 
 ## Outputs
 
@@ -273,6 +405,17 @@ The module will automatically:
 | `function_invoke_arns` | map(string) | Map of Lambda invoke ARNs for API Gateway integration |
 | `lambda_packages` | map(object) | Lambda deployment package information (paths, sizes, hashes) |
 
+### CloudFront Lambda@Edge Outputs
+| Name | Type | Description |
+|------|------|-------------|
+| `lambda_edge_distribution_ids` | map(string) | CloudFront distribution IDs keyed by distribution group name |
+| `lambda_edge_distribution_arns` | map(string) | CloudFront distribution ARNs keyed by distribution group name |
+| `lambda_edge_distribution_domain_names` | map(string) | CloudFront domain names keyed by distribution group name |
+| `lambda_edge_distribution_count` | number | Total count of Lambda@Edge CloudFront distributions created |
+| `custom_cloudfront_distribution_ids` | map(string) | Distribution IDs from `resources:` section, keyed by logical ID |
+| `custom_cloudfront_distribution_arns` | map(string) | Distribution ARNs from `resources:` section, keyed by logical ID |
+| `custom_cloudfront_distribution_domain_names` | map(string) | Domain names from `resources:` section, keyed by logical ID |
+
 ## Validation Rules
 
 ### Required Fields
@@ -288,6 +431,13 @@ The module will automatically:
 - `provider.timeout`: 1-900 seconds
 - `functions[].memorySize`: 128-10240 MB
 - `functions[].timeout`: 1-900 seconds
+
+### CloudFront Lambda@Edge Validation
+- `cloudFront.eventType`: Must be `viewer-request`, `viewer-response`, `origin-request`, or `origin-response`
+- `cloudFront.origin`: Required (string URL or origin object)
+- `cloudFront.includeBody`: Only valid for `viewer-request` and `origin-request` events
+- Viewer-side functions (`viewer-request`/`viewer-response`): `timeout` <= 5 seconds, `memorySize` <= 128 MB
+- Origin-side functions (`origin-request`/`origin-response`): `timeout` <= 30 seconds
 
 ### Default Values (Serverless Framework Specification)
 - `provider.stage`: `"dev"`
@@ -369,21 +519,18 @@ terraform plan
 ### Completed
 - ✅ **#1: Core Module Structure & YAML Parsing** - Parse and validate Serverless Framework configurations
 - ✅ **#2: Lambda Function Translation** - Generate Lambda functions, IAM roles, and code packages
-
-### Completed
 - ✅ **#3: IAM Role & Policy Management** - Custom IAM policies from iamRoleStatements
-
-### Completed
-- ✅ **#6: TypeScript Configuration Parsing** - Support for serverless.ts files with async exports, complex TypeScript features, and comprehensive error handling
-
-### In Progress
-- 🚧 **#4: API Gateway REST API Integration** - HTTP event triggers and API Gateway resources
-
-### Planned
-- **#5: S3 Event Source Mapping** - S3 bucket notifications
-- **#7: EventBridge Rules & Schedulers** - Schedule and event pattern triggers
-- **#8: DynamoDB & SQS Event Sources** - Stream and queue integrations
-- And more...
+- ✅ **#4: API Gateway REST API Integration** - HTTP event triggers, CORS, and path-based routing
+- ✅ **#5: S3 Event Source Mapping** - S3 bucket notifications with prefix/suffix filtering
+- ✅ **#6: TypeScript Configuration Parsing** - Support for serverless.ts files with async exports
+- ✅ **#7: EventBridge Rules & Schedulers** - Schedule (cron/rate) and event pattern triggers
+- ✅ **#8: DynamoDB & SQS Event Sources** - Stream and queue event source mappings
+- ✅ **#9: Custom Resource Provisioning** - CloudFormation-style S3, DynamoDB, SNS, SQS, CloudFront from `resources:` section
+- ✅ **#10: LocalStack Integration** - Dual-mode testing infrastructure with LocalStack
+- ✅ **#11: Variable Resolution Engine** - `${self:}` and `${env:}` variable syntax support
+- ✅ **#12: CloudFront Distribution Support** - `cloudFront` event type for Lambda@Edge (viewer/origin request/response) plus CloudFormation-style distribution resources
+- ✅ **#13: Route 53 & Custom Domain Management** - Custom domain provisioning with API Gateway
+- ✅ **#14: Schema Synchronization Tooling** - Automated tooling to sync validation with Serverless Framework schema
 
 See `agent-os/product/roadmap.md` for the complete roadmap.
 

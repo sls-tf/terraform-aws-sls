@@ -1,0 +1,18 @@
+service: cloudfront-edge-invalid
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+functions:
+  badEdge:
+    handler: edge/handler.handler
+    memorySize: 128
+    timeout: 5
+    events:
+      - cloudFront:
+          eventType: invalid-event-type
+          origin: https://www.example.com

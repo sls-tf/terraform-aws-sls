@@ -5,11 +5,13 @@ locals {
     null
   )
 
-  # Configuration parsing with YAML and TypeScript support
+  # Configuration parsing with YAML, TypeScript, and SAM support
   parsed_config = var.config_format == "yaml" ? try(
     yamldecode(local.file_content),
     null
-  ) : var.config_format == "typescript" ? local.parsed_config_with_typescript : null
+  ) : var.config_format == "typescript" ? local.parsed_config_with_typescript : (
+    var.config_format == "sam" ? local.sam_as_sls_config : null
+  )
 
   # Variable Resolution Integration (Feature #11)
   # The resolved_config from variable_resolution.tf contains the parsed config
@@ -20,7 +22,12 @@ locals {
   parsed_config_resolved = try(local.resolved_config, local.parsed_config)
 
   # Comprehensive validation error collection
-  validation_errors = local.parsed_config == null ? [] : concat(
+  # SAM errors are prepended outside the null check so parse failures are reported.
+  validation_errors = local.parsed_config == null ? (
+    var.config_format == "sam" ? local.sam_validation_errors : []
+  ) : concat(
+    # SAM-specific validation (Handler missing, Transform wrong, etc.)
+    var.config_format == "sam" ? local.sam_validation_errors : [],
     # Required field validations
     try(local.parsed_config.service, null) == null || try(local.parsed_config.service, "") == "" ?
     ["Required field 'service' is missing or empty. Specify service name in serverless.yml."] : [],
@@ -58,6 +65,9 @@ locals {
 
     # Variable resolution errors (Roadmap #11)
     local.parsed_config != null ? local.variable_resolution_errors : [],
+
+    # CloudFront event validations (Roadmap #12)
+    local.parsed_config != null ? local.cloudfront_event_validation_errors : [],
 
     # TypeScript parsing errors (Roadmap #6)
     var.config_format == "typescript" ? local.typescript_all_errors : []
@@ -293,8 +303,8 @@ locals {
   http_event_validation_errors = flatten([
     for event in local.http_events : concat(
       # Validate HTTP method
-      !contains(["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"], event.http_method) ?
-      ["Function '${event.function_name}' has invalid HTTP method '${event.http_method}'. Must be one of: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS."] : [],
+      !contains(["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "ANY"], event.http_method) ?
+      ["Function '${event.function_name}' has invalid HTTP method '${event.http_method}'. Must be one of: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, ANY."] : [],
 
       # Validate path starts with /
       !can(regex("^/", event.http_path)) ?
@@ -482,8 +492,8 @@ locals {
       evt.force_deploy && !evt.existing ?
       ["Function '${evt.function_name}' S3 event[${evt.event_index}]: forceDeploy can only be used with existing: true."] : [],
 
-      # Validate S3 bucket naming conventions
-      !can(regex("^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$", evt.bucket_name)) ?
+      # Validate S3 bucket naming conventions (skipped for SAM: bucket refs are CloudFormation logical IDs)
+      var.config_format != "sam" && !can(regex("^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$", evt.bucket_name)) ?
       ["Function '${evt.function_name}' S3 event[${evt.event_index}]: Bucket name '${evt.bucket_name}' violates S3 naming conventions."] : []
     )
   ])
@@ -573,12 +583,12 @@ locals {
       !contains(["LATEST", "TRIM_HORIZON"], mapping.event_config.startingPosition) ?
       ["Function '${mapping.function_name}' event[${mapping.event_index}]: startingPosition must be 'LATEST' or 'TRIM_HORIZON', got '${mapping.event_config.startingPosition}'."] : [],
 
-      # Validate DynamoDB stream ARN format
-      mapping.type == "stream" && !can(regex("^arn:aws:dynamodb:[^:]+:[^:]+:table/[^/]+/stream/.+$", mapping.arn)) ?
+      # Validate DynamoDB stream ARN format (skipped for SAM: !GetAtt refs aren't real ARNs at plan time)
+      mapping.type == "stream" && var.config_format != "sam" && !can(regex("^arn:aws:dynamodb:[^:]+:[^:]+:table/[^/]+/stream/.+$", mapping.arn)) ?
       ["Function '${mapping.function_name}' event[${mapping.event_index}]: Invalid DynamoDB stream ARN format. Expected pattern: arn:aws:dynamodb:region:account:table/TableName/stream/StreamLabel"] : [],
 
-      # Validate SQS queue ARN format
-      mapping.type == "sqs" && !can(regex("^arn:aws:sqs:[^:]+:[^:]+:.+$", mapping.arn)) ?
+      # Validate SQS queue ARN format (skipped for SAM: !Ref refs aren't real ARNs at plan time)
+      mapping.type == "sqs" && var.config_format != "sam" && !can(regex("^arn:aws:sqs:[^:]+:[^:]+:.+$", mapping.arn)) ?
       ["Function '${mapping.function_name}' event[${mapping.event_index}]: Invalid SQS queue ARN format. Expected pattern: arn:aws:sqs:region:account:QueueName"] : [],
 
       # Validate maximum_retry_attempts range (0-10000)
@@ -760,4 +770,95 @@ locals {
     for logical_id, type in local.unsupported_resources :
     "Unsupported CloudFormation resource type '${type}' for resource '${logical_id}'. Supported types: S3::Bucket, DynamoDB::Table, SNS::Topic, SQS::Queue, CloudFront::Distribution."
   ]
+
+  # ============================================================================
+  # CloudFront Event Parsing (Roadmap #12)
+  # ============================================================================
+
+  # Extract cloudFront events from function definitions (Lambda@Edge)
+  # Supports both string and object origin syntax:
+  #   origin: "https://example.com"
+  #   origin: { DomainName: "example.com", CustomOriginConfig: { ... } }
+  cloudfront_events_raw = flatten([
+    for func_name, func in local.functions_with_defaults_prevalidation : [
+      for event_idx, event in try(func.events, []) : {
+        function_name   = func_name
+        event_index     = event_idx
+        event_key       = "${func_name}-cloudfront-${event_idx}"
+        event_type      = try(event.cloudFront.eventType, "")
+        origin          = try(event.cloudFront.origin, null)
+        behavior        = try(event.cloudFront.behavior, {})
+        path_pattern    = try(event.cloudFront.pathPattern, null)
+        include_body    = try(event.cloudFront.includeBody, false)
+        distribution    = try(event.cloudFront.distribution, "default")
+        cache_policy_id = try(event.cloudFront.cachePolicy.id, null)
+      } if can(event.cloudFront)
+    ]
+  ])
+
+  # Functions that have cloudFront events - require publish=true and edge trust policy
+  functions_with_cloudfront_events = toset([
+    for event in local.cloudfront_events_raw : event.function_name
+  ])
+
+  # Group events by distribution key to create one distribution per group.
+  # Events without an explicit distribution reference use the "default" key.
+  cloudfront_distribution_groups = {
+    for dist_key in distinct([for ev in local.cloudfront_events_raw : ev.distribution]) :
+    dist_key => [for ev in local.cloudfront_events_raw : ev if ev.distribution == dist_key]
+  }
+
+  # Prepared distribution configs for resource creation.
+  # Excludes groups referencing existing AWS::CloudFront::Distribution resources.
+  cloudfront_lambda_edge_distributions = {
+    for dist_key, events in local.cloudfront_distribution_groups :
+    dist_key => {
+      events = events
+      primary_origin = {
+        domain_name = try(
+          events[0].origin.DomainName,
+          replace(replace(replace(tostring(events[0].origin), "https://", ""), "http://", ""), "s3://", "")
+        )
+        origin_id = try(events[0].origin.Id, events[0].function_name)
+        is_s3     = try(events[0].origin.S3OriginConfig, null) != null || can(regex("^s3://", tostring(events[0].origin)))
+        protocol = try(
+          events[0].origin.CustomOriginConfig.OriginProtocolPolicy,
+          can(regex("^http://", tostring(events[0].origin))) ? "http-only" : "https-only"
+        )
+        oai = try(events[0].origin.S3OriginConfig.OriginAccessIdentity, "")
+      }
+      default_events = [for ev in events : ev if ev.path_pattern == null]
+      ordered_behaviors = {
+        for path in distinct([for ev in events : ev.path_pattern if ev.path_pattern != null]) :
+        path => [for ev in events : ev if ev.path_pattern == path]
+      }
+    }
+    if !contains(keys(local.cloudfront_distributions), dist_key)
+  }
+
+  # CloudFront event validation errors
+  cloudfront_event_validation_errors = flatten([
+    for event in local.cloudfront_events_raw : concat(
+      !contains(["viewer-request", "viewer-response", "origin-request", "origin-response"], event.event_type) ?
+      ["Function '${event.function_name}' cloudFront event[${event.event_index}]: eventType must be one of: viewer-request, viewer-response, origin-request, origin-response. Got: '${event.event_type}'."] : [],
+
+      event.origin == null ?
+      ["Function '${event.function_name}' cloudFront event[${event.event_index}]: 'origin' is required."] : [],
+
+      contains(["viewer-response", "origin-response"], event.event_type) && event.include_body ?
+      ["Function '${event.function_name}' cloudFront event[${event.event_index}]: includeBody can only be true for viewer-request or origin-request events."] : [],
+
+      contains(["viewer-request", "viewer-response"], event.event_type) &&
+      try(local.functions_with_defaults_prevalidation[event.function_name].timeout, 6) > 5 ?
+      ["Function '${event.function_name}' cloudFront event[${event.event_index}]: viewer-side Lambda@Edge functions must have timeout <= 5 seconds. Current: ${try(local.functions_with_defaults_prevalidation[event.function_name].timeout, 6)}s."] : [],
+
+      contains(["origin-request", "origin-response"], event.event_type) &&
+      try(local.functions_with_defaults_prevalidation[event.function_name].timeout, 6) > 30 ?
+      ["Function '${event.function_name}' cloudFront event[${event.event_index}]: origin-side Lambda@Edge functions must have timeout <= 30 seconds. Current: ${try(local.functions_with_defaults_prevalidation[event.function_name].timeout, 6)}s."] : [],
+
+      contains(["viewer-request", "viewer-response"], event.event_type) &&
+      try(local.functions_with_defaults_prevalidation[event.function_name].memorySize, local.provider_with_defaults.memorySize) > 128 ?
+      ["Function '${event.function_name}' cloudFront event[${event.event_index}]: viewer-side Lambda@Edge functions must have memorySize <= 128 MB. Current: ${try(local.functions_with_defaults_prevalidation[event.function_name].memorySize, local.provider_with_defaults.memorySize)}MB. Set memorySize: 128 in the function definition."] : []
+    )
+  ])
 }

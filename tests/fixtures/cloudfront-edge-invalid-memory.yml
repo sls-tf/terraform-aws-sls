@@ -1,0 +1,18 @@
+service: cloudfront-edge-memory
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+functions:
+  bigViewer:
+    handler: edge/handler.handler
+    memorySize: 512  # Too large for viewer events (max 128 MB)
+    timeout: 5
+    events:
+      - cloudFront:
+          eventType: viewer-request
+          origin: https://www.example.com

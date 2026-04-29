@@ -1,0 +1,24 @@
+service: cloudfront-edge-simple
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+functions:
+  viewerRequest:
+    handler: edge/viewer.handler
+    memorySize: 128
+    timeout: 5
+    events:
+      - cloudFront:
+          eventType: viewer-request
+          origin: https://www.example.com
+          behavior:
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS

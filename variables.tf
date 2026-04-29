@@ -9,14 +9,20 @@ variable "config_path" {
 }
 
 variable "config_format" {
-  description = "Format of the configuration file (yaml or typescript). Currently only yaml is supported."
+  description = "Format of the configuration file. Options: 'yaml' (serverless.yml), 'typescript' (serverless.ts), 'sam' (AWS SAM template.yaml)."
   type        = string
   default     = "yaml"
 
   validation {
-    condition     = contains(["yaml", "typescript"], var.config_format)
-    error_message = "The config_format must be either 'yaml' or 'typescript'."
+    condition     = contains(["yaml", "typescript", "sam"], var.config_format)
+    error_message = "The config_format must be 'yaml', 'typescript', or 'sam'."
   }
+}
+
+variable "sam_template_parameters" {
+  description = "Parameter values for AWS SAM templates. Keys are parameter names as defined in the template Parameters section; values override the template Default."
+  type        = map(string)
+  default     = {}
 }
 
 variable "aws_region" {

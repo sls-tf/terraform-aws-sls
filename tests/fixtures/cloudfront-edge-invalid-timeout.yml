@@ -1,0 +1,18 @@
+service: cloudfront-edge-timeout
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+functions:
+  slowViewer:
+    handler: edge/slow.handler
+    memorySize: 128
+    timeout: 30  # Too long for viewer events (max 5s)
+    events:
+      - cloudFront:
+          eventType: viewer-request
+          origin: https://www.example.com

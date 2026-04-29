@@ -1,0 +1,27 @@
+service: cloudfront-edge-s3
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+functions:
+  edgeAuth:
+    handler: edge/auth.handler
+    memorySize: 128
+    timeout: 5
+    events:
+      - cloudFront:
+          eventType: viewer-request
+          origin:
+            DomainName: my-static-site.s3.amazonaws.com
+            Id: S3Origin
+            S3OriginConfig:
+              OriginAccessIdentity: origin-access-identity/cloudfront/ABCDEFG1234567
+          behavior:
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - GET
+              - HEAD

@@ -266,3 +266,27 @@ output "custom_cloudfront_distribution_hosted_zone_ids" {
   description = "Map of custom CloudFront distribution hosted zone IDs keyed by logical ID"
   value       = { for k, v in aws_cloudfront_distribution.custom : k => v.hosted_zone_id }
 }
+
+# ============================================================================
+# Lambda@Edge CloudFront Distribution Outputs (Roadmap #12)
+# ============================================================================
+
+output "lambda_edge_distribution_ids" {
+  description = "Map of Lambda@Edge CloudFront distribution IDs keyed by distribution group name"
+  value       = { for k, v in aws_cloudfront_distribution.lambda_edge : k => v.id }
+}
+
+output "lambda_edge_distribution_arns" {
+  description = "Map of Lambda@Edge CloudFront distribution ARNs keyed by distribution group name"
+  value       = { for k, v in aws_cloudfront_distribution.lambda_edge : k => v.arn }
+}
+
+output "lambda_edge_distribution_domain_names" {
+  description = "Map of Lambda@Edge CloudFront distribution domain names keyed by distribution group name"
+  value       = { for k, v in aws_cloudfront_distribution.lambda_edge : k => v.domain_name }
+}
+
+output "lambda_edge_distribution_count" {
+  description = "Total count of Lambda@Edge CloudFront distributions created from cloudFront events"
+  value       = length(aws_cloudfront_distribution.lambda_edge)
+}

@@ -1,0 +1,51 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM application demonstrating Globals section
+
+Globals:
+  Function:
+    Runtime: nodejs18.x
+    MemorySize: 512
+    Timeout: 15
+    Environment:
+      Variables:
+        STAGE: dev
+        LOG_LEVEL: info
+
+Resources:
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/api.handler
+      Description: API handler inheriting global runtime and memory
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /api
+            Method: ANY
+
+  WorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/worker.handler
+      Runtime: python3.11
+      MemorySize: 1024
+      Timeout: 300
+      Description: Background worker overriding global runtime and memory
+      Environment:
+        Variables:
+          QUEUE_URL: https://sqs.us-east-1.amazonaws.com/123456789/my-queue
+      Events:
+        ScheduleEvent:
+          Type: Schedule
+          Properties:
+            Schedule: rate(5 minutes)
+
+  UsersTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      TableName: users-dev
+      PrimaryKey:
+        Name: userId
+        Type: String

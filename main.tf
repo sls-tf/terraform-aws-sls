@@ -93,7 +93,10 @@ resource "aws_iam_role" "lambda_execution" {
     Statement = [{
       Effect = "Allow"
       Principal = {
-        Service = "lambda.amazonaws.com"
+        Service = contains(local.functions_with_cloudfront_events, each.key) ? [
+          "lambda.amazonaws.com",
+          "edgelambda.amazonaws.com"
+        ] : ["lambda.amazonaws.com"]
       }
       Action = "sts:AssumeRole"
     }]
@@ -147,6 +150,8 @@ resource "aws_lambda_function" "functions" {
   handler     = each.value.handler
   memory_size = each.value.memorySize
   timeout     = each.value.timeout
+  # Lambda@Edge requires published versions for qualified_arn references
+  publish = contains(local.functions_with_cloudfront_events, each.key)
 
   description = try(each.value.description, null)
 

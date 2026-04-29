@@ -1,0 +1,38 @@
+service: cloudfront-edge-multi
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+functions:
+  viewerRequestFn:
+    handler: edge/viewer-request.handler
+    memorySize: 128
+    timeout: 5
+    events:
+      - cloudFront:
+          eventType: viewer-request
+          origin: https://www.example.com
+          behavior:
+            ViewerProtocolPolicy: redirect-to-https
+            Compress: true
+
+  originRequestFn:
+    handler: edge/origin-request.handler
+    memorySize: 512
+    timeout: 30
+    events:
+      - cloudFront:
+          eventType: origin-request
+          origin: https://api.example.com
+          pathPattern: /api/*
+          behavior:
+            ViewerProtocolPolicy: https-only
+            ForwardedValues:
+              QueryString: true
+              Headers:
+                - Authorization
+                - Accept
