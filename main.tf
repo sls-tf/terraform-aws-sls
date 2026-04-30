@@ -1,14 +1,19 @@
+data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
+
 # Package Lambda function code
 data "archive_file" "lambda_code" {
   for_each = local.functions_with_defaults
 
-  type        = "zip"
-  source_dir  = var.lambda_code_path
+  type = "zip"
+  # SAM per-function CodeUri: each function gets its own archive from its subdirectory.
+  # node_modules are included because each CodeUri directory has its own dependencies.
+  # Without CodeUri (standard SLS): all functions share one archive from lambda_code_path,
+  # with dev dependencies excluded.
+  source_dir  = try(each.value.code_uri, null) != null ? "${var.lambda_code_path}/${trimprefix(each.value.code_uri, "./")}" : var.lambda_code_path
   output_path = "${path.module}/.terraform/lambda-${each.key}.zip"
 
-  # Exclude directories and files that should never be in Lambda packages
-  # This prevents massive bundles from including .git, .terraform, node_modules, etc.
-  excludes = [
+  excludes = try(each.value.code_uri, null) != null ? [] : [
     # Version control
     ".git",
     ".git/**",
@@ -117,6 +122,18 @@ resource "aws_iam_role_policy_attachment" "lambda_logs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionPolicy"
 }
 
+# Attach VPC access policy for functions with vpc_config
+resource "aws_iam_role_policy_attachment" "lambda_vpc" {
+  for_each = {
+    for func_name, func in local.functions_with_defaults :
+    func_name => func
+    if try(length(func.vpc_config.subnet_ids), 0) > 0
+  }
+
+  role       = aws_iam_role.lambda_execution[each.key].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
 # Custom IAM policies from iamRoleStatements (Roadmap #3)
 resource "aws_iam_role_policy" "lambda_custom_policy" {
   for_each = local.functions_with_policies
@@ -140,7 +157,8 @@ resource "aws_iam_role_policy" "lambda_custom_policy" {
 resource "aws_lambda_function" "functions" {
   for_each = local.functions_with_defaults
 
-  function_name = "${try(local.parsed_config_resolved.service, "unknown")}-${local.provider_with_defaults.stage}-${each.key}"
+  # Explicit FunctionName from SAM template overrides the auto-generated name.
+  function_name = try(each.value.name, null) != null ? each.value.name : "${try(local.parsed_config_resolved.service, "unknown")}-${local.provider_with_defaults.stage}-${each.key}"
   role          = aws_iam_role.lambda_execution[each.key].arn
 
   filename         = data.archive_file.lambda_code[each.key].output_path
@@ -153,12 +171,29 @@ resource "aws_lambda_function" "functions" {
   # Lambda@Edge requires published versions for qualified_arn references
   publish = contains(local.functions_with_cloudfront_events, each.key)
 
-  description = try(each.value.description, null)
+  description   = try(each.value.description, null)
+  architectures = try(each.value.architectures, null)
 
   dynamic "environment" {
     for_each = try(each.value.environment, null) != null ? [1] : []
     content {
       variables = each.value.environment
+    }
+  }
+
+  dynamic "vpc_config" {
+    for_each = try(length(each.value.vpc_config.subnet_ids), 0) > 0 ? [each.value.vpc_config] : []
+    content {
+      subnet_ids         = vpc_config.value.subnet_ids
+      security_group_ids = vpc_config.value.security_group_ids
+    }
+  }
+
+  dynamic "file_system_config" {
+    for_each = try(each.value.file_system_configs, null) != null ? each.value.file_system_configs : []
+    content {
+      arn              = file_system_config.value.arn
+      local_mount_path = file_system_config.value.local_mount_path
     }
   }
 
@@ -169,7 +204,8 @@ resource "aws_lambda_function" "functions" {
   }
 
   depends_on = [
-    aws_iam_role_policy_attachment.lambda_logs
+    aws_iam_role_policy_attachment.lambda_logs,
+    aws_iam_role_policy_attachment.lambda_vpc,
   ]
 }
 

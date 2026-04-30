@@ -47,6 +47,99 @@ locals {
   } : {}
 
   # ============================================================================
+  # SAM !Ref / !Sub Resolution
+  # ============================================================================
+  # yamldecode strips CloudFormation intrinsic function tags silently:
+  #   !Ref Foo        → "Foo"          (scalar string, tag discarded)
+  #   !Sub "${A}-b"   → "${A}-b"       (string with literal ${...} sequences)
+  #   !Select [0, !Ref X] → [0, "X"]  (list, handled separately in env vars)
+  #
+  # sam_resolved pre-computes every resolution so the sam_as_sls_config block
+  # can do a simple lookup without repeating the split/join logic per property.
+
+  # Merged parameter map: template Parameters + AWS CloudFormation pseudo-parameters.
+  sam_all_params = var.config_format == "sam" && local.sam_raw != null ? merge(
+    local.sam_parameters,
+    {
+      "AWS::Region"    = data.aws_region.current.name
+      "AWS::AccountId" = data.aws_caller_identity.current.account_id
+      "AWS::NoValue"   = ""
+      "AWS::Partition" = "aws"
+    }
+  ) : {}
+
+  # Collect every raw string that may require resolution.
+  # Includes: FunctionName, env var values, VPC refs, EFS ARNs, IAM Resource values.
+  sam_all_raw_strings = var.config_format == "sam" && local.sam_raw != null ? distinct(compact(flatten([
+    for logical_id, resource in try(local.sam_raw.Resources, {}) : [
+      # FunctionName (from !Sub "${NamePrefix}-create-schema" etc.)
+      can(tostring(resource.Properties.FunctionName)) ? [tostring(resource.Properties.FunctionName)] : [],
+
+      # Environment variable values — string-typed only; list values from !Select
+      # are resolved inline in sam_as_sls_config
+      [for v in values(try(resource.Properties.Environment.Variables, {})) :
+        can(tostring(v)) ? tostring(v) : ""],
+      [for v in values(try(local.sam_function_globals.Environment.Variables, {})) :
+        can(tostring(v)) ? tostring(v) : ""],
+
+      # VPC SubnetIds: !Ref to a CommaDelimitedList param → plain string after tag-strip
+      can(tostring(resource.Properties.VpcConfig.SubnetIds)) ?
+        [tostring(resource.Properties.VpcConfig.SubnetIds)] : [],
+
+      # VPC SecurityGroupIds: list of !Ref strings
+      [for sg in try(tolist(resource.Properties.VpcConfig.SecurityGroupIds), []) :
+        can(tostring(sg)) ? tostring(sg) : ""],
+
+      # EFS FileSystemConfig ARN references
+      [for fsc in try(tolist(resource.Properties.FileSystemConfigs), []) :
+        can(tostring(fsc.Arn)) ? tostring(fsc.Arn) : ""],
+
+      # IAM policy Resource values (!Sub ARNs, !Ref param names, literal strings)
+      flatten([for policy in try(tolist(resource.Properties.Policies), []) :
+        can(policy.Statement) ? flatten([
+          for stmt in try(tolist(policy.Statement), []) :
+          try(
+            [for r in tolist(stmt.Resource) :
+              can(tostring(r)) ? tostring(r) : ""
+              if can(tostring(r))
+            ],
+            can(tostring(stmt.Resource)) ? [tostring(stmt.Resource)] : []
+          )
+        ]) : []
+      ])
+    ]
+    if try(resource.Type, "") == "AWS::Serverless::Function"
+  ]))) : []
+
+  # Resolution map: raw_string → resolved_string.
+  #
+  # Two strategies:
+  #   !Ref Param:    entire string equals a parameter name → direct lookup
+  #   !Sub "${A}-b": contains ${...} sequences → split on ${ and substitute each
+  #
+  # Unresolved placeholders (unknown params) are preserved as "${Name}" so that
+  # downstream errors clearly identify the missing parameter.
+  sam_resolved = var.config_format == "sam" && local.sam_raw != null ? {
+    for raw_str in local.sam_all_raw_strings :
+    raw_str => (
+      # Pure !Ref: the whole string is a parameter / pseudo-parameter name
+      can(local.sam_all_params[raw_str]) ?
+        local.sam_all_params[raw_str] :
+      # No ${...} patterns: return the literal as-is
+      length(split("$${", raw_str)) == 1 ?
+        raw_str :
+      # !Sub: substitute each ${Param} placeholder using split/join
+      join("", flatten([
+        [split("$${", raw_str)[0]],
+        [for piece in slice(split("$${", raw_str), 1, length(split("$${", raw_str))) : [
+          lookup(local.sam_all_params, split("}", piece)[0], "$${${split("}", piece)[0]}}"),
+          join("}", slice(split("}", piece), 1, length(split("}", piece))))
+        ]]
+      ]))
+    )
+  } : {}
+
+  # ============================================================================
   # SAM Event Translation
   # ============================================================================
   # Translates SAM event types to SLS-compatible event objects.
@@ -213,29 +306,89 @@ locals {
     functions = {
       for logical_id, resource in try(local.sam_raw.Resources, {}) :
       logical_id => {
+        # Explicit FunctionName (from !Sub or plain string) overrides the
+        # auto-generated "{service}-{stage}-{logical_id}" name in main.tf.
+        name = try(resource.Properties.FunctionName, null) != null ? lookup(
+          local.sam_resolved,
+          tostring(resource.Properties.FunctionName),
+          tostring(resource.Properties.FunctionName)
+        ) : null
+
+        # CodeUri: per-function source directory (SAM-specific).
+        # main.tf uses this as source_dir for the per-function archive.
+        code_uri = try(tostring(resource.Properties.CodeUri), null)
+
         handler     = try(resource.Properties.Handler, "index.handler")
         runtime     = try(resource.Properties.Runtime, null)
         description = try(resource.Properties.Description, null)
         memorySize  = try(resource.Properties.MemorySize, null)
         timeout     = try(resource.Properties.Timeout, null)
 
-        # Global env vars merged with function-level env vars (function wins on conflict)
-        environment = merge(
-          try(local.sam_function_globals.Environment.Variables, {}),
-          try(resource.Properties.Environment.Variables, {})
-        )
+        # Architectures: ["arm64"] or ["x86_64"]; null defers to Lambda default (x86_64)
+        architectures = try(tolist(resource.Properties.Architectures), null)
+
+        # VPC configuration.
+        # SubnetIds is typically !Ref to a CommaDelimitedList param — yamldecode
+        # strips the tag, leaving a plain string that we resolve then split on comma.
+        vpc_config = try(resource.Properties.VpcConfig, null) != null ? {
+          subnet_ids = try(
+            tolist(resource.Properties.VpcConfig.SubnetIds),
+            compact(split(",", lookup(local.sam_resolved,
+              tostring(resource.Properties.VpcConfig.SubnetIds), "")))
+          )
+          security_group_ids = [
+            for sg in try(tolist(resource.Properties.VpcConfig.SecurityGroupIds), []) :
+            lookup(local.sam_resolved, tostring(sg), tostring(sg))
+          ]
+        } : null
+
+        # EFS file system configs
+        file_system_configs = length(try(tolist(resource.Properties.FileSystemConfigs), [])) > 0 ? [
+          for fsc in tolist(resource.Properties.FileSystemConfigs) : {
+            arn              = lookup(local.sam_resolved, tostring(fsc.Arn), tostring(fsc.Arn))
+            local_mount_path = try(tostring(fsc.LocalMountPath), "/mnt/efs")
+          }
+        ] : null
+
+        # Global env vars merged with function-level; function wins on conflict.
+        # All values are resolved via sam_resolved (!Ref param → value, !Sub → substituted).
+        # !Select [N, !Ref CommaDelimitedListParam] produces a list [index, "Param"] after
+        # tag-stripping — detected by !can(tostring(v)) and resolved by splitting on comma.
+        environment = {
+          for k, v in merge(
+            try(local.sam_function_globals.Environment.Variables, {}),
+            try(resource.Properties.Environment.Variables, {})
+          ) :
+          k => (
+            # !Select [N, !Ref ListParam]: yamldecode gives [index, "ParamName"]
+            !can(tostring(v)) ? try(
+              compact(split(",", lookup(local.sam_all_params, tostring(try(v[1], "")), "")))[tonumber(try(v[0], 0))],
+              ""
+            ) :
+            # String value: look up resolved form, fall back to raw string
+            lookup(local.sam_resolved, tostring(v), tostring(v))
+          )
+        }
 
         # Translate inline SAM policy documents to iamRoleStatements.
-        # SAM managed policy names (strings) and AWS managed policy ARNs are
-        # not translated here — the Lambda execution role still gets basic
-        # CloudWatch Logs permissions from main.tf.
+        # Resource values are resolved via sam_resolved so !Sub ARNs get correct
+        # region/account substitution. !If constructs (mixed-type lists) fall back
+        # to ["*"] since CloudFormation Conditions can't be evaluated at plan time.
         iamRoleStatements = flatten([
           for policy in try(tolist(resource.Properties.Policies), []) :
           can(policy.Statement) ? [
             for stmt in try(tolist(policy.Statement), []) : {
-              Effect   = try(stmt.Effect, "Allow")
-              Action   = try(tolist(stmt.Action), [tostring(try(stmt.Action, "*"))])
-              Resource = try(tolist(stmt.Resource), [tostring(try(stmt.Resource, "*"))])
+              Effect = try(stmt.Effect, "Allow")
+              Action = try(tolist(stmt.Action), [tostring(try(stmt.Action, "*"))])
+              Resource = try(
+                [for r in tolist(stmt.Resource) :
+                  lookup(local.sam_resolved, tostring(r), tostring(r))
+                  if can(tostring(r))
+                ],
+                can(tostring(stmt.Resource)) ?
+                  [lookup(local.sam_resolved, tostring(stmt.Resource), tostring(stmt.Resource))] :
+                  ["*"]
+              )
             }
           ] : []
         ])
