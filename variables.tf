@@ -25,6 +25,32 @@ variable "sam_template_parameters" {
   default     = {}
 }
 
+variable "resource_types" {
+  description = <<-EOT
+    Allowlist of CloudFormation resource types to materialise from the resources: section.
+    null (default) creates all supported resource types — preserves existing behaviour.
+    Provide a list to restrict which infrastructure resources are created, letting the
+    infrastructure team control what a service template is permitted to own in real AWS.
+
+    Lambda functions, IAM roles, and all event wiring (API Gateway, S3 notifications,
+    EventBridge rules, DynamoDB/SQS mappings) are always created regardless of this
+    setting — it only gates standalone infrastructure from the resources: section.
+
+    Example — Lambda only (SAM template used for sam local but infra managed elsewhere):
+      resource_types = ["AWS::Serverless::Function"]
+
+    Example — Lambda plus a tightly-coupled table:
+      resource_types = ["AWS::Serverless::Function", "AWS::DynamoDB::Table"]
+  EOT
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.resource_types == null || length(var.resource_types) > 0
+    error_message = "resource_types must be null (all types) or a non-empty list."
+  }
+}
+
 variable "aws_region" {
   description = "Optional AWS region override. If specified and differs from serverless.yml region, a warning will be displayed and this value will be used."
   type        = string

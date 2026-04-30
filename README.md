@@ -368,6 +368,45 @@ For `DynamoDB` and `SQS` events that use `!GetAtt`/`!Ref` to reference stream AR
 queue ARNs, these string values are passed through to the event source mapping resource
 and resolved at apply time by AWS. ARN format validation is skipped for SAM format.
 
+### Controlling Which Resources Get Created
+
+The `resource_types` variable lets the infrastructure team decide what a service
+template is permitted to materialise in real AWS, without touching the template itself.
+This is useful when developers use a full SAM template for `sam local` but only a
+subset of resources should be Terraform-managed:
+
+```hcl
+# Lambda only — infra team owns everything else
+module "event_service" {
+  source        = "path/to/sls.tf"
+  config_path   = "${path.module}/template.yaml"
+  config_format = "sam"
+
+  resource_types = ["AWS::Serverless::Function"]
+}
+
+# Lambda plus a tightly-coupled table the team owns end-to-end
+module "users_service" {
+  source        = "path/to/sls.tf"
+  config_path   = "${path.module}/template.yaml"
+  config_format = "sam"
+
+  resource_types = [
+    "AWS::Serverless::Function",
+    "AWS::DynamoDB::Table",
+  ]
+}
+```
+
+`resource_types` filters the `resources:` / `Resources:` section only. Lambda
+functions, IAM roles, API Gateway, S3 notifications, EventBridge rules, and
+DynamoDB/SQS event source mappings are always created — those are event wiring,
+not standalone infrastructure. Omit `resource_types` (or set it to `null`) to
+restore the default behaviour of creating all supported resource types.
+
+Resource types not in `supported_resource_types` are silently skipped rather than
+raising a validation error when they are explicitly excluded by `resource_types`.
+
 ### Unsupported SAM Types
 
 `AWS::Serverless::LayerVersion` and `AWS::Serverless::Application` are not yet
@@ -382,6 +421,7 @@ translated. Resources of these types are excluded from the Terraform plan silent
 | `lambda_code_path` | string | `"."` | no | Path to Lambda function code directory to package. Defaults to current directory. |
 | `aws_region` | string | `null` | no | Optional AWS region override. If set and differs from the config region, a warning will be displayed. |
 | `sam_template_parameters` | map(string) | `{}` | no | Parameter values for SAM templates. Keys must match names in the template `Parameters` section. |
+| `resource_types` | list(string) | `null` | no | Allowlist of CloudFormation resource types to materialise from the `resources:` section. `null` creates all types. Lambda functions, IAM roles, and event wiring are always created regardless. |
 
 ## Outputs
 

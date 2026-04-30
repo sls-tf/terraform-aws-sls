@@ -718,35 +718,45 @@ locals {
     logical_id => lower(join("_", regexall("[A-Z][a-z0-9]*", logical_id)))
   }
 
-  # Categorize resources by type
+  # Categorize resources by type, filtered by var.resource_types allowlist.
+  # null means all types are created (default / backward-compatible behaviour).
+  # A list restricts creation to only the named CloudFormation types.
+  # Lambda functions, IAM roles, and all event wiring are always created
+  # regardless of this filter — it only gates standalone infrastructure resources.
+
   s3_buckets = {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource
     if try(resource.Type, "") == "AWS::S3::Bucket"
+    && (var.resource_types == null || contains(var.resource_types, "AWS::S3::Bucket"))
   }
 
   dynamodb_tables = {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource
     if try(resource.Type, "") == "AWS::DynamoDB::Table"
+    && (var.resource_types == null || contains(var.resource_types, "AWS::DynamoDB::Table"))
   }
 
   sns_topics = {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource
     if try(resource.Type, "") == "AWS::SNS::Topic"
+    && (var.resource_types == null || contains(var.resource_types, "AWS::SNS::Topic"))
   }
 
   sqs_queues = {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource
     if try(resource.Type, "") == "AWS::SQS::Queue"
+    && (var.resource_types == null || contains(var.resource_types, "AWS::SQS::Queue"))
   }
 
   cloudfront_distributions = {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource
     if try(resource.Type, "") == "AWS::CloudFront::Distribution"
+    && (var.resource_types == null || contains(var.resource_types, "AWS::CloudFront::Distribution"))
   }
 
   # Supported resource types
@@ -758,11 +768,15 @@ locals {
     "AWS::CloudFront::Distribution"
   ])
 
-  # Identify unsupported resource types for validation
+  # Identify unsupported resource types for validation.
+  # Only reports types that would actually be created (i.e. not excluded by resource_types),
+  # so a resource_types allowlist silences errors for intentionally-skipped types.
   unsupported_resources = {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource.Type
-    if try(resource.Type, "") != "" && !contains(local.supported_resource_types, resource.Type)
+    if try(resource.Type, "") != ""
+    && !contains(local.supported_resource_types, resource.Type)
+    && (var.resource_types == null || contains(var.resource_types, try(resource.Type, "")))
   }
 
   # Validation errors for unsupported resources
