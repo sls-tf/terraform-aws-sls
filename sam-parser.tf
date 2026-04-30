@@ -307,9 +307,11 @@ locals {
   # SAM templates without any changes to downstream code.
 
   sam_as_sls_config = var.config_format == "sam" && local.sam_raw != null ? {
-    # SAM has no "service" field; use Description if provided, else a safe default.
+    # SAM has no "service" field; prefer Metadata.ServiceName (short, stable),
+    # then fall back to "sam-service". Description is intentionally NOT used here
+    # because it is often too long for IAM role names (64-char limit).
     service = try(
-      length(local.sam_raw.Description) > 0 ? local.sam_raw.Description : "sam-service",
+      length(try(local.sam_raw.Metadata.ServiceName, "")) > 0 ? local.sam_raw.Metadata.ServiceName : "sam-service",
       "sam-service"
     )
 

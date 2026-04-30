@@ -29,7 +29,9 @@ locals {
 
   # Comprehensive validation error collection
   # SAM errors are prepended outside the null check so parse failures are reported.
-  validation_errors = local.parsed_config == null ? (
+  # nonsensitive(): validation messages are plain strings, never secrets. The taint
+  # arrives via parsed_config_resolved → variable_resolution.tf → resolved_config.
+  validation_errors = nonsensitive(local.parsed_config == null ? (
     var.config_format == "sam" ? local.sam_validation_errors : []
   ) : concat(
     # SAM-specific validation (Handler missing, Transform wrong, etc.)
@@ -77,7 +79,7 @@ locals {
 
     # TypeScript parsing errors (Roadmap #6)
     var.config_format == "typescript" ? local.typescript_all_errors : []
-  )
+  ))
 
   # Runtime validation errors (strict mode)
   runtime_validation_errors = try(local.parsed_config.provider.runtime, null) == null && try(local.parsed_config.functions, null) != null ? flatten([
@@ -267,8 +269,8 @@ locals {
   # HTTP Event Parsing (Roadmap #4)
   # Extract all HTTP events from all functions
   # Use prevalidation version to avoid circular dependency
-  http_events = flatten([
-    for func_name, func in local.functions_with_defaults_prevalidation : [
+  http_events = nonsensitive(flatten([
+    for func_name, func in nonsensitive(local.functions_with_defaults_prevalidation) : [
       for event in try(func.events, []) :
       merge({
         function_name = func_name
@@ -301,7 +303,7 @@ locals {
       })
       if can(event.http)
     ]
-  ])
+  ]))
 
   # Deduplicate functions with HTTP events for permissions
   functions_with_http_events = toset([
@@ -468,16 +470,16 @@ locals {
   s3_buckets_custom_properties = try(local.parsed_config.provider.s3, {})
 
   # Identify unique buckets that need to be created (not existing)
-  s3_buckets_to_create = {
+  s3_buckets_to_create = nonsensitive({
     for bucket_key in distinct([
-      for evt in local.s3_events_normalized :
+      for evt in nonsensitive(local.s3_events_normalized) :
       evt.bucket_key if !evt.existing
     ]) :
     bucket_key => {
       name       = try(local.s3_buckets_custom_properties[bucket_key].name, bucket_key)
       properties = try(local.s3_buckets_custom_properties[bucket_key], {})
     }
-  }
+  })
 
   # S3 Event Validation (Roadmap #5)
   # S3 event configuration validation errors
