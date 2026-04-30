@@ -67,6 +67,11 @@ output "role_arns" {
   value       = { for k, v in aws_iam_role.lambda_execution : k => v.arn }
 }
 
+output "role_names" {
+  description = "Map of IAM role names keyed by function name"
+  value       = { for k, v in aws_iam_role.lambda_execution : k => v.name }
+}
+
 output "function_invoke_arns" {
   description = "Map of Lambda function invoke ARNs for API Gateway integration"
   value       = { for k, v in aws_lambda_function.functions : k => v.invoke_arn }

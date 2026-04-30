@@ -119,7 +119,7 @@ resource "aws_iam_role_policy_attachment" "lambda_logs" {
   for_each = local.functions_with_defaults
 
   role       = aws_iam_role.lambda_execution[each.key].name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionPolicy"
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 # Attach VPC access policy for functions with vpc_config
