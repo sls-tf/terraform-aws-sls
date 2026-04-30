@@ -5,12 +5,18 @@ locals {
     null
   )
 
-  # Configuration parsing with YAML, TypeScript, and SAM support
+  # Configuration parsing with YAML, TypeScript, and SAM support.
+  # For SAM format, nonsensitive() is applied to break the sensitivity chain from
+  # external data source / resolved parameters into for_each iteration maps.
+  # SAM parameter values are ARNs and config strings (visible in Lambda env vars
+  # in the AWS console), not actual secrets, so this stripping is semantically correct.
   parsed_config = var.config_format == "yaml" ? try(
     yamldecode(local.file_content),
     null
   ) : var.config_format == "typescript" ? local.parsed_config_with_typescript : (
-    var.config_format == "sam" ? local.sam_as_sls_config : null
+    var.config_format == "sam" ? (
+      local.sam_as_sls_config != null ? nonsensitive(local.sam_as_sls_config) : null
+    ) : null
   )
 
   # Variable Resolution Integration (Feature #11)
