@@ -13,11 +13,11 @@
 data "external" "sam_yaml" {
   count = var.config_format == "sam" ? 1 : 0
 
+  # Auto-install js-yaml if node_modules is absent (first run after module download).
+  # Wraps sam-preprocessor.js which needs js-yaml from scripts/package.json.
   program = [
-    "node",
-    fileexists("${path.cwd}/node_modules/sls-tf/scripts/sam-preprocessor.js")
-      ? "${path.cwd}/node_modules/sls-tf/scripts/sam-preprocessor.js"
-      : "${path.module}/scripts/sam-preprocessor.js"
+    "bash", "-c",
+    "SCRIPTS=\"${path.module}/scripts\" && { [ -d \"$SCRIPTS/node_modules\" ] || npm install --silent --prefix \"$SCRIPTS\" >&2; } && node \"$SCRIPTS/sam-preprocessor.js\""
   ]
 
   query = {
