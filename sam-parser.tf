@@ -44,17 +44,18 @@ locals {
     )
   } : {}
 
-  # Globals.Function — applied to all functions unless overridden per-function
+  # Globals.Function — applied to all functions unless overridden per-function.
+  # null (not {}) so the conditional types are compatible; all callers use try().
   sam_function_globals = var.config_format == "sam" && local.sam_raw != null ? try(
     local.sam_raw.Globals.Function,
-    {}
-  ) : {}
+    null
+  ) : null
 
   # Globals.Api — applied to all API resources
   sam_api_globals = var.config_format == "sam" && local.sam_raw != null ? try(
     local.sam_raw.Globals.Api,
-    {}
-  ) : {}
+    null
+  ) : null
 
   # Helper: map S3 bucket logical IDs to their actual bucket names.
   # Used to resolve !Ref references in S3 event Properties.Bucket.
