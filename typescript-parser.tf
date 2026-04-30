@@ -89,5 +89,5 @@ locals {
   # Final parsed configuration with TypeScript support
   parsed_config_with_typescript = var.config_format == "typescript" ? (
     local.typescript_parse_success ? local.typescript_config_raw : null
-  ) : (local.file_content != null ? yamldecode(local.file_content) : null)
+  ) : (var.config_format == "yaml" && local.file_content != null ? yamldecode(local.file_content) : null)
 }
