@@ -58,13 +58,49 @@ variable "aws_region" {
 }
 
 variable "lambda_code_path" {
-  description = "Path to Lambda function code directory to package. Defaults to current directory."
+  description = "Path to Lambda function code directory to package. Defaults to current directory. Ignored when var.lambda_code_source.type is \"s3\"."
   type        = string
   default     = "."
 
   validation {
     condition     = var.lambda_code_path != ""
     error_message = "lambda_code_path must not be an empty string."
+  }
+}
+
+variable "lambda_code_source" {
+  description = <<-EOT
+    Where each function's deployment package is sourced from.
+
+    type = "local" (default): build a zip from var.lambda_code_path (and the
+    function's CodeUri sub-path) at apply time, using data.archive_file.
+
+    type = "s3": treat the deployment package as already present in an S3
+    bucket. Skip archive_file. Each function's S3 key is computed as
+    "$${key_prefix}/$${artefact_name}/$${sha}.zip", where artefact_name is
+    derived from the SAM template's CodeUri by stripping a trailing "dist/"
+    segment and taking the last path component (e.g. "jobs/foo/dist/" -> "foo").
+    Use this for git-ops deployment models where artefacts are built once in
+    CI and promoted between environments by bumping the SHA pin.
+  EOT
+  type = object({
+    type       = string
+    bucket     = optional(string)
+    key_prefix = optional(string)
+    sha        = optional(string)
+  })
+  default = {
+    type = "local"
+  }
+
+  validation {
+    condition     = contains(["local", "s3"], var.lambda_code_source.type)
+    error_message = "lambda_code_source.type must be \"local\" or \"s3\"."
+  }
+
+  validation {
+    condition     = var.lambda_code_source.type != "s3" || (try(length(var.lambda_code_source.bucket), 0) > 0 && try(length(var.lambda_code_source.key_prefix), 0) > 0 && try(length(var.lambda_code_source.sha), 0) > 0)
+    error_message = "lambda_code_source.{bucket, key_prefix, sha} are all required when type = \"s3\"."
   }
 }
 

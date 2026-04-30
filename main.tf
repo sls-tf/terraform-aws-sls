@@ -1,9 +1,11 @@
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
-# Package Lambda function code
+# Package Lambda function code (local mode only — skipped when
+# var.lambda_code_source.type == "s3", in which case each function's
+# deployment package is read directly from S3).
 data "archive_file" "lambda_code" {
-  for_each = local.functions_with_defaults
+  for_each = var.lambda_code_source.type == "local" ? local.functions_with_defaults : {}
 
   type = "zip"
   # SAM per-function CodeUri: each function gets its own archive from its subdirectory.
@@ -67,10 +69,10 @@ data "archive_file" "lambda_code" {
   ]
 }
 
-# Lambda package size validation
-# Ensures deployment packages don't exceed AWS Lambda limits
+# Lambda package size validation (local mode only — S3-sourced packages
+# are AWS's responsibility to validate at upload time).
 resource "null_resource" "lambda_size_validation" {
-  for_each = local.functions_with_defaults
+  for_each = var.lambda_code_source.type == "local" ? local.functions_with_defaults : {}
 
   lifecycle {
     # Validate compressed package size (50 MB limit for direct upload)
@@ -161,8 +163,12 @@ resource "aws_lambda_function" "functions" {
   function_name = try(each.value.name, null) != null ? each.value.name : "${try(local.parsed_config_resolved.service, "unknown")}-${local.provider_with_defaults.stage}-${each.key}"
   role          = aws_iam_role.lambda_execution[each.key].arn
 
-  filename         = data.archive_file.lambda_code[each.key].output_path
-  source_code_hash = data.archive_file.lambda_code[each.key].output_base64sha256
+  # Code source: either local zip (data.archive_file) or S3 (artefact built
+  # in CI and promoted via the SHA pin in var.lambda_code_source).
+  filename         = var.lambda_code_source.type == "local" ? data.archive_file.lambda_code[each.key].output_path : null
+  source_code_hash = var.lambda_code_source.type == "local" ? data.archive_file.lambda_code[each.key].output_base64sha256 : null
+  s3_bucket        = var.lambda_code_source.type == "s3" ? var.lambda_code_source.bucket : null
+  s3_key           = var.lambda_code_source.type == "s3" ? "${var.lambda_code_source.key_prefix}/${local.s3_artefact_names[each.key]}/${var.lambda_code_source.sha}.zip" : null
 
   runtime     = each.value.runtime
   handler     = each.value.handler

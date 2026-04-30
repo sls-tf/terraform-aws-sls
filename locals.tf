@@ -213,6 +213,28 @@ locals {
     if length(nonsensitive(local.validation_errors)) == 0
   })
 
+  # S3 artefact name derivation (used only when var.lambda_code_source.type == "s3").
+  # Maps each function logical ID to the artefact name embedded in the S3 key:
+  #   "scheduler-service/<artefact_name>/<sha>.zip"
+  # Rule: take the function's CodeUri, strip a trailing "dist" or "dist/" segment,
+  # and use the last remaining path component. Falls back to the function logical ID
+  # in lower-kebab-case if CodeUri is absent. Examples:
+  #   "jobs/panel-session-sweeper/dist/" -> "panel-session-sweeper"
+  #   "jobs/foo/"                        -> "foo"
+  #   "" (no CodeUri)                    -> lowercased function key
+  s3_artefact_names = {
+    for func_name, func in local.functions_with_defaults :
+    func_name => (
+      try(func.code_uri, null) != null && func.code_uri != "" ?
+      element(
+        [for seg in split("/", trimsuffix(trimsuffix(trimprefix(func.code_uri, "./"), "/"), "/dist")) : seg if seg != "" && seg != "dist"],
+        length([for seg in split("/", trimsuffix(trimsuffix(trimprefix(func.code_uri, "./"), "/"), "/dist")) : seg if seg != "" && seg != "dist"]) - 1
+      ) :
+      lower(func_name)
+    )
+  }
+
+
   # Region override warning
   region_warnings = (
     var.aws_region != null &&
