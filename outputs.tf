@@ -49,12 +49,12 @@ output "lambda_packages" {
 
 output "function_arns" {
   description = "Map of Lambda function ARNs keyed by function name"
-  value       = { for k, v in aws_lambda_function.functions : k => v.arn }
+  value       = nonsensitive({ for k, v in aws_lambda_function.functions : k => v.arn })
 }
 
 output "function_names" {
   description = "Map of Lambda function names keyed by function name"
-  value       = { for k, v in aws_lambda_function.functions : k => v.function_name }
+  value       = nonsensitive({ for k, v in aws_lambda_function.functions : k => v.function_name })
 }
 
 output "role_arns" {
