@@ -7,7 +7,9 @@
 locals {
   sam_validation_errors = var.config_format != "sam" ? [] : (
     local.sam_raw == null ? [
-      "Failed to parse SAM template at '${var.config_path}'. Please verify the file exists and contains valid YAML syntax."
+      try(data.external.sam_yaml[0].result.error, "") != "" ?
+        "SAM YAML preprocessing failed: ${data.external.sam_yaml[0].result.error}" :
+        "Failed to parse SAM template at '${var.config_path}'. Please verify the file exists and contains valid YAML syntax."
     ] : concat(
       # Transform declaration is required and must be the SAM value
       try(local.sam_raw.Transform, null) == null ? [

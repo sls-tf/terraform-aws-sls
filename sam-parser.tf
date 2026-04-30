@@ -6,10 +6,31 @@
 # blocks (Lambda, API Gateway, S3, DynamoDB, SQS, etc.) consume this translated
 # config without modification.
 
+# Terraform's yamldecode() rejects CloudFormation intrinsic function tags
+# (!Ref, !Sub, !If, etc.) with "unsupported tag" errors rather than stripping
+# them silently.  Use js-yaml via an external data source, which treats those
+# tags as transparent wrappers returning their underlying value unchanged.
+data "external" "sam_yaml" {
+  count = var.config_format == "sam" ? 1 : 0
+
+  program = [
+    "node",
+    fileexists("${path.cwd}/node_modules/sls-tf/scripts/sam-preprocessor.js")
+      ? "${path.cwd}/node_modules/sls-tf/scripts/sam-preprocessor.js"
+      : "${path.module}/scripts/sam-preprocessor.js"
+  ]
+
+  query = {
+    config_path = var.config_path
+  }
+}
+
 locals {
-  # Raw YAML parse — only active when config_format is "sam"
-  sam_raw = var.config_format == "sam" ? try(
-    yamldecode(local.file_content),
+  # Raw SAM parse — only active when config_format is "sam".
+  # Decoded from the external preprocessor result (handles !Ref/!Sub/!If etc.).
+  sam_raw = var.config_format == "sam" ? (
+    try(data.external.sam_yaml[0].result.content, "") != "" ?
+    try(jsondecode(data.external.sam_yaml[0].result.content), null) :
     null
   ) : null
 
