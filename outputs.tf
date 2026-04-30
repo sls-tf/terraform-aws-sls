@@ -54,7 +54,12 @@ output "function_arns" {
 
 output "function_names" {
   description = "Map of Lambda function names keyed by function name"
-  value       = nonsensitive({ for k, v in aws_lambda_function.functions : k => v.function_name })
+  # Compute from config rather than resource attribute to avoid AWS provider sensitivity on
+  # aws_lambda_function.function_name (which trickles through environment.variables).
+  value = nonsensitive({
+    for k, func in local.functions_with_defaults :
+    k => try(func.name, "${local.parsed_config_resolved.service}-${local.provider_with_defaults.stage}-${k}")
+  })
 }
 
 output "role_arns" {
