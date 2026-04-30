@@ -251,20 +251,20 @@ locals {
   }
 
   # Merge provider and function statements per function
-  merged_iam_statements = {
-    for func_name, func in local.functions_with_defaults_prevalidation :
+  merged_iam_statements = nonsensitive({
+    for func_name, func in nonsensitive(local.functions_with_defaults_prevalidation) :
     func_name => concat(
       local.provider_iam_statements_normalized,
       local.function_iam_statements_normalized[func_name]
     )
-  }
+  })
 
   # Functions requiring custom policies (non-empty statements)
-  functions_with_policies = {
-    for func_name, statements in local.merged_iam_statements :
+  functions_with_policies = nonsensitive({
+    for func_name, statements in nonsensitive(local.merged_iam_statements) :
     func_name => statements
     if length(statements) > 0
-  }
+  })
 
   # HTTP Event Parsing (Roadmap #4)
   # Extract all HTTP events from all functions
@@ -441,8 +441,8 @@ locals {
   ])
 
   # Normalize both shorthand and object syntax to consistent format
-  s3_events_normalized = [
-    for evt in local.s3_events_raw :
+  s3_events_normalized = nonsensitive([
+    for evt in nonsensitive(local.s3_events_raw) :
     evt != null ? {
       function_name = evt.function_name
       event_index   = evt.event_index
@@ -464,7 +464,7 @@ locals {
       force_deploy = try(evt.s3_config.forceDeploy, false)
     } : null
     if evt != null
-  ]
+  ])
 
   # Parse custom bucket properties from provider.s3 section
   s3_buckets_custom_properties = try(local.parsed_config.provider.s3, {})
@@ -542,8 +542,8 @@ locals {
 
   # DynamoDB & SQS Event Source Mapping (Roadmap #8)
   # Flatten nested function/events structure into flat map for for_each
-  event_source_mappings = merge([
-    for func_name, func in local.functions_with_defaults_prevalidation : {
+  event_source_mappings = nonsensitive(merge([
+    for func_name, func in nonsensitive(local.functions_with_defaults_prevalidation) : {
       for idx, event in try(func.events, []) :
       # Create unique identifier: {function}_{type}_{index}
       "${func_name}_${try(event.stream, null) != null ? "stream" : "sqs"}_${idx}" => {
@@ -569,7 +569,7 @@ locals {
       # Only include DynamoDB stream and SQS events
       if(try(event.stream, null) != null || try(event.sqs, null) != null)
     }
-  ]...)
+  ]...))
 
   # Event Source Mapping Validation (Roadmap #8)
   event_source_validation_errors = flatten([
@@ -804,8 +804,8 @@ locals {
   # Supports both string and object origin syntax:
   #   origin: "https://example.com"
   #   origin: { DomainName: "example.com", CustomOriginConfig: { ... } }
-  cloudfront_events_raw = flatten([
-    for func_name, func in local.functions_with_defaults_prevalidation : [
+  cloudfront_events_raw = nonsensitive(flatten([
+    for func_name, func in nonsensitive(local.functions_with_defaults_prevalidation) : [
       for event_idx, event in try(func.events, []) : {
         function_name   = func_name
         event_index     = event_idx
@@ -819,7 +819,7 @@ locals {
         cache_policy_id = try(event.cloudFront.cachePolicy.id, null)
       } if can(event.cloudFront)
     ]
-  ])
+  ]))
 
   # Functions that have cloudFront events - require publish=true and edge trust policy
   functions_with_cloudfront_events = toset([
@@ -835,8 +835,8 @@ locals {
 
   # Prepared distribution configs for resource creation.
   # Excludes groups referencing existing AWS::CloudFront::Distribution resources.
-  cloudfront_lambda_edge_distributions = {
-    for dist_key, events in local.cloudfront_distribution_groups :
+  cloudfront_lambda_edge_distributions = nonsensitive({
+    for dist_key, events in nonsensitive(local.cloudfront_distribution_groups) :
     dist_key => {
       events = events
       primary_origin = {
@@ -859,7 +859,7 @@ locals {
       }
     }
     if !contains(keys(local.cloudfront_distributions), dist_key)
-  }
+  })
 
   # CloudFront event validation errors
   cloudfront_event_validation_errors = flatten([
