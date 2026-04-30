@@ -25,7 +25,10 @@ locals {
   # and to enable variable resolution transparently, we use resolved_config
   # throughout the module by referencing it via parsed_config_resolved.
   # Note: parsed_config continues to exist for the resolution engine itself.
-  parsed_config_resolved = try(local.resolved_config, local.parsed_config)
+  # nonsensitive(): resolved_config derives from parsed_config (itself nonsensitive)
+  # via purely string-substitution passes; the result carries no secret material.
+  # Wrapping here prevents taint from propagating into aws_lambda_function.function_name.
+  parsed_config_resolved = nonsensitive(try(local.resolved_config, local.parsed_config))
 
   # Comprehensive validation error collection
   # SAM errors are prepended outside the null check so parse failures are reported.
