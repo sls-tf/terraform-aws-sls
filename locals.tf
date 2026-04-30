@@ -199,11 +199,14 @@ locals {
 
   # Function-level default inheritance (after validation)
   # Used for resource generation - filters out invalid configs
-  functions_with_defaults = {
-    for func_name, func in local.functions_with_defaults_prevalidation :
+  # nonsensitive(): function names/structure are never secrets; SAM params (ARNs, config strings)
+  # are visible in the AWS console. Stripping here prevents the sensitivity flag from propagating
+  # into for_each resource maps and from remote-state ARNs tainting iteration keys.
+  functions_with_defaults = nonsensitive({
+    for func_name, func in nonsensitive(local.functions_with_defaults_prevalidation) :
     func_name => func
-    if length(local.validation_errors) == 0
-  }
+    if length(nonsensitive(local.validation_errors)) == 0
+  })
 
   # Region override warning
   region_warnings = (
@@ -679,10 +682,10 @@ locals {
   ])
 
   # Create map for for_each iteration
-  schedule_event_map = {
-    for event in local.all_schedule_events :
+  schedule_event_map = nonsensitive({
+    for event in nonsensitive(local.all_schedule_events) :
     event.event_key => event
-  }
+  })
 
   # Flatten eventBridge events from all functions
   # EventBridge events support event patterns and custom event buses
@@ -704,10 +707,10 @@ locals {
   ])
 
   # Create map for for_each iteration
-  eventbridge_event_map = {
-    for event in local.all_eventbridge_events :
+  eventbridge_event_map = nonsensitive({
+    for event in nonsensitive(local.all_eventbridge_events) :
     event.event_key => event
-  }
+  })
 
   # ============================================================================
   # Custom Resource Parsing (Roadmap #9)
