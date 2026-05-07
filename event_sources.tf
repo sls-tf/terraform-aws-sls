@@ -10,6 +10,8 @@ resource "aws_cloudwatch_event_rule" "schedule" {
   description         = each.value.description
   schedule_expression = each.value.schedule_expression
   state               = each.value.enabled ? "ENABLED" : "DISABLED"
+
+  depends_on = [null_resource.config_validation]
 }
 
 # CloudWatch Event Rules for eventBridge events
@@ -21,6 +23,8 @@ resource "aws_cloudwatch_event_rule" "eventbridge" {
   event_bus_name = each.value.eventBus
   event_pattern  = jsonencode(each.value.pattern)
   state          = each.value.enabled ? "ENABLED" : "DISABLED"
+
+  depends_on = [null_resource.config_validation]
 }
 
 # CloudWatch Event Targets for schedule events

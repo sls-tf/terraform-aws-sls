@@ -2,7 +2,7 @@
 # DynamoDB Streams and SQS Queue event source mappings for Lambda functions
 
 resource "aws_lambda_event_source_mapping" "event_sources" {
-  for_each = length(local.validation_errors) == 0 ? local.event_source_mappings : {}
+  for_each = local.event_source_mappings
 
   function_name    = aws_lambda_function.functions[each.value.function_name].function_name
   event_source_arn = each.value.arn
@@ -52,4 +52,6 @@ resource "aws_lambda_event_source_mapping" "event_sources" {
       }
     }
   }
+
+  depends_on = [null_resource.config_validation]
 }

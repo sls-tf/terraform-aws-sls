@@ -114,6 +114,8 @@ resource "aws_iam_role" "lambda_execution" {
     Stage    = local.provider_with_defaults.stage
     Function = each.key
   }
+
+  depends_on = [null_resource.config_validation]
 }
 
 # Attach basic execution policy for CloudWatch Logs

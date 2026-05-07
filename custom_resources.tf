@@ -31,6 +31,8 @@ resource "aws_s3_bucket" "custom" {
       tag.Key => tag.Value
     }, {})
   )
+
+  depends_on = [null_resource.config_validation]
 }
 
 # S3 bucket versioning configuration
@@ -138,6 +140,8 @@ resource "aws_dynamodb_table" "custom" {
       tag.Key => tag.Value
     }, {})
   )
+
+  depends_on = [null_resource.config_validation]
 }
 
 # ============================================================================
@@ -179,6 +183,8 @@ resource "aws_sns_topic" "custom" {
       tag.Key => tag.Value
     }, {})
   )
+
+  depends_on = [null_resource.config_validation]
 }
 
 # ============================================================================
@@ -233,6 +239,8 @@ resource "aws_sqs_queue" "custom" {
       tag.Key => tag.Value
     }, {})
   )
+
+  depends_on = [null_resource.config_validation]
 }
 
 # ============================================================================
@@ -414,4 +422,6 @@ resource "aws_cloudfront_distribution" "custom" {
       tag.Key => tag.Value
     }, {})
   )
+
+  depends_on = [null_resource.config_validation]
 }

@@ -203,14 +203,17 @@ locals {
   }
 
   # Function-level default inheritance (after validation)
-  # Used for resource generation - filters out invalid configs
-  # nonsensitive(): function names/structure are never secrets; SAM params (ARNs, config strings)
-  # are visible in the AWS console. Stripping here prevents the sensitivity flag from propagating
-  # into for_each resource maps and from remote-state ARNs tainting iteration keys.
+  # Keys are always the static logical IDs from the config schema so that for_each is
+  # deterministic even when sam_template_parameters contains unknown values (e.g. ARNs
+  # from resources being created in the same plan).  Validation errors are surfaced at
+  # apply time via the null_resource.config_validation precondition; all resources that
+  # depend on this local must carry depends_on = [null_resource.config_validation].
+  # nonsensitive(): function names/structure are never secrets; SAM params (ARNs, config
+  # strings) are visible in the AWS console. Stripping here prevents the sensitivity flag
+  # from propagating into for_each resource maps and remote-state ARNs tainting keys.
   functions_with_defaults = nonsensitive({
     for func_name, func in nonsensitive(local.functions_with_defaults_prevalidation) :
     func_name => func
-    if length(nonsensitive(local.validation_errors)) == 0
   })
 
   # S3 artefact name derivation (used only when var.lambda_code_source.type == "s3").
