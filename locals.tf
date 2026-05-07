@@ -227,9 +227,12 @@ locals {
   # nonsensitive(): function names/structure are never secrets; SAM params (ARNs, config
   # strings) are visible in the AWS console. Stripping here prevents the sensitivity flag
   # from propagating into for_each resource maps and remote-state ARNs tainting keys.
+  # Iterate _function_names (concrete set(string)) rather than the any-typed
+  # prevalidation map so Terraform can always verify the keys at plan time, even
+  # when sam_template_parameters contains unknown ARNs from co-planned resources.
   functions_with_defaults = nonsensitive({
-    for func_name, func in nonsensitive(local.functions_with_defaults_prevalidation) :
-    func_name => func
+    for func_name in local._function_names :
+    func_name => local.functions_with_defaults_prevalidation[func_name]
   })
 
   # S3 artefact name derivation (used only when var.lambda_code_source.type == "s3").
@@ -728,9 +731,11 @@ locals {
   ])
 
   # Create map for for_each iteration
+  # tostring() forces the key to string type so Terraform sees a concrete key
+  # even when event is any-typed (from iterating any-typed function values).
   schedule_event_map = nonsensitive({
     for event in nonsensitive(local.all_schedule_events) :
-    event.event_key => event
+    tostring(event.event_key) => event
   })
 
   # Flatten eventBridge events from all functions
@@ -753,9 +758,10 @@ locals {
   ])
 
   # Create map for for_each iteration
+  # tostring() forces the key to string type (same rationale as schedule_event_map).
   eventbridge_event_map = nonsensitive({
     for event in nonsensitive(local.all_eventbridge_events) :
-    event.event_key => event
+    tostring(event.event_key) => event
   })
 
   # ============================================================================
