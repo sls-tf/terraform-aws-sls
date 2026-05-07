@@ -191,15 +191,31 @@ locals {
     }
   )
 
+  # Concrete set(string) of function names.
+  # toset([for k, v in map : tostring(k)]) forces Terraform to resolve the iteration
+  # keys as set(string) rather than any-typed, preventing for_each unknown-key errors
+  # when sam_template_parameters contains computed ARNs from co-planned resources.
+  _function_names = toset([
+    for k, v in try(local.parsed_config.functions, {}) : tostring(k)
+  ])
+
+  # Concrete set(string) of CloudFormation custom resource logical IDs — same fix.
+  _custom_resource_names = toset([
+    for k, v in try(local.parsed_config.resources.Resources, {}) : tostring(k)
+  ])
+
   # Function-level default inheritance (before validation)
   # Used for parsing events - cannot depend on validation_errors
   functions_with_defaults_prevalidation = {
-    for func_name, func in try(local.parsed_config.functions, {}) :
-    func_name => merge(func, {
-      runtime    = try(coalesce(try(func.runtime, null), try(local.parsed_config.provider.runtime, null)), null)
-      memorySize = coalesce(try(func.memorySize, null), local.provider_with_defaults.memorySize)
-      timeout    = coalesce(try(func.timeout, null), local.provider_with_defaults.timeout)
-    })
+    for func_name in local._function_names :
+    func_name => merge(
+      try(local.parsed_config.functions[func_name], {}),
+      {
+        runtime    = try(coalesce(try(local.parsed_config.functions[func_name].runtime, null), try(local.parsed_config.provider.runtime, null)), null)
+        memorySize = coalesce(try(local.parsed_config.functions[func_name].memorySize, null), local.provider_with_defaults.memorySize)
+        timeout    = coalesce(try(local.parsed_config.functions[func_name].timeout, null), local.provider_with_defaults.timeout)
+      }
+    )
   }
 
   # Function-level default inheritance (after validation)
@@ -747,7 +763,10 @@ locals {
   # ============================================================================
 
   # Extract resources section from serverless config (with variable resolution)
-  custom_resources_raw = try(local.resolved_config.resources.Resources, {})
+  custom_resources_raw = {
+    for logical_id in local._custom_resource_names :
+    logical_id => try(local.resolved_config.resources.Resources[logical_id], {})
+  }
 
   # Helper function to convert PascalCase to snake_case
   # Example: MyBucket -> my_bucket, UsersTable -> users_table
