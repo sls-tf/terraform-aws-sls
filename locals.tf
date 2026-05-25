@@ -183,7 +183,7 @@ locals {
   provider_with_defaults = local.parsed_config_resolved == null ? null : merge(
     try(local.parsed_config_resolved.provider, {}),
     {
-      stage      = coalesce(try(local.parsed_config_resolved.provider.stage, null), "dev")
+      stage      = coalesce(var.stage_override, try(local.parsed_config_resolved.provider.stage, null), "dev")
       region     = coalesce(try(local.parsed_config_resolved.provider.region, null), var.aws_region, "us-east-1")
       memorySize = coalesce(try(local.parsed_config_resolved.provider.memorySize, null), 1024)
       timeout    = coalesce(try(local.parsed_config_resolved.provider.timeout, null), 6)

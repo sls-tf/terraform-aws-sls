@@ -169,3 +169,16 @@ variable "max_variable_depth" {
     error_message = "max_variable_depth must be between 1 and 50."
   }
 }
+
+variable "stage_override" {
+  description = <<-DESC
+    Overrides the deployment "stage" used in every generated resource name
+    (IAM roles, policies, log groups, event rules, function names, etc.), which
+    otherwise defaults to the template's provider.stage or "dev". Set this to a
+    per-environment value (e.g. an ephemeral PR-env slug) so multiple deployments
+    of the same template can coexist in one account without name collisions.
+    null = use the template/provider stage (unchanged behaviour).
+  DESC
+  type        = string
+  default     = null
+}
