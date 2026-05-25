@@ -13,7 +13,7 @@ locals {
   parsed_config = var.config_format == "yaml" ? try(
     yamldecode(local.file_content),
     null
-  ) : var.config_format == "typescript" ? local.parsed_config_with_typescript : (
+    ) : var.config_format == "typescript" ? local.parsed_config_with_typescript : (
     var.config_format == "sam" ? (
       local.sam_as_sls_config != null ? nonsensitive(local.sam_as_sls_config) : null
     ) : null
@@ -36,7 +36,7 @@ locals {
   # arrives via parsed_config_resolved → variable_resolution.tf → resolved_config.
   validation_errors = nonsensitive(local.parsed_config == null ? (
     var.config_format == "sam" ? local.sam_validation_errors : []
-  ) : concat(
+    ) : concat(
     # SAM-specific validation (Handler missing, Transform wrong, etc.)
     var.config_format == "sam" ? local.sam_validation_errors : [],
     # Required field validations
@@ -195,9 +195,68 @@ locals {
   # toset([for k, v in map : tostring(k)]) forces Terraform to resolve the iteration
   # keys as set(string) rather than any-typed, preventing for_each unknown-key errors
   # when sam_template_parameters contains computed ARNs from co-planned resources.
-  _function_names = toset([
-    for k, v in try(local.parsed_config.functions, {}) : tostring(k)
-  ])
+  #
+  # SAM: derive names straight from the parsed template (local.sam_raw), NOT from
+  # local.parsed_config.functions. parsed_config embeds resolved sam_template_parameters
+  # in each function's values; when any parameter is a co-planned ARN (unknown at plan,
+  # e.g. on a greenfield apply) iterating parsed_config.functions yields unknown KEYS,
+  # which propagates into every for_each/count derived from it. sam_raw depends only on
+  # the template file, so its resource keys are always known at plan.
+  _function_names = toset(
+    var.config_format == "sam" && local.sam_raw != null ? [
+      for logical_id, resource in try(local.sam_raw.Resources, {}) : tostring(logical_id)
+      if try(resource.Type, "") == "AWS::Serverless::Function"
+      ] : [
+      for k, v in try(local.parsed_config.functions, {}) : tostring(k)
+    ]
+  )
+
+  # Per-function event lists keyed by function name, sourced structurally so each
+  # event's TYPE and INDEX (which feed for_each keys downstream) are known at plan even
+  # when function values carry unknown resolved parameters. For SAM this is the
+  # template-derived event map; otherwise the parsed-config events (known for yaml/ts).
+  _function_events = var.config_format == "sam" ? local.sam_function_events : {
+    for func_name in local._function_names :
+    func_name => try(local.functions_with_defaults_prevalidation[func_name].events, [])
+  }
+
+  # Structural "does this function declare a VPC config" flag, so the lambda_vpc
+  # attachment's for_each keys are plan-known (length(func.vpc_config.subnet_ids) on
+  # the resolved function goes unknown when subnet IDs come from co-planned values).
+  _function_has_vpc = var.config_format == "sam" && local.sam_raw != null ? {
+    for logical_id, resource in try(local.sam_raw.Resources, {}) :
+    logical_id => try(resource.Properties.VpcConfig, null) != null
+    if try(resource.Type, "") == "AWS::Serverless::Function"
+    } : {
+    for func_name in local._function_names :
+    func_name => try(length(local.functions_with_defaults[func_name].vpc_config.subnet_ids), 0) > 0
+  }
+
+  # Structural handler/runtime, sourced straight from the template. The AWS provider
+  # requires both to be known at plan for Zip-package functions; reading them from the
+  # resolved function object makes them unknown whenever any sam_template_parameter is a
+  # co-planned (unknown) value, because the parsed object is dynamically typed and a
+  # single unknown leaf renders the whole object unknown. These depend only on sam_raw.
+  _function_handler = var.config_format == "sam" && local.sam_raw != null ? {
+    for fn in local._function_names :
+    fn => tostring(try(local.sam_raw.Resources[fn].Properties.Handler, "index.handler"))
+  } : {}
+  _function_runtime = var.config_format == "sam" && local.sam_raw != null ? {
+    for fn in local._function_names :
+    fn => try(coalesce(
+      try(tostring(local.sam_raw.Resources[fn].Properties.Runtime), null),
+      try(tostring(local.sam_function_globals.Runtime), null),
+    ), null)
+  } : {}
+
+  # Structural CodeUri per function (drives the S3 artefact key). Sourced from the
+  # template so the lambda's s3_key stays known at plan regardless of unknown params.
+  _function_code_uri = {
+    for fn in local._function_names :
+    fn => var.config_format == "sam" && local.sam_raw != null ?
+    tostring(try(local.sam_raw.Resources[fn].Properties.CodeUri, "")) :
+    tostring(try(local.functions_with_defaults[fn].code_uri, ""))
+  }
 
   # Concrete set(string) of CloudFormation custom resource logical IDs — same fix.
   _custom_resource_names = toset([
@@ -245,12 +304,12 @@ locals {
   #   "jobs/foo/"                        -> "foo"
   #   "" (no CodeUri)                    -> lowercased function key
   s3_artefact_names = {
-    for func_name, func in local.functions_with_defaults :
+    for func_name in local._function_names :
     func_name => (
-      try(func.code_uri, null) != null && func.code_uri != "" ?
+      local._function_code_uri[func_name] != "" ?
       element(
-        [for seg in split("/", trimsuffix(trimsuffix(trimprefix(func.code_uri, "./"), "/"), "/dist")) : seg if seg != "" && seg != "dist"],
-        length([for seg in split("/", trimsuffix(trimsuffix(trimprefix(func.code_uri, "./"), "/"), "/dist")) : seg if seg != "" && seg != "dist"]) - 1
+        [for seg in split("/", trimsuffix(trimsuffix(trimprefix(local._function_code_uri[func_name], "./"), "/"), "/dist")) : seg if seg != "" && seg != "dist"],
+        length([for seg in split("/", trimsuffix(trimsuffix(trimprefix(local._function_code_uri[func_name], "./"), "/"), "/dist")) : seg if seg != "" && seg != "dist"]) - 1
       ) :
       lower(func_name)
     )
@@ -279,10 +338,14 @@ locals {
     })
   ]
 
-  # Function-level iamRoleStatements (map of function_name -> statements)
+  # Function-level iamRoleStatements (map of function_name -> statements).
+  # Iterate _function_names (structural keys) rather than the value-contaminated
+  # prevalidation map so the map's keys stay known at plan; statement VALUES may be
+  # unknown (resolved ARNs) but that is fine — they are only rendered into the policy
+  # document at apply, never used as a for_each key.
   function_iam_statements = {
-    for func_name, func in local.functions_with_defaults_prevalidation :
-    func_name => try(func.iamRoleStatements, [])
+    for func_name in local._function_names :
+    func_name => try(local.functions_with_defaults_prevalidation[func_name].iamRoleStatements, [])
   }
 
   # Normalize function-level statements (Action/Resource: string -> array)
@@ -297,32 +360,53 @@ locals {
     ]
   }
 
-  # Merge provider and function statements per function
+  # Merge provider and function statements per function. Keyed by _function_names so
+  # keys are plan-known even when statement values carry unknown resolved ARNs.
   merged_iam_statements = nonsensitive({
-    for func_name, func in nonsensitive(local.functions_with_defaults_prevalidation) :
+    for func_name in local._function_names :
     func_name => concat(
       local.provider_iam_statements_normalized,
-      local.function_iam_statements_normalized[func_name]
+      try(local.function_iam_statements_normalized[func_name], [])
     )
   })
 
+  # Whether each function needs a custom policy resource. Computed STRUCTURALLY so the
+  # functions_with_policies for_each keys are known at plan: a function gets a policy if
+  # the provider declares statements, or the template attaches Policies to it. (Using
+  # length(statements) on merged_iam_statements would go unknown when statement Resource
+  # values are co-planned ARNs.)
+  _function_has_policies = var.config_format == "sam" && local.sam_raw != null ? {
+    for logical_id, resource in try(local.sam_raw.Resources, {}) :
+    logical_id => (
+      length(local.provider_iam_statements_normalized) > 0 ||
+      length(flatten([
+        for policy in try(tolist(resource.Properties.Policies), []) :
+        try(tolist(policy.Statement), [])
+      ])) > 0
+    )
+    if try(resource.Type, "") == "AWS::Serverless::Function"
+    } : {
+    for func_name in local._function_names :
+    func_name => length(try(local.merged_iam_statements[func_name], [])) > 0
+  }
+
   # Functions requiring custom policies (non-empty statements)
   functions_with_policies = nonsensitive({
-    for func_name, statements in nonsensitive(local.merged_iam_statements) :
-    func_name => statements
-    if length(statements) > 0
+    for func_name in local._function_names :
+    func_name => local.merged_iam_statements[func_name]
+    if try(local._function_has_policies[func_name], false)
   })
 
   # HTTP Event Parsing (Roadmap #4)
   # Extract all HTTP events from all functions
   # Use prevalidation version to avoid circular dependency
   http_events = nonsensitive(flatten([
-    for func_name, func in nonsensitive(local.functions_with_defaults_prevalidation) : [
-      for event in try(func.events, []) :
+    for func_name, events in local._function_events : [
+      for event in events :
       merge({
         function_name = func_name
-        handler       = tostring(func.handler)
-        runtime       = tostring(func.runtime)
+        handler       = tostring(try(local.functions_with_defaults_prevalidation[func_name].handler, ""))
+        runtime       = tostring(try(local.functions_with_defaults_prevalidation[func_name].runtime, ""))
         http_method   = ""
         http_path     = ""
         cors_enabled  = false
@@ -477,8 +561,8 @@ locals {
   # S3 Event Parsing (Roadmap #5)
   # Extract all S3 events from all functions
   s3_events_raw = flatten([
-    for func_name, func in local.functions_with_defaults_prevalidation : [
-      for idx, event in try(func.events, []) :
+    for func_name, events in local._function_events : [
+      for idx, event in events :
       try(event.s3, null) != null ? {
         function_name = func_name
         event_index   = idx
@@ -590,8 +674,8 @@ locals {
   # DynamoDB & SQS Event Source Mapping (Roadmap #8)
   # Flatten nested function/events structure into flat map for for_each
   event_source_mappings = nonsensitive(merge([
-    for func_name, func in nonsensitive(local.functions_with_defaults_prevalidation) : {
-      for idx, event in try(func.events, []) :
+    for func_name, events in local._function_events : {
+      for idx, event in events :
       # Create unique identifier: {function}_{type}_{index}
       "${func_name}_${try(event.stream, null) != null ? "stream" : "sqs"}_${idx}" => {
         function_name = func_name
@@ -709,8 +793,8 @@ locals {
   # Schedule events support both string syntax (schedule: "rate(5 minutes)")
   # and object syntax (schedule: { rate: "...", enabled: false, ... })
   all_schedule_events = flatten([
-    for func_name, func in local.functions_with_defaults : [
-      for event_idx, event in try(func.events, []) : {
+    for func_name, events in local._function_events : [
+      for event_idx, event in events : {
         function_name = func_name
         event_index   = event_idx
         event_key     = "${func_name}-schedule-${event_idx}"
@@ -741,8 +825,8 @@ locals {
   # Flatten eventBridge events from all functions
   # EventBridge events support event patterns and custom event buses
   all_eventbridge_events = flatten([
-    for func_name, func in local.functions_with_defaults : [
-      for event_idx, event in try(func.events, []) : {
+    for func_name, events in local._function_events : [
+      for event_idx, event in events : {
         function_name    = func_name
         event_index      = event_idx
         event_key        = "${func_name}-eventbridge-${event_idx}"
@@ -858,8 +942,8 @@ locals {
   #   origin: "https://example.com"
   #   origin: { DomainName: "example.com", CustomOriginConfig: { ... } }
   cloudfront_events_raw = nonsensitive(flatten([
-    for func_name, func in nonsensitive(local.functions_with_defaults_prevalidation) : [
-      for event_idx, event in try(func.events, []) : {
+    for func_name, events in local._function_events : [
+      for event_idx, event in events : {
         function_name   = func_name
         event_index     = event_idx
         event_key       = "${func_name}-cloudfront-${event_idx}"

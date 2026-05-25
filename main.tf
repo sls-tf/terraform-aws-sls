@@ -128,11 +128,10 @@ resource "aws_iam_role_policy_attachment" "lambda_logs" {
 
 # Attach VPC access policy for functions with vpc_config
 resource "aws_iam_role_policy_attachment" "lambda_vpc" {
-  for_each = {
-    for func_name, func in local.functions_with_defaults :
-    func_name => func
-    if try(length(func.vpc_config.subnet_ids), 0) > 0
-  }
+  for_each = toset([
+    for func_name in local._function_names : func_name
+    if try(local._function_has_vpc[func_name], false)
+  ])
 
   role       = aws_iam_role.lambda_execution[each.key].name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
@@ -172,8 +171,10 @@ resource "aws_lambda_function" "functions" {
   s3_bucket        = var.lambda_code_source.type == "s3" ? var.lambda_code_source.bucket : null
   s3_key           = var.lambda_code_source.type == "s3" ? "${var.lambda_code_source.key_prefix}/${local.s3_artefact_names[each.key]}/${var.lambda_code_source.sha}.zip" : null
 
-  runtime     = each.value.runtime
-  handler     = each.value.handler
+  # handler/runtime come from the structural template locals for SAM (always known at
+  # plan); other config formats keep the resolved-config values.
+  runtime     = var.config_format == "sam" ? try(local._function_runtime[each.key], each.value.runtime) : each.value.runtime
+  handler     = var.config_format == "sam" ? try(local._function_handler[each.key], each.value.handler) : each.value.handler
   memory_size = each.value.memorySize
   timeout     = each.value.timeout
   # Lambda@Edge requires published versions for qualified_arn references
