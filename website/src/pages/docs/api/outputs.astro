@@ -1,0 +1,335 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+---
+
+<Layout title="Outputs Reference - sls.tf API">
+  <div class="container">
+    <div class="docs-header">
+      <h1>Outputs Reference</h1>
+      <p class="docs-description">
+        Every value exposed by sls.tf after a successful <code>terraform apply</code>
+      </p>
+    </div>
+
+    <div class="content">
+      <section class="section">
+        <h2>Lambda Outputs</h2>
+
+        <div class="output-list">
+          <div class="output">
+            <h3>function_arns</h3>
+            <p><strong>Type:</strong> map(string)</p>
+            <p>Map of Lambda function ARNs keyed by function name as defined in serverless.yml.</p>
+            <div class="code-block">
+              <pre is:raw><code>output "my_function_arn" {
+  value = module.serverless.function_arns["hello"]
+}</code></pre>
+            </div>
+          </div>
+
+          <div class="output">
+            <h3>function_names</h3>
+            <p><strong>Type:</strong> map(string)</p>
+            <p>Map of deployed Lambda function names (e.g. <code>my-api-dev-hello</code>) keyed by function key.</p>
+          </div>
+
+          <div class="output">
+            <h3>function_invoke_arns</h3>
+            <p><strong>Type:</strong> map(string)</p>
+            <p>Map of Lambda invoke ARNs suitable for use as API Gateway integration URIs.</p>
+          </div>
+
+          <div class="output">
+            <h3>lambda_packages</h3>
+            <p><strong>Type:</strong> map(object)</p>
+            <p>
+              Deployment package metadata for each function: <code>output_path</code>,
+              <code>output_size</code>, <code>output_size_mb</code>, <code>output_sha256</code>,
+              and <code>within_aws_limit</code> (true when package is under 50 MB).
+            </p>
+          </div>
+
+          <div class="output">
+            <h3>role_arns</h3>
+            <p><strong>Type:</strong> map(string)</p>
+            <p>Map of IAM execution role ARNs keyed by function name.</p>
+          </div>
+
+          <div class="output">
+            <h3>role_names</h3>
+            <p><strong>Type:</strong> map(string)</p>
+            <p>Map of IAM execution role names keyed by function name.</p>
+          </div>
+
+          <div class="output">
+            <h3>policy_arns</h3>
+            <p><strong>Type:</strong> map(string)</p>
+            <p>Map of custom IAM policy ARNs keyed by function name (only populated when <code>iamRoleStatements</code> are defined).</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>API Gateway Outputs</h2>
+
+        <div class="output-list">
+          <div class="output">
+            <h3>api_gateway_invoke_url</h3>
+            <p><strong>Type:</strong> string | null</p>
+            <p>The base invoke URL for the deployed API Gateway stage, e.g. <code>https://abc123.execute-api.us-east-1.amazonaws.com/dev</code>. Null when no HTTP events are defined.</p>
+          </div>
+
+          <div class="output">
+            <h3>api_gateway_rest_api_id</h3>
+            <p><strong>Type:</strong> string | null</p>
+            <p>REST API ID. Useful for adding custom authorizers or domain mappings outside the module.</p>
+          </div>
+
+          <div class="output">
+            <h3>api_gateway_stage_name</h3>
+            <p><strong>Type:</strong> string | null</p>
+            <p>Deployed stage name (derived from <code>provider.stage</code> or <code>stage_override</code>).</p>
+          </div>
+
+          <div class="output">
+            <h3>api_gateway_resources</h3>
+            <p><strong>Type:</strong> map(string) | null</p>
+            <p>Map of API Gateway resource IDs keyed by path. Null when no HTTP events are defined.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>S3 Event Outputs</h2>
+
+        <div class="output-list">
+          <div class="output">
+            <h3>s3_bucket_arns</h3>
+            <p><strong>Type:</strong> map(string)</p>
+            <p>Map of S3 bucket ARNs by bucket name — includes both newly-created and existing buckets.</p>
+          </div>
+
+          <div class="output">
+            <h3>s3_bucket_names</h3>
+            <p><strong>Type:</strong> map(list(string))</p>
+            <p>Map of S3 bucket names keyed by bucket key.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Schedule / EventBridge Outputs</h2>
+
+        <div class="output-list">
+          <div class="output">
+            <h3>schedule_rule_arns</h3>
+            <p><strong>Type:</strong> map(string)</p>
+            <p>Map of CloudWatch Event Rule ARNs for <code>schedule</code> events.</p>
+          </div>
+
+          <div class="output">
+            <h3>eventbridge_rule_arns</h3>
+            <p><strong>Type:</strong> map(string)</p>
+            <p>Map of EventBridge rule ARNs for <code>eventBridge</code> events.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Custom Resource Outputs</h2>
+        <p>
+          Outputs from the <code>resources:</code> section of serverless.yml (S3 buckets,
+          DynamoDB tables, SNS topics, SQS queues, CloudFront distributions):
+        </p>
+
+        <div class="code-block">
+          <pre is:raw><code># DynamoDB
+module.serverless.custom_dynamodb_table_names
+module.serverless.custom_dynamodb_table_arns
+
+# SQS
+module.serverless.custom_sqs_queue_names
+module.serverless.custom_sqs_queue_arns
+module.serverless.custom_sqs_queue_urls
+
+# SNS
+module.serverless.custom_sns_topic_names
+module.serverless.custom_sns_topic_arns
+
+# S3
+module.serverless.custom_s3_bucket_ids
+module.serverless.custom_s3_bucket_arns
+
+# CloudFront
+module.serverless.custom_cloudfront_distribution_ids
+module.serverless.custom_cloudfront_distribution_domain_names</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Parsed Config Outputs</h2>
+
+        <div class="output-list">
+          <div class="output">
+            <h3>parsed_config</h3>
+            <p><strong>Type:</strong> any</p>
+            <p>The complete parsed and variable-resolved configuration object. Useful for debugging or feeding into other modules.</p>
+          </div>
+
+          <div class="output">
+            <h3>service_name</h3>
+            <p><strong>Type:</strong> string</p>
+            <p>The service name from your configuration file.</p>
+          </div>
+
+          <div class="output">
+            <h3>functions</h3>
+            <p><strong>Type:</strong> map(any)</p>
+            <p>Map of all function definitions with provider-level defaults applied.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+
+  .docs-header {
+    text-align: center;
+    margin-bottom: 4rem;
+  }
+
+  .docs-header h1 {
+    font-size: 3rem;
+    font-weight: 700;
+    color: #1a202c;
+    margin-bottom: 1rem;
+  }
+
+  .docs-description {
+    font-size: 1.2rem;
+    color: #4a5568;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .docs-description code {
+    background: #edf2f7;
+    padding: 0.1rem 0.4rem;
+    border-radius: 0.25rem;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9em;
+    color: #2d3748;
+  }
+
+  .content {
+    line-height: 1.7;
+  }
+
+  .section {
+    margin-bottom: 3rem;
+  }
+
+  .section h2 {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #1a202c;
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 0.5rem;
+  }
+
+  .section p {
+    color: #4a5568;
+    margin-bottom: 1rem;
+  }
+
+  .section code {
+    background: #edf2f7;
+    padding: 0.1rem 0.4rem;
+    border-radius: 0.25rem;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9em;
+    color: #2d3748;
+  }
+
+  .output-list {
+    display: grid;
+    gap: 1.5rem;
+  }
+
+  .output {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+  }
+
+  .output h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #667eea;
+    margin-bottom: 0.5rem;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  }
+
+  .output p {
+    color: #4a5568;
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+  }
+
+  .code-block {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+  }
+
+  .code-block pre {
+    background: #1a202c;
+    color: #e2e8f0;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: 0;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .code-block code {
+    background: none;
+    padding: 0;
+    color: inherit;
+  }
+
+  @media (max-width: 768px) {
+    .container {
+      padding: 1rem;
+    }
+
+    .docs-header h1 {
+      font-size: 2rem;
+    }
+
+    .section h2 {
+      font-size: 1.5rem;
+    }
+
+    .code-block {
+      padding: 1rem;
+    }
+
+    .code-block pre {
+      font-size: 0.8rem;
+    }
+  }
+</style>

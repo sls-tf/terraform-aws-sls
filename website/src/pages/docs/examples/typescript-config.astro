@@ -1,0 +1,346 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+---
+
+<Layout title="TypeScript Config Example - sls.tf">
+  <div class="container">
+    <div class="docs-header">
+      <h1>TypeScript Config Example</h1>
+      <p class="docs-description">
+        The same basic service as the YAML example, rewritten as a typed <code>serverless.ts</code>
+      </p>
+    </div>
+
+    <div class="content">
+      <section class="section">
+        <h2>When to use TypeScript config</h2>
+        <p>
+          TypeScript configuration is useful when you want type-checked serverless definitions,
+          need to compute values at parse time (e.g. from environment variables), or want to share
+          types between your application code and infrastructure config.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>Install dependencies</h2>
+
+        <div class="code-block">
+          <pre is:raw><code>npm install --save-dev typescript ts-node @types/node @serverless/typescript</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>serverless.ts</h2>
+
+        <div class="code-block">
+          <pre is:raw><code>import type { AWS } from '@serverless/typescript';
+
+const stage = process.env.STAGE ?? 'dev';
+const region = 'us-east-1';
+
+const serverlessConfig: AWS = {
+  service: 'items-api',
+  frameworkVersion: '3',
+  provider: {
+    name: 'aws',
+    runtime: 'nodejs20.x',
+    region,
+    stage,
+    environment: {
+      TABLE_NAME: `items-${stage}`,
+      STAGE: stage,
+    },
+  },
+  functions: {
+    listItems: {
+      handler: 'src/list.handler',
+      description: 'List all items',
+      memorySize: 256,
+      timeout: 10,
+      events: [
+        {
+          http: {
+            path: '/items',
+            method: 'get',
+            cors: true,
+          },
+        },
+      ],
+    },
+    createItem: {
+      handler: 'src/create.handler',
+      description: 'Create a new item',
+      memorySize: 256,
+      timeout: 10,
+      events: [
+        {
+          http: {
+            path: '/items',
+            method: 'post',
+            cors: true,
+          },
+        },
+      ],
+    },
+  },
+  resources: {
+    Resources: {
+      ItemsTable: {
+        Type: 'AWS::DynamoDB::Table',
+        Properties: {
+          TableName: `items-${stage}`,
+          BillingMode: 'PAY_PER_REQUEST',
+          AttributeDefinitions: [{ AttributeName: 'id', AttributeType: 'S' }],
+          KeySchema: [{ AttributeName: 'id', KeyType: 'HASH' }],
+        },
+      },
+    },
+  },
+};
+
+export default serverlessConfig;</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>main.tf</h2>
+
+        <div class="code-block">
+          <pre is:raw><code>terraform {
+  required_version = ">= 1.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+module "serverless" {
+  source        = "./modules/sls.tf"
+  config_path   = "${path.root}/serverless.ts"
+  config_format = "typescript"
+
+  # STAGE is read by serverless.ts at parse time
+  environment_vars = {
+    STAGE = "production"
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>outputs.tf</h2>
+
+        <div class="code-block">
+          <pre is:raw><code>output "api_url" {
+  value = module.serverless.api_gateway_invoke_url
+}
+
+output "function_arns" {
+  value = module.serverless.function_arns
+}
+
+output "table_name" {
+  value = module.serverless.custom_dynamodb_table_names["ItemsTable"]
+}</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Deploy</h2>
+
+        <div class="code-block">
+          <pre is:raw><code>terraform init
+terraform plan
+terraform apply</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Async configuration</h2>
+        <p>
+          For more advanced use cases you can export an async function. sls.tf's TypeScript parser
+          will await it before continuing:
+        </p>
+
+        <div class="code-block">
+          <pre is:raw><code>import type { AWS } from '@serverless/typescript';
+import { readFileSync } from 'fs';
+
+// Load a shared config file at parse time
+const sharedConfig = JSON.parse(readFileSync('./config.json', 'utf8'));
+
+const getConfig = async (): Promise&lt;AWS&gt; => {
+  const stage = process.env.STAGE ?? 'dev';
+  return {
+    service: sharedConfig.serviceName,
+    provider: {
+      name: 'aws',
+      runtime: 'nodejs20.x',
+      region: sharedConfig.region,
+      stage,
+    },
+    functions: {
+      handler: {
+        handler: 'dist/index.handler',
+        events: [{ http: { path: '/{proxy+}', method: 'any' } }],
+      },
+    },
+  };
+};
+
+export default getConfig;</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Next steps</h2>
+        <ul>
+          <li><a href="/docs/features/typescript">TypeScript Feature Guide</a> — full details on the TypeScript parser</li>
+          <li><a href="/docs/examples/basic-service">Basic Service Example</a> — the YAML equivalent</li>
+          <li><a href="/docs/api/outputs">Outputs Reference</a> — all outputs available after apply</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+
+  .docs-header {
+    text-align: center;
+    margin-bottom: 4rem;
+  }
+
+  .docs-header h1 {
+    font-size: 3rem;
+    font-weight: 700;
+    color: #1a202c;
+    margin-bottom: 1rem;
+  }
+
+  .docs-description {
+    font-size: 1.2rem;
+    color: #4a5568;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .docs-description code {
+    background: #edf2f7;
+    padding: 0.1rem 0.4rem;
+    border-radius: 0.25rem;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9em;
+    color: #2d3748;
+  }
+
+  .content {
+    line-height: 1.7;
+  }
+
+  .section {
+    margin-bottom: 3rem;
+  }
+
+  .section h2 {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #1a202c;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 0.5rem;
+  }
+
+  .section p {
+    color: #4a5568;
+    margin-bottom: 1rem;
+  }
+
+  .section ul {
+    margin: 1rem 0;
+    padding-left: 2rem;
+  }
+
+  .section li {
+    color: #4a5568;
+    margin-bottom: 0.5rem;
+  }
+
+  .section a {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .section a:hover {
+    text-decoration: underline;
+  }
+
+  .section code {
+    background: #edf2f7;
+    padding: 0.1rem 0.4rem;
+    border-radius: 0.25rem;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9em;
+    color: #2d3748;
+  }
+
+  .code-block {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+  }
+
+  .code-block pre {
+    background: #1a202c;
+    color: #e2e8f0;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: 0;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .code-block code {
+    background: none;
+    padding: 0;
+    color: inherit;
+  }
+
+  @media (max-width: 768px) {
+    .container {
+      padding: 1rem;
+    }
+
+    .docs-header h1 {
+      font-size: 2rem;
+    }
+
+    .section h2 {
+      font-size: 1.5rem;
+    }
+
+    .code-block {
+      padding: 1rem;
+    }
+
+    .code-block pre {
+      font-size: 0.8rem;
+    }
+  }
+</style>

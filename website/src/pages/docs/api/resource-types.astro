@@ -1,0 +1,309 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+---
+
+<Layout title="Resource Types - sls.tf API">
+  <div class="container">
+    <div class="docs-header">
+      <h1>Supported Resource Types</h1>
+      <p class="docs-description">
+        AWS resources that sls.tf can create from your serverless configuration
+      </p>
+    </div>
+
+    <div class="content">
+      <section class="section">
+        <h2>Overview</h2>
+        <p>
+          sls.tf creates AWS resources from two sources: the <code>functions:</code> block (Lambda,
+          IAM roles, event wiring) and the <code>resources:</code> block (custom infrastructure).
+          The <code>resource_types</code> variable lets you restrict which CloudFormation resource
+          types from the <code>resources:</code> section get materialised.
+        </p>
+
+        <div class="code-block">
+          <h4>Restrict resource creation</h4>
+          <pre is:raw><code>module "serverless" {
+  source      = "./modules/sls.tf"
+  config_path = "${path.root}/serverless.yml"
+
+  # Only create Lambda functions and DynamoDB tables from the resources: section.
+  # API Gateway, S3 event wiring, etc. are always created regardless.
+  resource_types = [
+    "AWS::Serverless::Function",
+    "AWS::DynamoDB::Table",
+  ]
+}</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Always-Created Resources</h2>
+        <p>
+          These resources are created whenever the corresponding events or functions are present,
+          regardless of the <code>resource_types</code> setting:
+        </p>
+
+        <div class="resource-grid">
+          <div class="resource-card">
+            <h3>aws_lambda_function</h3>
+            <p>One per function in the <code>functions:</code> block.</p>
+          </div>
+          <div class="resource-card">
+            <h3>aws_iam_role</h3>
+            <p>Execution role per function with CloudWatch Logs permissions.</p>
+          </div>
+          <div class="resource-card">
+            <h3>aws_iam_role_policy</h3>
+            <p>Custom inline policy when <code>iamRoleStatements</code> are defined.</p>
+          </div>
+          <div class="resource-card">
+            <h3>aws_api_gateway_rest_api</h3>
+            <p>Created when any function has an <code>http</code> event.</p>
+          </div>
+          <div class="resource-card">
+            <h3>aws_api_gateway_stage</h3>
+            <p>Deployed stage for the REST API.</p>
+          </div>
+          <div class="resource-card">
+            <h3>aws_s3_bucket_notification</h3>
+            <p>Trigger wiring for <code>s3</code> events.</p>
+          </div>
+          <div class="resource-card">
+            <h3>aws_cloudwatch_event_rule</h3>
+            <p>Created for <code>schedule</code> and <code>eventBridge</code> events.</p>
+          </div>
+          <div class="resource-card">
+            <h3>aws_lambda_event_source_mapping</h3>
+            <p>Created for <code>stream</code> (DynamoDB/Kinesis) and <code>sqs</code> events.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Custom Resources (resources: section)</h2>
+        <p>
+          Resources defined in the <code>resources:</code> block using CloudFormation syntax.
+          These are gated by the <code>resource_types</code> variable.
+        </p>
+
+        <div class="resource-grid">
+          <div class="resource-card">
+            <h3>AWS::S3::Bucket</h3>
+            <p>Creates <code>aws_s3_bucket</code>. Exposes <code>custom_s3_bucket_ids</code> and <code>custom_s3_bucket_arns</code> outputs.</p>
+          </div>
+          <div class="resource-card">
+            <h3>AWS::DynamoDB::Table</h3>
+            <p>Creates <code>aws_dynamodb_table</code>. Exposes <code>custom_dynamodb_table_names</code> and <code>custom_dynamodb_table_arns</code> outputs.</p>
+          </div>
+          <div class="resource-card">
+            <h3>AWS::SNS::Topic</h3>
+            <p>Creates <code>aws_sns_topic</code>. Exposes <code>custom_sns_topic_names</code> and <code>custom_sns_topic_arns</code> outputs.</p>
+          </div>
+          <div class="resource-card">
+            <h3>AWS::SQS::Queue</h3>
+            <p>Creates <code>aws_sqs_queue</code>. Exposes names, ARNs, and URLs.</p>
+          </div>
+          <div class="resource-card">
+            <h3>AWS::CloudFront::Distribution</h3>
+            <p>Creates <code>aws_cloudfront_distribution</code>. Exposes IDs, ARNs, and domain names.</p>
+          </div>
+          <div class="resource-card">
+            <h3>AWS::Serverless::Function</h3>
+            <p>SAM function shorthand — treated equivalently to a Serverless Framework function entry.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Lambda@Edge</h2>
+        <p>
+          Functions with <code>cloudFront</code> events automatically create
+          <code>aws_cloudfront_distribution</code> resources. These are tracked separately
+          under the <code>lambda_edge_distribution_*</code> outputs.
+        </p>
+
+        <div class="code-block">
+          <h4>Lambda@Edge example</h4>
+          <pre is:raw><code>functions:
+  viewerRequest:
+    handler: edge/viewerRequest.handler
+    events:
+      - cloudFront:
+          eventType: viewer-request
+          origin:
+            DomainName: my-bucket.s3.amazonaws.com</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>AWS SAM Support</h2>
+        <p>
+          Set <code>config_format = "sam"</code> to use an AWS SAM <code>template.yaml</code>.
+          Pass parameter overrides via <code>sam_template_parameters</code>:
+        </p>
+
+        <div class="code-block">
+          <pre is:raw><code>module "serverless" {
+  source        = "./modules/sls.tf"
+  config_path   = "${path.root}/template.yaml"
+  config_format = "sam"
+
+  sam_template_parameters = {
+    Environment = "production"
+    TableName   = "my-table-prod"
+  }
+
+  # Only materialise functions; DynamoDB table managed elsewhere
+  resource_types = ["AWS::Serverless::Function"]
+}</code></pre>
+        </div>
+      </section>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+
+  .docs-header {
+    text-align: center;
+    margin-bottom: 4rem;
+  }
+
+  .docs-header h1 {
+    font-size: 3rem;
+    font-weight: 700;
+    color: #1a202c;
+    margin-bottom: 1rem;
+  }
+
+  .docs-description {
+    font-size: 1.2rem;
+    color: #4a5568;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .content {
+    line-height: 1.7;
+  }
+
+  .section {
+    margin-bottom: 3rem;
+  }
+
+  .section h2 {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #1a202c;
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 0.5rem;
+  }
+
+  .section p {
+    color: #4a5568;
+    margin-bottom: 1rem;
+  }
+
+  .section code {
+    background: #edf2f7;
+    padding: 0.1rem 0.4rem;
+    border-radius: 0.25rem;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9em;
+    color: #2d3748;
+  }
+
+  .resource-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+
+  .resource-card {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+  }
+
+  .resource-card h3 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #667eea;
+    margin-bottom: 0.5rem;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  }
+
+  .resource-card p {
+    color: #4a5568;
+    font-size: 0.9rem;
+    margin: 0;
+  }
+
+  .code-block {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+  }
+
+  .code-block h4 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin: 0 0 1rem 0;
+  }
+
+  .code-block pre {
+    background: #1a202c;
+    color: #e2e8f0;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: 0;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .code-block code {
+    background: none;
+    padding: 0;
+    color: inherit;
+  }
+
+  @media (max-width: 768px) {
+    .container {
+      padding: 1rem;
+    }
+
+    .docs-header h1 {
+      font-size: 2rem;
+    }
+
+    .section h2 {
+      font-size: 1.5rem;
+    }
+
+    .resource-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .code-block {
+      padding: 1rem;
+    }
+
+    .code-block pre {
+      font-size: 0.8rem;
+    }
+  }
+</style>

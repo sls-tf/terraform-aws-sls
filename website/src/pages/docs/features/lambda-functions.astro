@@ -1,0 +1,381 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+---
+
+<Layout title="Lambda Functions - sls.tf Features">
+  <div class="container">
+    <div class="docs-header">
+      <h1>Lambda Functions</h1>
+      <p class="docs-description">
+        Complete Lambda function support with all configurations and best practices
+      </p>
+    </div>
+
+    <div class="content">
+      <section class="section">
+        <h2>Overview</h2>
+        <p>
+          sls.tf provides comprehensive support for AWS Lambda functions, automatically converting your
+          Serverless Framework function definitions into production-ready Terraform resources. All Lambda
+          configurations are supported, including runtime settings, environment variables, VPC networking,
+          and advanced features like layers and concurrency controls.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>Basic Function Definition</h2>
+        <p>
+          Define Lambda functions in your serverless.yml configuration:
+        </p>
+
+        <div class="code-block">
+          <h4>Simple function</h4>
+          <pre is:raw><code>service: my-api
+provider:
+  name: aws
+  runtime: nodejs18.x
+
+functions:
+  hello:
+    handler: handler.hello
+    events:
+      - http:
+          path: hello
+          method: get</code></pre>
+        </div>
+
+        <div class="code-block">
+          <h4>Generated Terraform resources</h4>
+          <pre is:raw><code># Lambda function
+resource "aws_lambda_function" "hello" {
+  function_name = "my-api-production-hello"
+  role         = aws_iam_role.lambda_exec.arn
+  handler      = "handler.hello"
+  runtime      = "nodejs18.x"
+
+  filename         = "hello.zip"
+  source_code_hash = data.archive_file.hello.output_base64sha256
+
+  environment {
+    variables = {
+      STAGE = "production"
+    }
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Advanced Configuration</h2>
+        <p>
+          Configure advanced Lambda function settings:
+        </p>
+
+        <div class="code-block">
+          <h4>Advanced function configuration</h4>
+          <pre is:raw><code>functions:
+  api:
+    handler: dist/index.handler
+    description: "Main API handler"
+    memorySize: 512
+    timeout: 30
+    runtime: nodejs18.x
+
+    # Environment variables
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${ssm:/my-app/database-url~true}
+      LOG_LEVEL: info
+
+    # VPC configuration
+    vpc:
+      subnetIds:
+        - subnet-12345
+        - subnet-67890
+      securityGroupIds:
+        - sg-12345
+
+    # Lambda layers
+    layers:
+      - arn:aws:lambda:us-east-1:123456789:layer:shared-libraries:1
+
+    # Concurrency settings
+    reservedConcurrencyLimit: 10
+    provisionedConcurrency: 5
+
+    # Dead Letter Queue
+    deadLetterArn: arn:aws:sqs:us-east-1:123456789:queue/dead-letter-queue
+
+    # Tracing
+    tracing: Active
+
+    # Tags
+    tags:
+      Team: Backend
+      CostCenter: engineering</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Event Sources</h2>
+        <p>
+          sls.tf supports all Lambda event sources:
+        </p>
+
+        <div class="code-block">
+          <h4>HTTP API Gateway</h4>
+          <pre is:raw><code>functions:
+  api:
+    handler: handler.api
+    events:
+      - http:
+          path: /api/{proxy+}
+          method: ANY
+          cors: true</code></pre>
+        </div>
+
+        <div class="code-block">
+          <h4>S3 events</h4>
+          <pre is:raw><code>functions:
+  processImage:
+    handler: image.process
+    events:
+      - s3:
+          bucket: my-bucket
+          event: s3:ObjectCreated:*
+          existing: true</code></pre>
+        </div>
+
+        <div class="code-block">
+          <h4>DynamoDB streams</h4>
+          <pre is:raw><code>functions:
+  processData:
+    handler: data.process
+    events:
+      - stream:
+          type: dynamodb
+          arn: arn:aws:dynamodb:us-east-1:123456789:table/my-table/stream
+          batchSize: 100
+          startingPosition: LATEST</code></pre>
+        </div>
+
+        <div class="code-block">
+          <h4>Schedule events</h4>
+          <pre is:raw><code>functions:
+  cleanup:
+    handler: cleanup.run
+    events:
+      - schedule:
+          rate: rate(1 day)
+          enabled: true
+          input:
+            cleanup_type: "logs"</code></pre>
+        </div>
+
+        <div class="code-block">
+          <h4>SNS topics</h4>
+          <pre is:raw><code>functions:
+  handleNotification:
+    handler: notification.handle
+    events:
+      - sns:
+          topicName: my-topic
+          displayName: "My notification topic"</code></pre>
+        </div>
+
+        <div class="code-block">
+          <h4>SQS queues</h4>
+          <pre is:raw><code>functions:
+  processMessage:
+    handler: message.process
+    events:
+      - sqs:
+          arn: arn:aws:sqs:us-east-1:123456789:queue/my-queue
+          batchSize: 10</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Runtime Support</h2>
+        <p>
+          sls.tf supports all AWS Lambda runtimes:
+        </p>
+
+        <ul>
+          <li><strong>Node.js:</strong> nodejs14.x, nodejs16.x, nodejs18.x, nodejs20.x</li>
+          <li><strong>Python:</strong> python3.8, python3.9, python3.10, python3.11, python3.12</li>
+          <li><strong>Java:</strong> java8.al2, java11, java17, java21</li>
+          <li><strong>Go:</strong> go1.x</li>
+          <li><strong>Ruby:</strong> ruby2.7, ruby3.2</li>
+          <li><strong>.NET:</strong> dotnet6, dotnet7, dotnet8</li>
+          <li><strong>Custom runtimes:</strong> provided.al2, provided</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>Security Best Practices</h2>
+        <p>
+          sls.tf implements security best practices for Lambda functions:
+        </p>
+
+        <ul>
+          <li><strong>Principle of least privilege:</strong> IAM roles with minimal required permissions</li>
+          <li><strong>VPC isolation:</strong> Network isolation for sensitive functions</li>
+          <li><strong>Environment variable encryption:</strong> Automatic encryption of sensitive variables</li>
+          <li><strong>Resource policies:</strong> Proper resource-based policies for cross-account access</li>
+          <li><strong>VPC endpoints:</strong> Secure access to AWS services without internet access</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>Performance Optimization</h2>
+        <p>
+          Performance optimization features:
+        </p>
+
+        <ul>
+          <li><strong>Provisioned Concurrency:</strong> Keep functions warm and reduce cold starts</li>
+          <li><strong>Reserved Concurrency:</strong> Limit concurrent executions</li>
+          <li><strong>Memory optimization:</strong> Automatic memory sizing recommendations</li>
+          <li><strong>Layer optimization:</strong> Shared dependencies across functions</li>
+        </ul>
+
+        <div class="code-block">
+          <h4>Performance configuration</h4>
+          <pre is:raw><code>functions:
+  optimizedFunction:
+    handler: optimized.handler
+    memorySize: 1024
+    timeout: 60
+    reservedConcurrencyLimit: 20
+    provisionedConcurrency: 5
+    layers:
+      - arn:aws:lambda:us-east-1:123456789:layer:shared-dependencies:3
+    package:
+      individually: true
+      patterns:
+        - '!node_modules/**'
+        - 'node_modules/required-package/**'</code></pre>
+        </div>
+      </section>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+
+  .docs-header {
+    text-align: center;
+    margin-bottom: 4rem;
+  }
+
+  .docs-header h1 {
+    font-size: 3rem;
+    font-weight: 700;
+    color: #1a202c;
+    margin-bottom: 1rem;
+  }
+
+  .docs-description {
+    font-size: 1.2rem;
+    color: #4a5568;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .content {
+    line-height: 1.7;
+  }
+
+  .section {
+    margin-bottom: 3rem;
+  }
+
+  .section h2 {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #1a202c;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 0.5rem;
+  }
+
+  .section p {
+    color: #4a5568;
+    margin-bottom: 1rem;
+  }
+
+  .section ul {
+    margin: 1rem 0;
+    padding-left: 2rem;
+  }
+
+  .section li {
+    color: #4a5568;
+    margin-bottom: 0.5rem;
+  }
+
+  .section strong {
+    color: #2d3748;
+  }
+
+  .code-block {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+  }
+
+  .code-block h4 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin: 0 0 1rem 0;
+  }
+
+  .code-block pre {
+    background: #1a202c;
+    color: #e2e8f0;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: 0;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .code-block code {
+    background: none;
+    padding: 0;
+    color: inherit;
+  }
+
+  @media (max-width: 768px) {
+    .container {
+      padding: 1rem;
+    }
+
+    .docs-header h1 {
+      font-size: 2rem;
+    }
+
+    .section h2 {
+      font-size: 1.5rem;
+    }
+
+    .code-block {
+      padding: 1rem;
+    }
+
+    .code-block pre {
+      font-size: 0.8rem;
+    }
+  }
+</style>

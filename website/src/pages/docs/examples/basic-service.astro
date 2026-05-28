@@ -1,0 +1,320 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+---
+
+<Layout title="Basic Service Example - sls.tf">
+  <div class="container">
+    <div class="docs-header">
+      <h1>Basic Service Example</h1>
+      <p class="docs-description">
+        A complete HTTP API with Lambda functions — from serverless.yml to deployed infrastructure
+      </p>
+    </div>
+
+    <div class="content">
+      <section class="section">
+        <h2>What you'll build</h2>
+        <p>
+          A simple REST API backed by two Lambda functions: one that lists items and one that
+          creates items. The example shows how sls.tf translates a standard Serverless Framework
+          configuration into Terraform resources.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>Project structure</h2>
+
+        <div class="code-block">
+          <pre is:raw><code>my-api/
+  modules/
+    sls.tf/              # git submodule
+  src/
+    list.js
+    create.js
+  serverless.yml
+  main.tf
+  outputs.tf</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>serverless.yml</h2>
+
+        <div class="code-block">
+          <pre is:raw><code>service: items-api
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: us-east-1
+  stage: dev
+  environment:
+    TABLE_NAME: items-${self:provider.stage}
+
+functions:
+  listItems:
+    handler: src/list.handler
+    description: "List all items"
+    memorySize: 256
+    timeout: 10
+    events:
+      - http:
+          path: /items
+          method: get
+          cors: true
+
+  createItem:
+    handler: src/create.handler
+    description: "Create a new item"
+    memorySize: 256
+    timeout: 10
+    events:
+      - http:
+          path: /items
+          method: post
+          cors: true
+
+resources:
+  Resources:
+    ItemsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: items-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>main.tf</h2>
+
+        <div class="code-block">
+          <pre is:raw><code>terraform {
+  required_version = ">= 1.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+module "serverless" {
+  source      = "./modules/sls.tf"
+  config_path = "${path.root}/serverless.yml"
+
+  # Grant both functions access to the DynamoDB table
+  environment_vars = {
+    STAGE = "dev"
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>outputs.tf</h2>
+
+        <div class="code-block">
+          <pre is:raw><code>output "api_url" {
+  description = "Base URL for the deployed API"
+  value       = module.serverless.api_gateway_invoke_url
+}
+
+output "list_items_arn" {
+  value = module.serverless.function_arns["listItems"]
+}
+
+output "create_item_arn" {
+  value = module.serverless.function_arns["createItem"]
+}
+
+output "table_name" {
+  value = module.serverless.custom_dynamodb_table_names["ItemsTable"]
+}</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Deploy</h2>
+
+        <div class="code-block">
+          <pre is:raw><code>terraform init
+terraform plan
+terraform apply
+
+# Output example:
+# api_url = "https://abc123.execute-api.us-east-1.amazonaws.com/dev"</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Test the API</h2>
+
+        <div class="code-block">
+          <pre is:raw><code># List items
+curl https://abc123.execute-api.us-east-1.amazonaws.com/dev/items
+
+# Create an item
+curl -X POST https://abc123.execute-api.us-east-1.amazonaws.com/dev/items \
+  -H "Content-Type: application/json" \
+  -d '{"name": "my item"}'</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>What sls.tf created</h2>
+        <ul>
+          <li>Two <code>aws_lambda_function</code> resources (<code>listItems</code>, <code>createItem</code>)</li>
+          <li>Two <code>aws_iam_role</code> execution roles with CloudWatch Logs permissions</li>
+          <li>One <code>aws_api_gateway_rest_api</code> with routes for <code>GET /items</code> and <code>POST /items</code></li>
+          <li>CORS configuration on both routes</li>
+          <li>One <code>aws_dynamodb_table</code> from the <code>resources:</code> block</li>
+          <li>Lambda permissions for API Gateway to invoke each function</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>Next steps</h2>
+        <ul>
+          <li><a href="/docs/examples/typescript-config">TypeScript Config Example</a> — the same service in TypeScript</li>
+          <li><a href="/docs/api/outputs">Outputs Reference</a> — all available outputs</li>
+          <li><a href="/docs/configuration">Configuration Guide</a> — advanced options</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+
+  .docs-header {
+    text-align: center;
+    margin-bottom: 4rem;
+  }
+
+  .docs-header h1 {
+    font-size: 3rem;
+    font-weight: 700;
+    color: #1a202c;
+    margin-bottom: 1rem;
+  }
+
+  .docs-description {
+    font-size: 1.2rem;
+    color: #4a5568;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .content {
+    line-height: 1.7;
+  }
+
+  .section {
+    margin-bottom: 3rem;
+  }
+
+  .section h2 {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #1a202c;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 0.5rem;
+  }
+
+  .section p {
+    color: #4a5568;
+    margin-bottom: 1rem;
+  }
+
+  .section ul {
+    margin: 1rem 0;
+    padding-left: 2rem;
+  }
+
+  .section li {
+    color: #4a5568;
+    margin-bottom: 0.5rem;
+  }
+
+  .section a {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .section a:hover {
+    text-decoration: underline;
+  }
+
+  .section code {
+    background: #edf2f7;
+    padding: 0.1rem 0.4rem;
+    border-radius: 0.25rem;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9em;
+    color: #2d3748;
+  }
+
+  .code-block {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+  }
+
+  .code-block pre {
+    background: #1a202c;
+    color: #e2e8f0;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: 0;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .code-block code {
+    background: none;
+    padding: 0;
+    color: inherit;
+  }
+
+  @media (max-width: 768px) {
+    .container {
+      padding: 1rem;
+    }
+
+    .docs-header h1 {
+      font-size: 2rem;
+    }
+
+    .section h2 {
+      font-size: 1.5rem;
+    }
+
+    .code-block {
+      padding: 1rem;
+    }
+
+    .code-block pre {
+      font-size: 0.8rem;
+    }
+  }
+</style>

@@ -1,0 +1,346 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="Configuration Guide - sls.tf">
+  <div class="container">
+    <div class="docs-header">
+      <h1>Configuration Guide</h1>
+      <p class="docs-description">
+        Advanced configuration options and best practices for sls.tf
+      </p>
+    </div>
+
+    <div class="content">
+      <section class="section">
+        <h2>Required Variables</h2>
+        <p>
+          These are the essential variables you need to configure when using sls.tf:
+        </p>
+
+        <div class="code-block">
+          <h4>Basic configuration</h4>
+          <pre is:raw><code>module "serverless" {
+  source = "./modules/sls.tf"
+
+  # Required: Path to your serverless configuration
+  config_path = "${path.root}/serverless.yml"
+}</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Optional Variables</h2>
+        <p>
+          Customize your deployment with these optional configuration options:
+        </p>
+
+        <div class="code-block">
+          <h4>Advanced configuration</h4>
+          <pre is:raw><code>module "serverless" {
+  source = "./modules/sls.tf"
+
+  # Basic configuration
+  config_path   = "${path.root}/serverless.yml"
+  config_format = "yaml"   # yaml | typescript | sam
+
+  # Override the deployment stage (default: from serverless.yml)
+  stage_override = "production"
+
+  # Override AWS region (default: from serverless.yml)
+  aws_region = "us-east-1"
+
+  # Lambda code source
+  lambda_code_path = "."
+
+  # Restrict which resource types from the resources: section get created
+  # null (default) = create all supported types
+  resource_types = ["AWS::Serverless::Function", "AWS::DynamoDB::Table"]
+
+  # Custom domain support
+  enable_custom_domain = true
+  acm_certificate_arn  = "arn:aws:acm:us-east-1:123456789:certificate/12345"
+
+  # Environment variables for ${env:VAR} resolution
+  environment_vars = {
+    DATABASE_URL = "postgres://..."
+  }
+
+  # Variable resolution behaviour
+  strict_variable_resolution = true
+  max_variable_depth         = 10
+}</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Configuration File Options</h2>
+        <p>
+          sls.tf supports YAML, TypeScript, and AWS SAM configuration files:
+        </p>
+
+        <div class="code-block">
+          <h4>serverless.yml (YAML)</h4>
+          <pre is:raw><code>service: my-api
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: production
+  environment:
+    NODE_ENV: production
+    DATABASE_URL: ${ssm:/my-app/database-url}
+
+functions:
+  api:
+    handler: dist/index.handler
+    events:
+      - http:
+          path: /{proxy+}
+          method: ANY
+    environment:
+      FUNCTION_NAME: api</code></pre>
+        </div>
+
+        <div class="code-block">
+          <h4>serverless.ts (TypeScript)</h4>
+          <pre is:raw><code>import type { AWS } from '@serverless/typescript';
+
+const serverlessConfiguration: AWS = {
+  service: 'my-api',
+  frameworkVersion: '3',
+  provider: {
+    name: 'aws',
+    runtime: 'nodejs18.x',
+    region: 'us-east-1',
+    stage: 'production',
+    environment: {
+      NODE_ENV: 'production',
+      DATABASE_URL: process.env.DATABASE_URL
+    }
+  },
+  functions: {
+    api: {
+      handler: 'dist/index.handler',
+      events: [
+        {
+          http: {
+            path: '/{proxy+}',
+            method: 'any'
+          }
+        }
+      ]
+    }
+  }
+};
+
+export default serverlessConfiguration;</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Variable Resolution</h2>
+        <p>
+          sls.tf automatically resolves variables in your serverless configuration:
+        </p>
+
+        <div class="code-block">
+          <h4>Supported variable sources</h4>
+          <pre is:raw><code># Environment variables
+DATABASE_URL: ${env:DATABASE_URL}
+
+# AWS Systems Manager Parameter Store
+API_KEY: ${ssm:/my-app/api-key~true}
+
+# AWS Secrets Manager
+DB_PASSWORD: ${secretsmanager:my-app-db-password}
+
+# File references
+PRIVATE_KEY: ${file(./keys/private.key)}
+
+# Other function references
+BUCKET_NAME: ${cf:stack-name.OutputBucketName}
+
+# Self references
+FUNCTION_NAME: ${self:service}-${self:provider.stage}</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>S3-Based Lambda Packages</h2>
+        <p>
+          For CI/CD pipelines where artefacts are built once and promoted between environments:
+        </p>
+
+        <div class="code-block">
+          <h4>S3 artefact source</h4>
+          <pre is:raw><code>module "serverless" {
+  source      = "./modules/sls.tf"
+  config_path = "${path.root}/serverless.yml"
+
+  lambda_code_source = {
+    type       = "s3"
+    bucket     = "my-artefact-bucket"
+    key_prefix = "releases/my-api"
+    sha        = var.deploy_sha   # passed in from CI
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Best Practices</h2>
+        <p>
+          Follow these best practices for optimal configuration:
+        </p>
+
+        <ul>
+          <li><strong>Use environment-specific stages:</strong> Separate configurations for dev, staging, and production</li>
+          <li><strong>Secure secrets:</strong> Use AWS Systems Manager Parameter Store or Secrets Manager for sensitive data</li>
+          <li><strong>Resource naming:</strong> Use consistent naming conventions with resource prefixes</li>
+          <li><strong>Tagging:</strong> Apply comprehensive tags for cost allocation and resource management</li>
+          <li><strong>IAM permissions:</strong> Follow the principle of least privilege for IAM roles</li>
+          <li><strong>Monitoring:</strong> Enable CloudWatch logging and X-Ray tracing for observability</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>Troubleshooting</h2>
+        <p>
+          Common configuration issues and solutions:
+        </p>
+
+        <ul>
+          <li><strong>Variable resolution errors:</strong> Ensure all referenced variables exist and are accessible</li>
+          <li><strong>Permission errors:</strong> Verify IAM roles have sufficient permissions for all resources</li>
+          <li><strong>Resource limits:</strong> Check AWS service limits for your region</li>
+          <li><strong>Invalid syntax:</strong> Validate your serverless.yml syntax before deployment</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+
+  .docs-header {
+    text-align: center;
+    margin-bottom: 4rem;
+  }
+
+  .docs-header h1 {
+    font-size: 3rem;
+    font-weight: 700;
+    color: #1a202c;
+    margin-bottom: 1rem;
+  }
+
+  .docs-description {
+    font-size: 1.2rem;
+    color: #4a5568;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .content {
+    line-height: 1.7;
+  }
+
+  .section {
+    margin-bottom: 3rem;
+  }
+
+  .section h2 {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #1a202c;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 0.5rem;
+  }
+
+  .section h4 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin: 1.5rem 0 0.5rem 0;
+  }
+
+  .section p {
+    color: #4a5568;
+    margin-bottom: 1rem;
+  }
+
+  .section ul {
+    margin: 1rem 0;
+    padding-left: 2rem;
+  }
+
+  .section li {
+    color: #4a5568;
+    margin-bottom: 0.5rem;
+  }
+
+  .section a {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .section a:hover {
+    text-decoration: underline;
+  }
+
+  .code-block {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+  }
+
+  .code-block pre {
+    background: #1a202c;
+    color: #e2e8f0;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: 0;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .code-block code {
+    background: none;
+    padding: 0;
+    color: inherit;
+  }
+
+  @media (max-width: 768px) {
+    .container {
+      padding: 1rem;
+    }
+
+    .docs-header h1 {
+      font-size: 2rem;
+    }
+
+    .section h2 {
+      font-size: 1.5rem;
+    }
+
+    .code-block {
+      padding: 1rem;
+    }
+
+    .code-block pre {
+      font-size: 0.8rem;
+    }
+  }
+</style>

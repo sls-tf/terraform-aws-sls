@@ -1,0 +1,317 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+---
+
+<Layout title="TypeScript Support - sls.tf Features">
+  <div class="container">
+    <div class="docs-header">
+      <h1>TypeScript Support</h1>
+      <p class="docs-description">
+        Use <code>serverless.ts</code> with async exports — full TypeScript configuration support
+      </p>
+    </div>
+
+    <div class="content">
+      <section class="section">
+        <h2>Overview</h2>
+        <p>
+          sls.tf supports TypeScript configuration files (<code>serverless.ts</code>) via an
+          external Node.js parser. The parser handles <code>export default</code>, async function
+          exports, and Promise-returning exports, so you can write your serverless configuration
+          with full TypeScript type safety.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>Prerequisites</h2>
+        <p>
+          The TypeScript parser requires Node.js and either <code>ts-node</code> or the sls-tf
+          NPM package in your project:
+        </p>
+
+        <div class="code-block">
+          <pre is:raw><code>npm install --save-dev ts-node @types/node @serverless/typescript</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Enable TypeScript parsing</h2>
+        <p>
+          Set <code>config_format = "typescript"</code> and point <code>config_path</code> at your
+          <code>serverless.ts</code> file:
+        </p>
+
+        <div class="code-block">
+          <h4>main.tf</h4>
+          <pre is:raw><code>module "serverless" {
+  source        = "./modules/sls.tf"
+  config_path   = "${path.root}/serverless.ts"
+  config_format = "typescript"
+}</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Static export</h2>
+        <p>
+          The simplest form — a typed constant exported as default:
+        </p>
+
+        <div class="code-block">
+          <h4>serverless.ts</h4>
+          <pre is:raw><code>import type { AWS } from '@serverless/typescript';
+
+const config: AWS = {
+  service: 'my-api',
+  frameworkVersion: '3',
+  provider: {
+    name: 'aws',
+    runtime: 'nodejs20.x',
+    region: 'us-east-1',
+    stage: process.env.STAGE ?? 'dev',
+  },
+  functions: {
+    api: {
+      handler: 'dist/handler.main',
+      events: [
+        {
+          http: {
+            path: '/{proxy+}',
+            method: 'any',
+            cors: true,
+          },
+        },
+      ],
+    },
+  },
+};
+
+export default config;</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Async export</h2>
+        <p>
+          The parser also handles async exports, useful when you need to fetch secrets or
+          configuration at parse time:
+        </p>
+
+        <div class="code-block">
+          <h4>serverless.ts (async)</h4>
+          <pre is:raw><code>import type { AWS } from '@serverless/typescript';
+
+const getConfig = async (): Promise&lt;AWS&gt; => {
+  // Async setup — e.g. read from a secrets file
+  const stage = process.env.STAGE ?? 'dev';
+
+  return {
+    service: 'my-api',
+    provider: {
+      name: 'aws',
+      runtime: 'nodejs20.x',
+      region: 'us-east-1',
+      stage,
+    },
+    functions: {
+      hello: {
+        handler: `dist/handlers/${stage}.handler`,
+        events: [{ http: { path: '/hello', method: 'get' } }],
+      },
+    },
+  };
+};
+
+export default getConfig;</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Environment variables during parse</h2>
+        <p>
+          Pass environment variables into the TypeScript parser via Terraform:
+        </p>
+
+        <div class="code-block">
+          <pre is:raw><code>module "serverless" {
+  source        = "./modules/sls.tf"
+  config_path   = "${path.root}/serverless.ts"
+  config_format = "typescript"
+
+  environment_vars = {
+    STAGE      = "production"
+    AWS_REGION = "eu-west-1"
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>How it works</h2>
+        <p>
+          During <code>terraform plan</code> / <code>terraform apply</code>, sls.tf calls an
+          <code>external</code> data source that executes a Node.js script via <code>ts-node</code>.
+          The script imports your <code>serverless.ts</code>, resolves any async exports, and
+          returns the config as JSON. The parser looks for <code>ts-node</code> first in your
+          project's local <code>node_modules</code>, then falls back to the module's own scripts
+          directory.
+        </p>
+
+        <ul>
+          <li>Supports <code>export default value</code>, <code>export default function</code>, and <code>export default asyncFn</code></li>
+          <li>TypeScript errors surface as clean <code>terraform plan</code> errors</li>
+          <li>No separate compilation step required — <code>ts-node</code> is used directly</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>Troubleshooting</h2>
+
+        <ul>
+          <li>
+            <strong>Cannot find module 'ts-node':</strong> Run
+            <code>npm install --save-dev ts-node typescript</code> in your project root.
+          </li>
+          <li>
+            <strong>TypeScript compilation errors:</strong> Fix type errors in <code>serverless.ts</code> before running <code>terraform plan</code>.
+          </li>
+          <li>
+            <strong>Async export not resolving:</strong> Ensure your default export is either a value or a zero-argument async function returning a Promise.
+          </li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+
+  .docs-header {
+    text-align: center;
+    margin-bottom: 4rem;
+  }
+
+  .docs-header h1 {
+    font-size: 3rem;
+    font-weight: 700;
+    color: #1a202c;
+    margin-bottom: 1rem;
+  }
+
+  .docs-description {
+    font-size: 1.2rem;
+    color: #4a5568;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .docs-description code {
+    background: #edf2f7;
+    padding: 0.1rem 0.4rem;
+    border-radius: 0.25rem;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9em;
+    color: #2d3748;
+  }
+
+  .content {
+    line-height: 1.7;
+  }
+
+  .section {
+    margin-bottom: 3rem;
+  }
+
+  .section h2 {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #1a202c;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 0.5rem;
+  }
+
+  .section p {
+    color: #4a5568;
+    margin-bottom: 1rem;
+  }
+
+  .section ul {
+    margin: 1rem 0;
+    padding-left: 2rem;
+  }
+
+  .section li {
+    color: #4a5568;
+    margin-bottom: 0.5rem;
+  }
+
+  .section code {
+    background: #edf2f7;
+    padding: 0.1rem 0.4rem;
+    border-radius: 0.25rem;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9em;
+    color: #2d3748;
+  }
+
+  .code-block {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+  }
+
+  .code-block h4 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin: 0 0 1rem 0;
+  }
+
+  .code-block pre {
+    background: #1a202c;
+    color: #e2e8f0;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: 0;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .code-block code {
+    background: none;
+    padding: 0;
+    color: inherit;
+  }
+
+  @media (max-width: 768px) {
+    .container {
+      padding: 1rem;
+    }
+
+    .docs-header h1 {
+      font-size: 2rem;
+    }
+
+    .section h2 {
+      font-size: 1.5rem;
+    }
+
+    .code-block {
+      padding: 1rem;
+    }
+
+    .code-block pre {
+      font-size: 0.8rem;
+    }
+  }
+</style>
