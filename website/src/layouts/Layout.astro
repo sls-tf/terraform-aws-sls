@@ -155,6 +155,75 @@ const { title } = Astro.props;
     color: var(--fg);
     text-decoration: none;
   }
+
+  /* ── Doc page overrides ──────────────────────────────────────
+     Inner doc pages have their own <style> blocks written for a
+     light background. These globals restore contrast on dark bg. */
+
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--fg) !important;
+    font-family: var(--font-display);
+  }
+
+  p, li, td, th {
+    color: var(--fg-2) !important;
+  }
+
+  /* Section rule lines */
+  .section h2,
+  .doc-section h2 {
+    border-bottom-color: var(--border-bright) !important;
+  }
+
+  /* Code block containers */
+  .code-block {
+    background: var(--bg-2) !important;
+    border: 1px solid var(--border-bright) !important;
+    border-radius: 4px !important;
+  }
+
+  .code-block h4 {
+    color: var(--fg-2) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 0.8rem !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .code-block pre {
+    border-radius: 2px !important;
+  }
+
+  /* Doc index cards */
+  .doc-link {
+    background: var(--bg-2) !important;
+    border: 1px solid var(--border-bright) !important;
+    border-radius: 4px !important;
+  }
+
+  .doc-link:hover {
+    background: var(--bg-3) !important;
+    border-color: var(--accent) !important;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+
+  .doc-link h3 {
+    color: var(--fg) !important;
+  }
+
+  /* Docs header description text */
+  .docs-description {
+    color: var(--fg-2) !important;
+  }
+
+  /* Section links */
+  .section a {
+    color: var(--accent) !important;
+  }
+  .section a:hover {
+    color: var(--fg) !important;
+  }
 </style>
 
 <style>
