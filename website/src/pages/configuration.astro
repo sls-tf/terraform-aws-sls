@@ -20,7 +20,7 @@ import Layout from '../layouts/Layout.astro';
 
         <div class="code-block">
           <h4>Basic configuration</h4>
-          <pre><code>module "serverless" {
+          <pre is:raw><code>module "serverless" {
   source = "./modules/sls.tf"
 
   # Required: Path to your serverless configuration
@@ -43,7 +43,7 @@ import Layout from '../layouts/Layout.astro';
 
         <div class="code-block">
           <h4>Advanced configuration</h4>
-          <pre><code>module "serverless" {
+          <pre is:raw><code>module "serverless" {
   source = "./modules/sls.tf"
 
   # Basic configuration
@@ -104,7 +104,7 @@ import Layout from '../layouts/Layout.astro';
 
         <div class="code-block">
           <h4>serverless.yml (YAML)</h4>
-          <pre><code>service: my-api
+          <pre is:raw><code>service: my-api
 provider:
   name: aws
   runtime: nodejs18.x
@@ -134,7 +134,7 @@ custom:
 
         <div class="code-block">
           <h4>serverless.ts (TypeScript)</h4>
-          <pre><code>import type { AWS } from '@serverless/typescript';
+          <pre is:raw><code>import type { AWS } from '@serverless/typescript';
 
 const serverlessConfiguration: AWS = {
   service: 'my-api',
@@ -176,7 +176,7 @@ export default serverlessConfiguration;</code></pre>
 
         <div class="code-block">
           <h4>Supported variable sources</h4>
-          <pre><code># Environment variables
+          <pre is:raw><code># Environment variables
 DATABASE_URL: ${env:DATABASE_URL}
 
 # AWS Systems Manager Parameter Store
@@ -220,7 +220,7 @@ FUNCTION_NAME: ${self:service}-${self:provider.stage}</code></pre>
 
         <div class="code-block">
           <h4>Multi-environment setup</h4>
-          <pre><code># terraform.tfvars for production
+          <pre is:raw><code># terraform.tfvars for production
 environment = "production"
 region      = "us-east-1"
 enable_cloudwatch_logs = true
@@ -235,7 +235,7 @@ enable_xray_tracing   = false</code></pre>
 
         <div class="code-block">
           <h4>Custom domain configuration</h4>
-          <pre><code>module "serverless" {
+          <pre is:raw><code>module "serverless" {
   source = "./modules/sls.tf"
 
   config_file = "${path.root}/serverless.yml"

@@ -33,14 +33,14 @@ import Layout from '../layouts/Layout.astro';
 
         <div class="code-block">
           <h4>Add sls.tf submodule</h4>
-          <pre><code># Add the sls.tf submodule to your project
+          <pre is:raw><code># Add the sls.tf submodule to your project
 git submodule add https://github.com/your-org/sls.tf.git modules/sls.tf
 git submodule update --init --recursive</code></pre>
         </div>
 
         <div class="code-block">
           <h4>Initialize Terraform</h4>
-          <pre><code># Navigate to your project directory
+          <pre is:raw><code># Navigate to your project directory
 cd your-project
 
 # Initialize Terraform
@@ -62,7 +62,7 @@ terraform apply</code></pre>
 
         <div class="code-block">
           <h4>Download and setup</h4>
-          <pre><code># Clone the repository
+          <pre is:raw><code># Clone the repository
 git clone https://github.com/your-org/sls.tf.git
 
 # Copy to your project modules directory
@@ -84,7 +84,7 @@ terraform init</code></pre>
 
         <div class="code-block">
           <h4>main.tf</h4>
-          <pre><code>terraform {'{'}
+          <pre is:raw><code>terraform {'{'}
   required_version = ">= 1.0"
   required_providers {'{'}
     aws = {'{'}
@@ -121,7 +121,7 @@ module "serverless" {'{'}
 
         <div class="code-block">
           <h4>serverless.yml</h4>
-          <pre><code>service: my-api
+          <pre is:raw><code>service: my-api
 provider:
   name: aws
   runtime: nodejs18.x
@@ -145,7 +145,7 @@ functions:
 
         <div class="code-block">
           <h4>Test the installation</h4>
-          <pre><code># Check Terraform configuration
+          <pre is:raw><code># Check Terraform configuration
 terraform validate
 
 # See what will be created

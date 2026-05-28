@@ -23,7 +23,7 @@ import Layout from '../../../layouts/Layout.astro';
             <p><strong>Description:</strong> Path to your serverless configuration file (serverless.yml or serverless.ts)</p>
             <div class="example">
               <h4>Example:</h4>
-              <pre><code>config_file = "${path.root}/serverless.yml"</code></pre>
+              <pre is:raw><code>config_file = "${path.root}/serverless.yml"</code></pre>
             </div>
           </div>
 
@@ -34,7 +34,7 @@ import Layout from '../../../layouts/Layout.astro';
             <p><strong>Description:</strong> AWS region where resources will be deployed</p>
             <div class="example">
               <h4>Example:</h4>
-              <pre><code>region = "us-east-1"</code></pre>
+              <pre is:raw><code>region = "us-east-1"</code></pre>
             </div>
           </div>
 
@@ -45,7 +45,7 @@ import Layout from '../../../layouts/Layout.astro';
             <p><strong>Description:</strong> Environment identifier for resource naming and configuration</p>
             <div class="example">
               <h4>Example:</h4>
-              <pre><code>environment = "production"</code></pre>
+              <pre is:raw><code>environment = "production"</code></pre>
             </div>
           </div>
         </div>
@@ -63,7 +63,7 @@ import Layout from '../../../layouts/Layout.astro';
             <p><strong>Description:</strong> Tags to apply to all created resources</p>
             <div class="example">
               <h4>Example:</h4>
-              <pre><code>tags = {'{'}
+              <pre is:raw><code>tags = {'{'}
   Project     = "My API"
   Owner       = "team@example.com"
   CostCenter  = "engineering"
@@ -80,7 +80,7 @@ import Layout from '../../../layouts/Layout.astro';
             <p><strong>Description:</strong> Prefix to add to all resource names</p>
             <div class="example">
               <h4>Example:</h4>
-              <pre><code>resource_prefix = "myapp"</code></pre>
+              <pre is:raw><code>resource_prefix = "myapp"</code></pre>
             </div>
           </div>
 
@@ -92,7 +92,7 @@ import Layout from '../../../layouts/Layout.astro';
             <p><strong>Description:</strong> Stage name for API Gateway deployment</p>
             <div class="example">
               <h4>Example:</h4>
-              <pre><code>stage_name = "v1"</code></pre>
+              <pre is:raw><code>stage_name = "v1"</code></pre>
             </div>
           </div>
 
@@ -104,7 +104,7 @@ import Layout from '../../../layouts/Layout.astro';
             <p><strong>Description:</strong> Enable CloudWatch logging for Lambda functions</p>
             <div class="example">
               <h4>Example:</h4>
-              <pre><code>enable_cloudwatch_logs = true</code></pre>
+              <pre is:raw><code>enable_cloudwatch_logs = true</code></pre>
             </div>
           </div>
 
@@ -116,7 +116,7 @@ import Layout from '../../../layouts/Layout.astro';
             <p><strong>Description:</strong> Enable AWS X-Ray tracing for Lambda functions</p>
             <div class="example">
               <h4>Example:</h4>
-              <pre><code>enable_xray_tracing = true</code></pre>
+              <pre is:raw><code>enable_xray_tracing = true</code></pre>
             </div>
           </div>
 
@@ -128,7 +128,7 @@ import Layout from '../../../layouts/Layout.astro';
             <p><strong>Description:</strong> Enable API Gateway execution logging</p>
             <div class="example">
               <h4>Example:</h4>
-              <pre><code>enable_api_logs = true</code></pre>
+              <pre is:raw><code>enable_api_logs = true</code></pre>
             </div>
           </div>
         </div>
@@ -145,7 +145,7 @@ import Layout from '../../../layouts/Layout.astro';
             <p><strong>Description:</strong> VPC configuration for Lambda functions</p>
             <div class="example">
               <h4>Example:</h4>
-              <pre><code>vpc_config = {
+              <pre is:raw><code>vpc_config = {
   subnet_ids         = ["subnet-12345", "subnet-67890"]
   security_group_ids = ["sg-12345"]
 }</code></pre>
@@ -165,7 +165,7 @@ import Layout from '../../../layouts/Layout.astro';
             <p><strong>Description:</strong> Custom domain configuration for API Gateway</p>
             <div class="example">
               <h4>Example:</h4>
-              <pre><code>custom_domain = {
+              <pre is:raw><code>custom_domain = {
   domain_name       = "api.example.com"
   certificate_arn   = "arn:aws:acm:us-east-1:123456789:certificate/12345"
   base_path         = "v1"
@@ -187,7 +187,7 @@ import Layout from '../../../layouts/Layout.astro';
             <p><strong>Description:</strong> Additional IAM policies to attach to Lambda execution role</p>
             <div class="example">
               <h4>Example:</h4>
-              <pre><code>iam_policies = [
+              <pre is:raw><code>iam_policies = [
   {
     name   = "dynamodb-access"
     policy = jsonencode({
@@ -212,7 +212,7 @@ import Layout from '../../../layouts/Layout.astro';
             <p><strong>Description:</strong> Existing IAM role ARN to use instead of creating a new one</p>
             <div class="example">
               <h4>Example:</h4>
-              <pre><code>iam_role_arn = "arn:aws:iam::123456789:role/existing-lambda-role"</code></pre>
+              <pre is:raw><code>iam_role_arn = "arn:aws:iam::123456789:role/existing-lambda-role"</code></pre>
             </div>
           </div>
         </div>
@@ -229,7 +229,7 @@ import Layout from '../../../layouts/Layout.astro';
             <p><strong>Description:</strong> Additional environment variables for all Lambda functions</p>
             <div class="example">
               <h4>Example:</h4>
-              <pre><code>environment_variables = {
+              <pre is:raw><code>environment_variables = {
   LOG_LEVEL      = "info"
   FEATURE_FLAGS  = "new_feature,experimental_api"
   CACHE_TTL      = "300"

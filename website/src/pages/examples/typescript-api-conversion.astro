@@ -30,7 +30,7 @@ import Layout from '../../layouts/Layout.astro';
 
         <div class="code-block">
           <h4>Project Directory</h4>
-          <pre><code>aws-serverless-typescript-api/
+          <pre is:raw><code>aws-serverless-typescript-api/
 ├── src/
 │   ├── functions/
 │   │   └── todo/
@@ -116,7 +116,7 @@ import Layout from '../../layouts/Layout.astro';
 
         <div class="code-block">
           <h4>Install sls.tf locally for TypeScript parsing</h4>
-          <pre><code># Navigate to your project root
+          <pre is:raw><code># Navigate to your project root
 cd /path/to/your-project
 
 # Install sls.tf from Git repository for TypeScript parsing
@@ -145,7 +145,7 @@ touch outputs.tf</code></pre>
 
         <div class="code-block">
           <h4>Dual Installation Example</h4>
-          <pre><code># Terminal session showing both installations
+          <pre is:raw><code># Terminal session showing both installations
 cd /path/to/your-project
 
 # 1. Install as NPM package (gets TypeScript parser with dependencies)
@@ -175,7 +175,7 @@ terraform init
 
         <div class="code-block">
           <h4>Updated serverless.ts (minimal changes)</h4>
-          <pre><code>import type { AWS } from '@serverless/typescript';
+          <pre is:raw><code>import type { AWS } from '@serverless/typescript';
 import { createTodo, getTodo, getAllTodos, updateTodo, deleteTodo } from '@functions/todo';
 
 const serverlessConfiguration: AWS = {
@@ -247,7 +247,7 @@ export default serverlessConfiguration;</code></pre>
         <h3>Step 3: Create Terraform Configuration</h3>
         <div class="code-block">
           <h4>main.tf</h4>
-          <pre><code>terraform {'{'}
+          <pre is:raw><code>terraform {'{'}
   required_version = ">= 1.0"
   required_providers {'{'}
     aws = {'{'}
@@ -298,7 +298,7 @@ output "service_name" {'{'}
 
         <div class="code-block">
           <h4>variables.tf</h4>
-          <pre><code>variable "aws_region" {'{'}
+          <pre is:raw><code>variable "aws_region" {'{'}
   description = "AWS region for deployment"
   type        = string
   default     = "us-east-1"
@@ -359,7 +359,7 @@ variable "tags" {'{'}
         <h3>Local Testing</h3>
         <div class="code-block">
           <h4>Continue using Serverless Framework locally</h4>
-          <pre><code># Install dependencies
+          <pre is:raw><code># Install dependencies
 npm install
 
 # Start local development
@@ -372,7 +372,7 @@ npx sls invoke local -f getAllTodos</code></pre>
         <h3>Step 4: Test Hybrid Installation</h3>
         <div class="code-block">
           <h4>Test TypeScript parsing and Terraform configuration</h4>
-          <pre><code># Navigate to project root
+          <pre is:raw><code># Navigate to project root
 cd /path/to/your-project
 
 # Verify sls.tf NPM installation
@@ -406,7 +406,7 @@ terraform apply</code></pre>
         <h3>Integration Testing</h3>
         <div class="code-block">
           <h4>Test deployed API</h4>
-          <pre><code># Get API endpoint from Terraform output
+          <pre is:raw><code># Get API endpoint from Terraform output
 API_URL=$(terraform output -raw api_gateway_url)
 
 # Test GET all todos

@@ -30,7 +30,7 @@ import Layout from '../../layouts/Layout.astro';
 
         <div class="code-block">
           <h4>Simple function</h4>
-          <pre><code>service: my-api
+          <pre is:raw><code>service: my-api
 provider:
   name: aws
   runtime: nodejs18.x
@@ -46,7 +46,7 @@ functions:
 
         <div class="code-block">
           <h4>Generated Terraform resources</h4>
-          <pre><code># Lambda function
+          <pre is:raw><code># Lambda function
 resource "aws_lambda_function" "hello" {
   function_name = "my-api-production-hello"
   role         = aws_iam_role.lambda_exec.arn
@@ -73,7 +73,7 @@ resource "aws_lambda_function" "hello" {
 
         <div class="code-block">
           <h4>Advanced function configuration</h4>
-          <pre><code>functions:
+          <pre is:raw><code>functions:
   api:
     handler: dist/index.handler
     description: "Main API handler"
@@ -124,7 +124,7 @@ resource "aws_lambda_function" "hello" {
 
         <div class="code-block">
           <h4>HTTP API Gateway</h4>
-          <pre><code>functions:
+          <pre is:raw><code>functions:
   api:
     handler: handler.api
     events:
@@ -136,7 +136,7 @@ resource "aws_lambda_function" "hello" {
 
         <div class="code-block">
           <h4>S3 events</h4>
-          <pre><code>functions:
+          <pre is:raw><code>functions:
   processImage:
     handler: image.process
     events:
@@ -148,7 +148,7 @@ resource "aws_lambda_function" "hello" {
 
         <div class="code-block">
           <h4>DynamoDB streams</h4>
-          <pre><code>functions:
+          <pre is:raw><code>functions:
   processData:
     handler: data.process
     events:
@@ -161,7 +161,7 @@ resource "aws_lambda_function" "hello" {
 
         <div class="code-block">
           <h4>Schedule events</h4>
-          <pre><code>functions:
+          <pre is:raw><code>functions:
   cleanup:
     handler: cleanup.run
     events:
@@ -174,7 +174,7 @@ resource "aws_lambda_function" "hello" {
 
         <div class="code-block">
           <h4>SNS topics</h4>
-          <pre><code>functions:
+          <pre is:raw><code>functions:
   handleNotification:
     handler: notification.handle
     events:
@@ -185,7 +185,7 @@ resource "aws_lambda_function" "hello" {
 
         <div class="code-block">
           <h4>SQS queues</h4>
-          <pre><code>functions:
+          <pre is:raw><code>functions:
   processMessage:
     handler: message.process
     events:
@@ -228,7 +228,7 @@ resource "aws_lambda_function" "hello" {
 
         <div class="code-block">
           <h4>Security configuration example</h4>
-          <pre><code>functions:
+          <pre is:raw><code>functions:
   secureHandler:
     handler: secure.handler
 
@@ -280,7 +280,7 @@ resource "aws_lambda_function" "hello" {
 
         <div class="code-block">
           <h4>Monitoring configuration</h4>
-          <pre><code>functions:
+          <pre is:raw><code>functions:
   monitoredFunction:
     handler: monitor.handler
 
@@ -320,7 +320,7 @@ resource "aws_lambda_function" "hello" {
 
         <div class="code-block">
           <h4>Performance configuration</h4>
-          <pre><code>functions:
+          <pre is:raw><code>functions:
   optimizedFunction:
     handler: optimized.handler
 
