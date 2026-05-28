@@ -13,6 +13,12 @@ const { title } = Astro.props;
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Serverless Framework to Terraform Conversion Module" />
     <title>{title}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Outfit:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -22,9 +28,8 @@ const { title } = Astro.props;
           <a href="/">sls.tf</a>
         </div>
         <div class="nav-links">
-          <a href="/">Home</a>
-          <a href="/docs">Documentation</a>
-          <a href="https://github.com/sls-tf/sls.tf" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <a href="/docs">Docs</a>
+          <a href="https://github.com/sls-tf/sls.tf" target="_blank" rel="noopener noreferrer" class="nav-github">GitHub</a>
         </div>
       </div>
     </nav>
@@ -33,96 +38,158 @@ const { title } = Astro.props;
     </main>
     <footer>
       <div class="footer-container">
-        <p>&copy; 2025 sls.tf • Serverless Framework to Terraform conversion module</p>
+        <p>sls.tf &mdash; MIT License &mdash; <a href="https://github.com/sls-tf/sls.tf" target="_blank" rel="noopener noreferrer">github.com/sls-tf/sls.tf</a></p>
       </div>
     </footer>
   </body>
 </html>
 
 <style is:global>
-  * {
+  *, *::before, *::after {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
   }
 
   :root {
-    --primary-color: #667eea;
-    --primary-dark: #5a67d8;
-    --secondary-color: #764ba2;
-    --text-primary: #1a202c;
-    --text-secondary: #4a5568;
-    --bg-primary: #ffffff;
-    --bg-secondary: #f7fafc;
-    --border-color: #e2e8f0;
-    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  }
+    --bg: #0C0C0F;
+    --bg-2: #141418;
+    --bg-3: #1C1C22;
+    --fg: #F4F1EB;
+    --fg-2: #A8A49C;
+    --accent: #F5A623;
+    --accent-dim: rgba(245, 166, 35, 0.12);
+    --border: #2A2A32;
+    --border-bright: #3D3D4A;
+    --code-bg: #0A0A0D;
+    --code-fg: #E8E4DC;
 
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    line-height: 1.6;
-    color: var(--text-primary);
-    background-color: var(--bg-primary);
+    --font-display: 'Syne', sans-serif;
+    --font-body: 'Outfit', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
   }
 
   html {
     scroll-behavior: smooth;
+    background: var(--bg);
+    color-scheme: dark;
   }
 
-  /* Skip link for accessibility */
+  body {
+    font-family: var(--font-body);
+    font-weight: 400;
+    line-height: 1.6;
+    color: var(--fg);
+    background-color: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--bg);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-bright);
+    border-radius: 0;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--accent);
+  }
+
+  /* Skip link */
   .skip-link {
     position: absolute;
     top: -40px;
     left: 6px;
-    background: #000;
-    color: white;
-    padding: 8px;
+    background: var(--accent);
+    color: var(--bg);
+    padding: 8px 12px;
     text-decoration: none;
-    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
     z-index: 1000;
-    transition: top 0.3s;
+    transition: top 0.2s;
   }
-
   .skip-link:focus {
     top: 6px;
   }
 
-  /* Make meta tags technically visible for tests */
+  /* Meta tag for tests */
   meta[name="description"] {
     display: block;
+  }
+
+  /* Global code styling */
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    color: var(--code-fg);
+    background: var(--code-bg);
+    padding: 0.15em 0.4em;
+    border: 1px solid var(--border);
+  }
+
+  pre {
+    font-family: var(--font-mono);
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 1.5rem;
+    overflow-x: auto;
+    line-height: 1.7;
+    font-size: 0.875rem;
+    color: var(--code-fg);
+  }
+
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+  }
+
+  a {
+    color: var(--fg);
+    text-decoration: none;
   }
 </style>
 
 <style>
   nav {
-    background: var(--bg-primary);
-    border-bottom: 1px solid var(--border-color);
     position: sticky;
     top: 0;
     z-index: 100;
-    backdrop-filter: blur(8px);
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(12, 12, 15, 0.92);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
   }
 
   .nav-container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 1rem 2rem;
+    padding: 0 2rem;
+    height: 52px;
     display: flex;
     justify-content: space-between;
     align-items: center;
   }
 
   .nav-brand a {
-    font-size: 1.5rem;
+    font-family: var(--font-display);
     font-weight: 700;
-    color: var(--text-primary);
+    font-size: 1.1rem;
+    color: var(--fg);
     text-decoration: none;
-    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    letter-spacing: -0.02em;
+    transition: color 0.15s;
+  }
+
+  .nav-brand a:hover {
+    color: var(--accent);
   }
 
   .nav-links {
@@ -132,45 +199,61 @@ const { title } = Astro.props;
   }
 
   .nav-links a {
-    color: var(--text-secondary);
-    text-decoration: none;
+    font-family: var(--font-body);
+    font-size: 0.875rem;
     font-weight: 500;
-    transition: color 0.2s ease;
+    color: var(--fg-2);
+    text-decoration: none;
+    transition: color 0.15s;
+    padding-bottom: 2px;
+    border-bottom: 1px solid transparent;
   }
 
   .nav-links a:hover {
-    color: var(--primary-color);
+    color: var(--fg);
+    border-bottom-color: var(--accent);
   }
 
   main {
-    min-height: calc(100vh - 120px);
+    min-height: calc(100vh - 52px - 48px);
   }
 
   footer {
-    background: var(--bg-secondary);
-    border-top: 1px solid var(--border-color);
-    margin-top: auto;
+    border-top: 1px solid var(--border);
+    background: var(--bg);
+    height: 48px;
+    display: flex;
+    align-items: center;
   }
 
   .footer-container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 2rem;
-    text-align: center;
-    color: var(--text-secondary);
+    padding: 0 2rem;
+    width: 100%;
   }
 
-  @media (max-width: 768px) {
-    .nav-container {
-      flex-direction: column;
-      gap: 1rem;
-      text-align: center;
-    }
+  .footer-container p {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--fg-2);
+  }
 
-    .nav-links {
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 1rem;
+  .footer-container a {
+    color: var(--fg-2);
+    transition: color 0.15s;
+  }
+
+  .footer-container a:hover {
+    color: var(--accent);
+  }
+
+  @media (max-width: 640px) {
+    .nav-container {
+      padding: 0 1rem;
+    }
+    .footer-container {
+      padding: 0 1rem;
     }
   }
 </style>

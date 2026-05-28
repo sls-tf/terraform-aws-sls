@@ -2,323 +2,694 @@
 import Layout from '../layouts/Layout.astro';
 ---
 
-<Layout title="sls.tf - Serverless Framework to Terraform Conversion">
-  <div class="container">
-    <!-- Hero Section -->
-    <section class="hero">
-      <div class="hero-content">
-        <h1>sls.tf</h1>
-        <h2>Serverless Framework to Terraform Conversion</h2>
-        <p class="hero-description">
-          Transform your Serverless Framework applications into production-ready Terraform infrastructure
-          with a single module. Deploy AWS resources with confidence using infrastructure as code best practices.
-        </p>
-        <div class="hero-buttons">
-          <a href="/docs" class="btn btn-primary">Get Started</a>
-          <a href="https://github.com/sls-tf/sls.tf" target="_blank" class="btn btn-secondary">View on GitHub</a>
+<Layout title="sls.tf — serverless.yml to Terraform">
+
+  <!-- ═══════════════════════════════════════════ HERO -->
+  <section class="hero">
+    <div class="hero-inner">
+
+      <div class="hero-left">
+        <span class="hero-label">TERRAFORM MODULE</span>
+        <h1 class="hero-h1">serverless.yml<br/><span class="arrow">&rarr;</span> Terraform</h1>
+        <p class="hero-sub">Drop your serverless.yml. Get production Terraform. No rewrites.</p>
+        <div class="hero-cta">
+          <a href="/docs" class="btn-primary">Get Started &rarr;</a>
+          <a href="https://github.com/sls-tf/sls.tf" target="_blank" rel="noopener noreferrer" class="btn-ghost">View on GitHub</a>
+        </div>
+        <div class="hero-stats">
+          <span class="stat">v0.3.4</span>
+          <span class="stat-sep">/</span>
+          <span class="stat">MIT License</span>
+          <span class="stat-sep">/</span>
+          <span class="stat">AWS</span>
         </div>
       </div>
-    </section>
 
-    <!-- Features Section -->
-    <section class="features">
-      <div class="section-header">
-        <h2>Powerful Features</h2>
-        <p>Everything you need to convert and deploy serverless applications</p>
-      </div>
+      <div class="hero-right">
+        <div class="transform-visual">
 
-      <div class="features-grid">
-        <div class="feature-card">
-          <div class="feature-icon">📋</div>
-          <h3>Configuration Parsing</h3>
-          <p>Support for both YAML and TypeScript configurations with comprehensive validation and intelligent error handling.</p>
-        </div>
+          <!-- Input window -->
+          <div class="code-window" id="window-in">
+            <div class="window-bar">
+              <span class="dot dot-1"></span>
+              <span class="dot dot-2"></span>
+              <span class="dot dot-3"></span>
+              <span class="window-title">serverless.yml</span>
+            </div>
+            <pre is:raw class="window-code"><span class="ln">service:</span> my-api
 
-        <div class="feature-card">
-          <div class="feature-icon">⚡</div>
-          <h3>Auto-Generation</h3>
-          <p>Automatically creates Lambda functions, API Gateway, DynamoDB tables, and all necessary AWS resources with proper IAM roles.</p>
-        </div>
+<span class="ln">provider:</span>
+  name: aws
+  runtime: nodejs20.x
+  stage: prod
 
-        <div class="feature-card">
-          <div class="feature-icon">🔧</div>
-          <h3>Advanced Support</h3>
-          <p>Variable resolution, custom CloudFormation resources, EventBridge integration, and TypeScript async exports.</p>
-        </div>
-
-        <div class="feature-card">
-          <div class="feature-icon">🛡️</div>
-          <h3>Production Ready</h3>
-          <p>Built-in best practices, security hardening, monitoring integration, and disaster recovery capabilities.</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- Getting Started Section -->
-    <section class="getting-started">
-      <div class="section-header">
-        <h2>Getting Started</h2>
-        <p>Convert your Serverless Framework application in minutes</p>
-      </div>
-
-      <div class="steps">
-        <div class="step">
-          <div class="step-number">1</div>
-          <div class="step-content">
-            <h3>Add sls.tf Module</h3>
-            <p>Add the sls.tf submodule to your project and initialize it.</p>
+<span class="ln">functions:</span>
+  hello:
+    handler: src/hello.handler
+    events:
+      - httpApi:
+          path: /hello
+          method: GET</pre>
           </div>
-        </div>
 
-        <div class="step">
-          <div class="step-number">2</div>
-          <div class="step-content">
-            <h3>Create Terraform Config</h3>
-            <p>Create a simple Terraform configuration that references your serverless.yml file.</p>
+          <!-- Pipeline connector -->
+          <div class="pipeline" aria-hidden="true">
+            <div class="pipe-line"></div>
+            <div class="pipe-dots">
+              <span class="pipe-dot"></span>
+              <span class="pipe-dot"></span>
+              <span class="pipe-dot"></span>
+            </div>
+            <div class="pipe-label">sls.tf</div>
           </div>
-        </div>
 
-        <div class="step">
-          <div class="step-number">3</div>
-          <div class="step-content">
-            <h3>Deploy Infrastructure</h3>
-            <p>Run Terraform commands to deploy your converted infrastructure to AWS.</p>
+          <!-- Output window -->
+          <div class="code-window" id="window-out">
+            <div class="window-bar">
+              <span class="dot dot-1"></span>
+              <span class="dot dot-2"></span>
+              <span class="dot dot-3"></span>
+              <span class="window-title">main.tf</span>
+            </div>
+            <pre is:raw class="window-code"><span class="kw">module</span> <span class="str">"api"</span> {
+  source = <span class="str">"git::https://github.com/</span>
+<span class="str">    sls-tf/sls.tf.git?ref=v0.3.4"</span>
+
+  serverless_config = <span class="str">"./serverless.yml"</span>
+  environment       = <span class="str">"prod"</span>
+}
+
+<span class="cm"># Lambda, API GW, IAM roles —</span>
+<span class="cm"># all provisioned automatically.</span></pre>
           </div>
+
         </div>
       </div>
-    </section>
-  </div>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════ CAPABILITIES -->
+  <section class="capabilities">
+    <div class="section-inner">
+      <div class="section-label">CAPABILITIES</div>
+      <div class="cap-grid">
+
+        <div class="cap-item">
+          <div class="cap-header">
+            <span class="cap-arrow">&rarr;</span>
+            <strong>SAM Support</strong>
+          </div>
+          <p>Reads both Serverless Framework serverless.yml and AWS SAM template.yaml — no migration step required.</p>
+        </div>
+
+        <div class="cap-item">
+          <div class="cap-header">
+            <span class="cap-arrow">&rarr;</span>
+            <strong>Variable Resolution</strong>
+          </div>
+          <p>Resolves <code>${"{"}self:custom.foo{"}"}</code>, environment-specific overrides, and nested references at plan time.</p>
+        </div>
+
+        <div class="cap-item">
+          <div class="cap-header">
+            <span class="cap-arrow">&rarr;</span>
+            <strong>TypeScript Configs</strong>
+          </div>
+          <p>Evaluates TypeScript serverless.ts exports, including async factory functions that return the config object.</p>
+        </div>
+
+        <div class="cap-item">
+          <div class="cap-header">
+            <span class="cap-arrow">&rarr;</span>
+            <strong>API Gateway</strong>
+          </div>
+          <p>Provisions HTTP API v2 and REST API v1 resources, routes, integrations, and custom authorizers.</p>
+        </div>
+
+        <div class="cap-item">
+          <div class="cap-header">
+            <span class="cap-arrow">&rarr;</span>
+            <strong>DynamoDB Tables</strong>
+          </div>
+          <p>Creates tables declared in resources.Resources with keys, billing mode, TTL, and stream settings preserved.</p>
+        </div>
+
+        <div class="cap-item">
+          <div class="cap-header">
+            <span class="cap-arrow">&rarr;</span>
+            <strong>IAM Roles</strong>
+          </div>
+          <p>Synthesises least-privilege execution roles per function, merging provider-level and function-level statements.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════ USAGE -->
+  <section class="usage">
+    <div class="section-inner">
+      <div class="section-label">USAGE</div>
+      <h2 class="usage-heading">Reference the module. Point at your config. Done.</h2>
+
+      <div class="usage-window">
+        <div class="window-bar">
+          <span class="dot dot-1"></span>
+          <span class="dot dot-2"></span>
+          <span class="dot dot-3"></span>
+          <span class="window-title">main.tf</span>
+        </div>
+        <pre is:raw class="window-code large-code"><span class="kw">module</span> <span class="str">"service"</span> {
+  source = <span class="str">"git::https://github.com/sls-tf/sls.tf.git?ref=v0.3.4"</span>
+
+  serverless_config = <span class="str">"./serverless.yml"</span>  <span class="cm"># or template.yaml</span>
+  environment       = <span class="str">"production"</span>
+  aws_region        = <span class="str">"us-east-1"</span>
+}</pre>
+      </div>
+
+      <div class="usage-callouts">
+        <div class="callout">
+          <div class="callout-label">One command</div>
+          <div class="callout-value"><code>terraform init</code></div>
+          <div class="callout-desc">Fetches the module. No npm install. No CLI setup.</div>
+        </div>
+        <div class="callout-divider"></div>
+        <div class="callout">
+          <div class="callout-label">Pin a version</div>
+          <div class="callout-value"><code>?ref=v0.3.4</code></div>
+          <div class="callout-desc">Semver tags on every release. Upgrade on your schedule.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════ CTA -->
+  <section class="cta">
+    <div class="section-inner cta-inner">
+      <p class="cta-text">Start converting in 5 minutes</p>
+      <a href="/docs" class="btn-primary">Read the docs &rarr;</a>
+    </div>
+  </section>
+
 </Layout>
 
 <style>
-  .container {
+  /* ─── Shared ──────────────────────────────────────────── */
+  .section-inner {
     max-width: 1200px;
     margin: 0 auto;
     padding: 0 2rem;
   }
 
-  /* Hero Section */
-  .hero {
-    padding: 6rem 0;
-    text-align: center;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    margin: 0 -2rem;
-    color: white;
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: 0.14em;
+    margin-bottom: 2.5rem;
   }
 
-  .hero-content h1 {
-    font-size: 5rem;
-    font-weight: 800;
-    margin-bottom: 1rem;
-    line-height: 1;
+  /* Code windows */
+  .code-window {
+    background: var(--code-bg);
+    border: 1px solid var(--border-bright);
   }
 
-  .hero-content h2 {
-    font-size: 1.8rem;
-    font-weight: 300;
-    margin-bottom: 1.5rem;
-    opacity: 0.9;
-  }
-
-  .hero-description {
-    font-size: 1.2rem;
-    margin-bottom: 2rem;
-    line-height: 1.6;
-    opacity: 0.8;
-    max-width: 600px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-
-  .hero-buttons {
+  .window-bar {
     display: flex;
-    gap: 1rem;
-    justify-content: center;
-    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 0.55rem 0.9rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-3);
   }
 
-  /* Button Styles */
-  .btn {
-    padding: 0.75rem 2rem;
-    border-radius: 0.5rem;
-    text-decoration: none;
-    font-weight: 600;
-    transition: all 0.2s ease;
+  .dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
     display: inline-block;
-    border: 2px solid transparent;
+  }
+  .dot-1 { background: var(--accent); opacity: 0.7; }
+  .dot-2 { background: var(--border-bright); }
+  .dot-3 { background: var(--border-bright); }
+
+  .window-title {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--fg-2);
+    margin-left: 6px;
+    letter-spacing: 0.04em;
   }
 
+  .window-code {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    line-height: 1.7;
+    color: var(--code-fg);
+    padding: 1.1rem 1.25rem;
+    margin: 0;
+    background: transparent;
+    border: none;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  /* Syntax highlight helpers */
+  .kw  { color: #C9A8FF; }
+  .str { color: #7EC8A0; }
+  .cm  { color: var(--fg-2); font-style: italic; }
+  .ln  { color: #5B9BD5; }
+
+  /* Buttons */
   .btn-primary {
-    background: white;
-    color: #667eea;
+    display: inline-block;
+    background: var(--accent);
+    color: #0C0C0F;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.9rem;
+    padding: 0.65rem 1.5rem;
+    text-decoration: none;
+    border: 1px solid var(--accent);
+    transition: background 0.15s, color 0.15s;
+    letter-spacing: 0.01em;
   }
 
   .btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    background: #FFB74D;
+    border-color: #FFB74D;
   }
 
-  .btn-secondary {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-    border-color: rgba(255, 255, 255, 0.3);
-    backdrop-filter: blur(10px);
+  .btn-ghost {
+    display: inline-block;
+    background: transparent;
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-weight: 500;
+    font-size: 0.9rem;
+    padding: 0.65rem 1.5rem;
+    text-decoration: none;
+    border: 1px solid var(--border-bright);
+    transition: border-color 0.15s, color 0.15s;
   }
 
-  .btn-secondary:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: translateY(-1px);
+  .btn-ghost:hover {
+    border-color: var(--fg-2);
+    color: var(--fg);
   }
 
-  /* Section Styles */
-  .section-header {
-    text-align: center;
-    margin-bottom: 3rem;
-  }
-
-  .section-header h2 {
-    font-size: 2.5rem;
-    font-weight: 700;
-    color: #1a202c;
-    margin-bottom: 1rem;
-  }
-
-  .section-header p {
-    font-size: 1.2rem;
-    color: #4a5568;
-    max-width: 600px;
-    margin: 0 auto;
-  }
-
-  /* Features Section */
-  .features {
-    padding: 6rem 0;
-    background: #f7fafc;
-    margin: 0 -2rem;
-  }
-
-  .features-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 2rem;
-  }
-
-  .feature-card {
-    background: white;
-    padding: 2rem;
-    border-radius: 1rem;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-    border: 1px solid #e2e8f0;
-  }
-
-  .feature-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  }
-
-  .feature-icon {
-    font-size: 2.5rem;
-    margin-bottom: 1rem;
-  }
-
-  .feature-card h3 {
-    font-size: 1.3rem;
-    font-weight: 600;
-    color: #1a202c;
-    margin-bottom: 1rem;
-  }
-
-  .feature-card p {
-    color: #4a5568;
-    line-height: 1.6;
-  }
-
-  /* Getting Started Section */
-  .getting-started {
-    padding: 6rem 0;
-  }
-
-  .steps {
-    display: grid;
-    gap: 2rem;
-    max-width: 800px;
-    margin: 0 auto;
-  }
-
-  .step {
-    display: grid;
-    grid-template-columns: 80px 1fr;
-    gap: 2rem;
-    align-items: start;
-  }
-
-  .step-number {
-    width: 60px;
-    height: 60px;
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    color: white;
-    border-radius: 50%;
+  /* ─── Hero ────────────────────────────────────────────── */
+  .hero {
+    min-height: calc(100vh - 52px);
     display: flex;
     align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-    font-weight: 700;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    animation: fadeUp 0.7s ease both;
   }
 
-  .step-content h3 {
-    font-size: 1.3rem;
-    font-weight: 600;
-    color: #1a202c;
-    margin-bottom: 1rem;
+  .hero-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 5rem 2rem;
+    display: grid;
+    grid-template-columns: 55fr 45fr;
+    gap: 4rem;
+    align-items: center;
+    width: 100%;
   }
 
-  .step-content p {
-    color: #4a5568;
+  .hero-label {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: 0.16em;
+    margin-bottom: 1.5rem;
+  }
+
+  .hero-h1 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: clamp(2.6rem, 5vw, 5.5rem);
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    color: var(--fg);
+    margin-bottom: 1.5rem;
+  }
+
+  .hero-h1 .arrow {
+    color: var(--accent);
+  }
+
+  .hero-sub {
+    font-family: var(--font-body);
+    font-weight: 300;
+    font-size: 1.15rem;
+    color: var(--fg-2);
     line-height: 1.6;
+    margin-bottom: 2.5rem;
+    max-width: 440px;
   }
 
-  /* Responsive Design */
-  @media (max-width: 768px) {
-    .container {
+  .hero-cta {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 2.5rem;
+  }
+
+  .hero-stats {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--fg-2);
+    letter-spacing: 0.03em;
+  }
+
+  .stat-sep {
+    color: var(--border-bright);
+  }
+
+  /* ─── Transform visual ────────────────────────────────── */
+  .hero-right {
+    animation: fadeUp 0.7s 0.2s ease both;
+  }
+
+  .transform-visual {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  #window-in,
+  #window-out {
+    position: relative;
+  }
+
+  /* Pipeline */
+  .pipeline {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 0 1.25rem;
+    height: 52px;
+    position: relative;
+    background: var(--bg-2);
+    border-left: 1px solid var(--border-bright);
+    border-right: 1px solid var(--border-bright);
+  }
+
+  .pipe-line {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--border-bright);
+    transform: translateX(-50%);
+  }
+
+  .pipe-dots {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-evenly;
+    transform: translateX(-50%);
+    gap: 4px;
+  }
+
+  .pipe-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0;
+    animation: flowDot 1.4s ease-in-out infinite;
+  }
+
+  .pipe-dot:nth-child(1) { animation-delay: 0s; }
+  .pipe-dot:nth-child(2) { animation-delay: 0.46s; }
+  .pipe-dot:nth-child(3) { animation-delay: 0.92s; }
+
+  .pipe-label {
+    position: absolute;
+    right: 1.25rem;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    font-weight: 500;
+  }
+
+  @keyframes flowDot {
+    0%   { opacity: 0; transform: translateY(-12px); }
+    20%  { opacity: 1; }
+    80%  { opacity: 1; }
+    100% { opacity: 0; transform: translateY(12px); }
+  }
+
+  @keyframes fadeUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* ─── Capabilities ────────────────────────────────────── */
+  .capabilities {
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--border);
+    padding: 5rem 0;
+    animation: fadeUp 0.7s 0.1s ease both;
+  }
+
+  .cap-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    border-top: 1px solid var(--border);
+  }
+
+  .cap-item {
+    padding: 1.75rem 0;
+    border-bottom: 1px solid var(--border);
+    padding-right: 2.5rem;
+  }
+
+  .cap-item:nth-child(odd) {
+    border-right: 1px solid var(--border);
+    padding-right: 2.5rem;
+    padding-left: 0;
+  }
+
+  .cap-item:nth-child(even) {
+    padding-left: 2.5rem;
+    padding-right: 0;
+  }
+
+  .cap-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .cap-arrow {
+    font-family: var(--font-mono);
+    color: var(--accent);
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+
+  .cap-header strong {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--fg);
+    letter-spacing: -0.01em;
+  }
+
+  .cap-item p {
+    font-family: var(--font-body);
+    font-weight: 300;
+    font-size: 0.875rem;
+    color: var(--fg-2);
+    line-height: 1.65;
+    padding-left: 1.45rem;
+  }
+
+  /* ─── Usage ───────────────────────────────────────────── */
+  .usage {
+    padding: 5rem 0;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    animation: fadeUp 0.7s 0.15s ease both;
+  }
+
+  .usage-heading {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(1.5rem, 3vw, 2.2rem);
+    color: var(--fg);
+    letter-spacing: -0.025em;
+    margin-bottom: 2.5rem;
+    max-width: 600px;
+  }
+
+  .usage-window {
+    margin-bottom: 2.5rem;
+  }
+
+  .large-code {
+    font-size: 0.875rem;
+    padding: 1.5rem 1.75rem;
+  }
+
+  .usage-callouts {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--border-bright);
+    background: var(--bg-2);
+  }
+
+  .callout {
+    padding: 1.5rem 2rem;
+    flex: 1;
+  }
+
+  .callout-label {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--fg-2);
+    letter-spacing: 0.1em;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+  }
+
+  .callout-value {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.25rem;
+    color: var(--fg);
+    letter-spacing: -0.02em;
+    margin-bottom: 0.5rem;
+  }
+
+  .callout-value code {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-size: 1rem;
+    padding: 0.2em 0.5em;
+  }
+
+  .callout-desc {
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    color: var(--fg-2);
+    font-weight: 300;
+  }
+
+  .callout-divider {
+    width: 1px;
+    background: var(--border-bright);
+    flex-shrink: 0;
+  }
+
+  /* ─── CTA ─────────────────────────────────────────────── */
+  .cta {
+    padding: 5rem 0;
+    background: var(--accent-dim);
+    border-bottom: 1px solid var(--border);
+    animation: fadeUp 0.7s 0.2s ease both;
+  }
+
+  .cta-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.75rem;
+    text-align: center;
+  }
+
+  .cta-text {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(1.5rem, 3vw, 2.2rem);
+    color: var(--fg);
+    letter-spacing: -0.025em;
+  }
+
+  /* ─── Responsive ──────────────────────────────────────── */
+  @media (max-width: 900px) {
+    .hero-inner {
+      grid-template-columns: 1fr;
+      padding: 3rem 1.5rem;
+      gap: 3rem;
+    }
+
+    .hero-sub {
+      max-width: 100%;
+    }
+
+    .transform-visual .window-code {
+      font-size: 0.72rem;
+    }
+
+    .cap-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .cap-item:nth-child(odd) {
+      border-right: none;
+      padding-right: 0;
+    }
+
+    .cap-item:nth-child(even) {
+      padding-left: 0;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .section-inner {
       padding: 0 1rem;
     }
 
-    .hero {
-      padding: 4rem 0;
-      margin: 0 -1rem;
+    .hero-inner {
+      padding: 2.5rem 1rem;
     }
 
-    .hero-content h1 {
-      font-size: 3rem;
+    .hero-cta {
+      flex-direction: column;
+      align-items: flex-start;
     }
 
-    .hero-content h2 {
-      font-size: 1.4rem;
+    .usage-callouts {
+      flex-direction: column;
     }
 
-    .hero-buttons {
-      justify-content: center;
+    .callout-divider {
+      width: auto;
+      height: 1px;
     }
 
-    .features,
-    .getting-started {
-      padding: 4rem 0;
-      margin: 0 -1rem;
-    }
-
-    .section-header h2 {
-      font-size: 2rem;
-    }
-
-    .step {
-      grid-template-columns: 1fr;
-      text-align: center;
-      gap: 1rem;
-    }
-
-    .step-number {
-      margin: 0 auto;
+    .hero-stats {
+      flex-wrap: wrap;
     }
   }
 </style>
