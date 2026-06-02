@@ -15,3 +15,10 @@
 
 # Dependencies
 node_modules/
+
+# Website build output
+website/dist/
+
+# Working reference directories (not part of the module)
+texe-vendored-fork/
+TEXE-FORK-RECONCILIATION.md
