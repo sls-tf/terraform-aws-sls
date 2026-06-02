@@ -1,0 +1,25 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM template testing 2-argument !Sub form
+
+Parameters:
+  Env:
+    Type: String
+    Default: staging
+
+Resources:
+  MyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      Runtime: python3.11
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: ssm:GetParameter
+              Resource:
+                - !Sub
+                  - "arn:aws:ssm:${Region}:${Account}:parameter/${EnvParam}/*"
+                  - Region: !Ref "AWS::Region"
+                    Account: !Ref "AWS::AccountId"
+                    EnvParam: !Ref Env

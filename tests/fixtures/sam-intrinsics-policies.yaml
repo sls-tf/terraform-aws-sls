@@ -1,0 +1,73 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM template testing CFN intrinsic resolution in Policies
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+  AppName:
+    Type: String
+    Default: myapp
+
+Conditions:
+  IsProd: !Equals [!Ref Environment, prod]
+  IsNotProd: !Not [!Condition IsProd]
+
+Globals:
+  Function:
+    Runtime: nodejs18.x
+    MemorySize: 512
+    Timeout: 30
+
+Resources:
+  ApiHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/api.handler
+      FunctionName: !Sub "${AppName}-${Environment}-api-handler"
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+                - ssm:GetParametersByPath
+              Resource:
+                - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${Environment}/shared/*"
+                - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/workflows/*"
+                - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AppName}/${Environment}"
+        - !If
+          - IsProd
+          - Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub "arn:aws:s3:::${AppName}-prod-assets/*"
+          - !Ref AWS::NoValue
+
+  WorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/worker.handler
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - rds-data:ExecuteStatement
+                - rds-data:BatchExecuteStatement
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource:
+                - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${Environment}/db*"
+
+  ProdOnlyFunction:
+    Type: AWS::Serverless::Function
+    Condition: IsProd
+    Properties:
+      Handler: src/prod.handler
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: s3:PutObject
+              Resource: "arn:aws:s3:::prod-bucket/*"

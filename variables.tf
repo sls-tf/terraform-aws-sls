@@ -170,6 +170,20 @@ variable "max_variable_depth" {
   }
 }
 
+variable "strict_sam_intrinsics" {
+  description = <<-DESC
+    When true, unresolved CloudFormation intrinsic functions (!Ref, !Sub, !GetAtt
+    etc.) that cannot be evaluated from the supplied parameters or the template's
+    own resource definitions cause a clear plan-time error rather than producing
+    placeholder marker strings. Defaults to false so that templates using
+    !GetAtt for co-planned resources (whose real ARNs are only known post-apply)
+    continue to work; enable it once all parameters are fully supplied and you
+    want hard failure on any unresolvable reference.
+  DESC
+  type    = bool
+  default = false
+}
+
 variable "stage_override" {
   description = <<-DESC
     Overrides the deployment "stage" used in every generated resource name

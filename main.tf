@@ -147,11 +147,14 @@ resource "aws_iam_role_policy" "lambda_custom_policy" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      for stmt in each.value : {
-        Effect   = stmt.Effect
-        Action   = stmt.Action
-        Resource = stmt.Resource
-      }
+      for stmt in each.value : merge(
+        {
+          Effect   = stmt.Effect
+          Action   = stmt.Action
+          Resource = stmt.Resource
+        },
+        try(stmt.Condition, null) != null ? { Condition = stmt.Condition } : {}
+      )
     ]
   })
 }

@@ -6,6 +6,11 @@
 
 locals {
   sam_validation_errors = var.config_format != "sam" ? [] : (
+    # Surface preprocessor evaluation errors (e.g. unresolved !Ref in strict mode)
+    # before checking sam_raw so the message is specific rather than "failed to parse".
+    try(data.external.sam_yaml[0].result.error, "") != "" ? [
+      "SAM template preprocessing failed: ${data.external.sam_yaml[0].result.error}"
+    ] :
     local.sam_raw == null ? [
       "Failed to parse SAM template at '${var.config_path}'. Verify the file exists and is valid YAML. Run with TF_LOG=DEBUG to see preprocessor stderr."
     ] : concat(
