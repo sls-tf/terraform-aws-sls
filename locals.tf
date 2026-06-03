@@ -146,7 +146,7 @@ locals {
       # Validate Action format (service:action pattern)
       try(stmt.Action, null) != null ? flatten([
         for act in try(tolist(stmt.Action), [stmt.Action]) :
-        !can(regex("^[a-z0-9]+:[*a-zA-Z0-9]+$", act)) ?
+        !can(regex("^[a-z0-9-]+:[*a-zA-Z0-9]+$", act)) ?
         ["Provider iamRoleStatement[${idx}]: Invalid action format '${act}'. Must match 'service:action' pattern."] : []
       ]) : []
     )
@@ -172,7 +172,7 @@ locals {
         # Validate Action format (service:action pattern)
         try(stmt.Action, null) != null ? flatten([
           for act in try(tolist(stmt.Action), [stmt.Action]) :
-          !can(regex("^[a-z0-9]+:[*a-zA-Z0-9]+$", act)) ?
+          !can(regex("^[a-z0-9-]+:[*a-zA-Z0-9]+$", act)) ?
           ["Function '${func_name}' iamRoleStatement[${idx}]: Invalid action format '${act}'. Must match 'service:action' pattern."] : []
         ]) : []
       )
