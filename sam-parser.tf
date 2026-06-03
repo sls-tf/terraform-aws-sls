@@ -294,13 +294,21 @@ locals {
         # values here are plain strings/lists with no CFN constructs remaining.
         # !If-gated policies resolve to their correct branch (or are absent when
         # the false branch was AWS::NoValue, which the preprocessor filters out).
+        # Iterate the Policies list directly (no tolist): a SAM Policies list is
+        # heterogeneous when it mixes policy templates (e.g. `VPCAccessPolicy: {}`)
+        # with inline `Statement` documents — tolist() can't unify those object
+        # types and throws, which `try` swallows to `[]`, silently dropping the
+        # function's entire policy. Likewise iterate Statement directly rather than
+        # via a `? [...] : []` ternary: the ternary's two branches are length-typed
+        # tuples (`tuple([obj,obj])` vs `tuple([])`) that Terraform cannot unify for
+        # complex object elements, raising "Inconsistent conditional result types".
+        # A policy-template entry has no `.Statement`, so it simply yields nothing.
         iamRoleStatements = flatten([
-          for policy in try(tolist(resource.Properties.Policies), []) :
-          try(policy.Statement, null) != null ? [
-            for stmt in try(tolist(policy.Statement), []) : {
-              Effect    = try(stmt.Effect, "Allow")
-              Action    = try(tolist(stmt.Action), [tostring(try(stmt.Action, "*"))])
-              Resource  = try(
+          for policy in try(resource.Properties.Policies, []) : [
+            for stmt in try(policy.Statement, []) : {
+              Effect = try(stmt.Effect, "Allow")
+              Action = try(tolist(stmt.Action), [tostring(try(stmt.Action, "*"))])
+              Resource = try(
                 compact([for r in tolist(stmt.Resource) : can(tostring(r)) ? tostring(r) : null]),
                 can(tostring(stmt.Resource)) ? [tostring(stmt.Resource)] : ["*"]
               )
@@ -312,7 +320,7 @@ locals {
               compact([for r in tolist(stmt.Resource) : can(tostring(r)) ? tostring(r) : null]),
               can(tostring(stmt.Resource)) ? [tostring(stmt.Resource)] : ["*"]
             )) > 0
-          ] : []
+          ]
         ])
 
         events = try(local.sam_function_events[logical_id], [])

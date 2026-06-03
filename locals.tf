@@ -380,8 +380,17 @@ locals {
     logical_id => (
       length(local.provider_iam_statements_normalized) > 0 ||
       length(flatten([
-        for policy in try(tolist(resource.Properties.Policies), []) :
-        try(tolist(policy.Statement), [])
+        # Iterate the Policies / Statement lists directly (no tolist). A SAM
+        # Policies list is heterogeneous when it mixes policy templates (e.g.
+        # `VPCAccessPolicy: {}`) with inline `Statement` documents, and a
+        # Statement list is heterogeneous when statements differ in shape (some
+        # carry a Condition, mix string/list Resource, or an `!If`-gated entry).
+        # tolist() can't unify those element types and throws, which `try` then
+        # swallows to `[]` — silently marking the function as having no policy
+        # even though its statements parse fine in sam-parser.tf. Direct
+        # iteration tolerates the heterogeneity.
+        for policy in try(resource.Properties.Policies, []) :
+        [for stmt in try(policy.Statement, []) : stmt]
       ])) > 0
     )
     if try(resource.Type, "") == "AWS::Serverless::Function"
