@@ -1,8 +1,21 @@
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
+# Package Lambda function code (local mode only — skipped when
+# var.lambda_code_source.type == "s3", in which case each function's
+# deployment package is read directly from S3 and the CodeUri source
+# directory is never checked out).
 data "archive_file" "lambda_code" {
-  for_each = local.functions_with_defaults
+  # Filtered for expression: gates on the code source being local AND avoids the
+  # object/map type-unification error that a ternary (functions_with_defaults : {})
+  # produces in Terraform ≥ 1.0 when functions_with_defaults is an object type
+  # rather than map(any). Iterating local._function_names (a set(string)) yields a
+  # consistent map(any) in both the populated and empty cases.
+  for_each = {
+    for func_name in local._function_names :
+    func_name => local.functions_with_defaults[func_name]
+    if var.lambda_code_source.type == "local"
+  }
 
   type = "zip"
   # SAM per-function CodeUri: each function gets its own archive from its subdirectory.
@@ -67,8 +80,14 @@ data "archive_file" "lambda_code" {
 }
 
 # Lambda package size validation (local mode only — S3-sourced packages
+# are AWS's responsibility to validate at upload time, and there is no local
+# archive to measure).
 resource "null_resource" "lambda_size_validation" {
-  for_each = local.functions_with_defaults
+  for_each = {
+    for func_name in local._function_names :
+    func_name => local.functions_with_defaults[func_name]
+    if var.lambda_code_source.type == "local"
+  }
 
   lifecycle {
     # Validate compressed package size (50 MB limit for direct upload)

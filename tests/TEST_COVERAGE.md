@@ -155,6 +155,25 @@ terraform test tests/gap_coverage.tftest.hcl
 
 ---
 
+### Lambda Code Source Gating (regression — Issue B)
+**File:** `tests/lambda_code_source.tftest.hcl`
+
+| Test Name | Coverage |
+|-----------|----------|
+| `local_mode_archives_every_function` | `type = "local"` archives + size-validates every function; Lambdas use a local filename |
+| `s3_mode_skips_archiving` | `type = "s3"` creates **zero** `archive_file`/size-validation resources; Lambdas deploy from S3 with the computed `s3_key` |
+| `local_mode_single_function` | Single-function local config still archives (guards against an over-broad gate) |
+| `functionless_no_archives_local` / `functionless_no_archives_s3` | No functions ⇒ no archives in either source mode |
+
+**Coverage:** ✅ `var.lambda_code_source.type` gating of `data.archive_file.lambda_code`
+and `null_resource.lambda_size_validation`. Pins the regression from commit
+`9ecf8c8c`, where dropping the `if … == "local"` gate made S3-source consumers
+fail `plan` trying to archive a non-existent `CodeUri` directory (report.md,
+Issue B). Uses `mock_provider "aws"`, so it runs with neither LocalStack nor AWS
+credentials.
+
+---
+
 ## Test Standards Alignment
 
 This test suite follows the user's testing standards from `.agent-os/standards/testing/test-writing.md`:
