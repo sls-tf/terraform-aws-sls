@@ -10,14 +10,21 @@ locals {
   # external data source / resolved parameters into for_each iteration maps.
   # SAM parameter values are ARNs and config strings (visible in Lambda env vars
   # in the AWS console), not actual secrets, so this stripping is semantically correct.
-  parsed_config = var.config_format == "yaml" ? try(
-    yamldecode(local.file_content),
-    null
-    ) : var.config_format == "typescript" ? local.parsed_config_with_typescript : (
-    var.config_format == "sam" ? (
-      local.sam_as_sls_config != null ? nonsensitive(local.sam_as_sls_config) : null
-    ) : null
-  )
+  # Each format produces a differently-shaped object (a raw YAML/SAM template vs
+  # the translated SLS config). A plain ternary across them raises "Inconsistent
+  # conditional result types" under Terraform's structural unification, because
+  # the unused yamldecode(file_content) branch infers a concrete object type from
+  # the static file that cannot unify with sam_as_sls_config. Encoding every
+  # branch to JSON (all `string`, so they unify) and decoding once yields a value
+  # of the dynamic type `any` — which every downstream consumer already accesses
+  # via try()/can(). Decoding a computed (non-literal) string is what forces the
+  # `any` type and defeats the eager unification.
+  parsed_config = try(jsondecode(
+    var.config_format == "yaml" ? jsonencode(try(yamldecode(local.file_content), null)) :
+    var.config_format == "typescript" ? jsonencode(local.parsed_config_with_typescript) :
+    var.config_format == "sam" ? jsonencode(try(nonsensitive(local.sam_as_sls_config), null)) :
+    "null"
+  ), null)
 
   # Variable Resolution Integration (Feature #11)
   # The resolved_config from variable_resolution.tf contains the parsed config

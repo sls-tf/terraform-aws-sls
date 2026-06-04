@@ -1,0 +1,18 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM function whose env var resolves to a non-scalar (a leaked intrinsic
+  or, as here, a literal list). The module must fail loud with the offending
+  function + variable name rather than coercing to a meaningless string.
+
+Resources:
+  BadEnvFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/index.handler
+      Runtime: nodejs18.x
+      Environment:
+        Variables:
+          GOOD_VAR: hello
+          BAD_VAR:
+            - a
+            - b

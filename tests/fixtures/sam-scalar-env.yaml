@@ -1,0 +1,16 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM function with ordinary scalar env vars — must NOT trip the
+  non-scalar guard (no false positives).
+
+Resources:
+  GoodEnvFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/index.handler
+      Runtime: nodejs18.x
+      Environment:
+        Variables:
+          STRING_VAR: hello
+          NUMBER_VAR: 42
+          BOOL_VAR: true

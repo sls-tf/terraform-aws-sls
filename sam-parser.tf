@@ -23,7 +23,7 @@ data "external" "sam_yaml" {
   query = {
     config_path = var.config_path
     parameters  = jsonencode(var.sam_template_parameters)
-    region      = data.aws_region.current.name
+    region      = data.aws_region.current.region
     account_id  = data.aws_caller_identity.current.account_id
     strict      = tostring(var.strict_sam_intrinsics)
   }
@@ -174,9 +174,14 @@ locals {
 
   sam_resources_translated = var.config_format == "sam" && local.sam_raw != null ? {
     for logical_id, resource in try(local.sam_raw.Resources, {}) :
-    logical_id => (
+    # JSON-laundered to the dynamic `any` type: the SimpleTable-translation branch
+    # and the pass-through `resource` branch are differently-shaped objects, which
+    # a bare ternary cannot unify ("Inconsistent conditional result types"). Both
+    # branches are encoded to a string and decoded once — the same idiom used for
+    # sam_function_events above.
+    logical_id => jsondecode(
       # AWS::Serverless::SimpleTable → AWS::DynamoDB::Table (PAY_PER_REQUEST)
-      try(resource.Type, "") == "AWS::Serverless::SimpleTable" ? {
+      try(resource.Type, "") == "AWS::Serverless::SimpleTable" ? jsonencode({
         Type = "AWS::DynamoDB::Table"
         Properties = {
           TableName   = try(resource.Properties.TableName, logical_id)
@@ -194,11 +199,11 @@ locals {
           }]
           Tags = try(resource.Properties.Tags, null)
         }
-      } :
+        }) :
 
-      # All other resource types (AWS::S3::Bucket, AWS::DynamoDB::Table, etc.)
-      # pass through unchanged for custom_resources.tf to handle.
-      resource
+        # All other resource types (AWS::S3::Bucket, AWS::DynamoDB::Table, etc.)
+        # pass through unchanged for custom_resources.tf to handle.
+        jsonencode(resource)
     )
     # Exclude SAM-specific types that are handled elsewhere:
     # - Function → becomes a Lambda function via functions map
@@ -280,13 +285,18 @@ locals {
         ] : null
 
         # Global env vars merged with function-level; function wins on conflict.
-        # All values are already resolved by the preprocessor.
+        # All values are already resolved by the preprocessor. A value that is
+        # NOT scalar at this point means an unsupported/unresolved intrinsic (or a
+        # literal list/map) leaked through — always a bug. Rather than let
+        # tostring() raise an opaque type error here, keep a sentinel string so
+        # the build stays evaluable and surface a clear, named error via
+        # local.sam_env_nonscalar_errors (checked by null_resource.config_validation).
         environment = {
           for k, v in merge(
             try(local.sam_function_globals.Environment.Variables, {}),
             try(resource.Properties.Environment.Variables, {})
           ) :
-          k => tostring(try(v, ""))
+          k => can(tostring(v)) ? tostring(try(v, "")) : "<<unresolved-intrinsic>>"
         }
 
         # Translate inline SAM policy documents to iamRoleStatements.
