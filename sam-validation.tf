@@ -13,11 +13,11 @@ locals {
     ] :
     local.sam_raw == null ? [
       "Failed to parse SAM template at '${var.config_path}'. Verify the file exists and is valid YAML. Run with TF_LOG=DEBUG to see preprocessor stderr."
-    ] : concat(
+      ] : concat(
       # Transform declaration is required and must be the SAM value
       try(local.sam_raw.Transform, null) == null ? [
         "SAM template is missing the required 'Transform: AWS::Serverless-2016-10-31' declaration."
-      ] : (
+        ] : (
         tostring(try(local.sam_raw.Transform, "")) != "AWS::Serverless-2016-10-31" ? [
           "SAM template 'Transform' must be 'AWS::Serverless-2016-10-31', got: '${tostring(local.sam_raw.Transform)}'."
         ] : []

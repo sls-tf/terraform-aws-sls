@@ -199,11 +199,11 @@ locals {
           }]
           Tags = try(resource.Properties.Tags, null)
         }
-        }) :
+      }) :
 
-        # All other resource types (AWS::S3::Bucket, AWS::DynamoDB::Table, etc.)
-        # pass through unchanged for custom_resources.tf to handle.
-        jsonencode(resource)
+      # All other resource types (AWS::S3::Bucket, AWS::DynamoDB::Table, etc.)
+      # pass through unchanged for custom_resources.tf to handle.
+      jsonencode(resource)
     )
     # Exclude SAM-specific types that are handled elsewhere:
     # - Function → becomes a Lambda function via functions map
