@@ -98,6 +98,14 @@ Each item below was verified against the source at `3cca7f5d`.
 
 Lower-confidence items flagged for verification rather than asserted as bugs: FIFO-queue detection keyed on an `.fifo` ARN suffix (`locals.tf` ~707) would not recognise SAM `!Ref` logical IDs and could apply standard-queue batch-size validation to a FIFO queue; "same path pattern, multiple behaviours" in Lambda@Edge merging may keep only the first behaviour. These were consistent with the code read but not exercised against a failing fixture at review time.
 
+### Addendum (verification done immediately after this snapshot, same commit `3cca7f5d`)
+
+Two further correctness bugs were confirmed by planning SAM templates to completion under Terraform 1.14.8 — a path the original analysis above did not exercise (it relied on `terraform validate`, which type-checks but does not fully evaluate `locals`). Both were present at `3cca7f5d` and are recorded here for completeness of the same-commit record:
+
+7. **The entire SAM path failed at plan time with "Inconsistent conditional result types."** In `locals.tf`'s `parsed_config`, the unused `yamldecode(file_content)` ternary branch inferred a concrete object type from the static SAM file (`AWSTemplateFormatVersion`/`Transform`/`Resources`) that could not structurally unify with the translated `sam_as_sls_config` object. **Impact:** every SAM configuration errored before any resource was planned, under the Terraform version in use at review. This did not surface earlier precisely because the test suite could not run (Delivery risk §1) and because `terraform validate` does not evaluate the conditional. Severity: high (SAM unusable at this Terraform version). A second instance of the same class existed in `sam-parser.tf`'s `sam_resources_translated` (the `AWS::Serverless::SimpleTable` translation branch vs the pass-through `resource` branch), triggered by templates containing non-function resources or `Globals`.
+
+This addendum strengthens, rather than revises, the strategic assessment: it is direct evidence that high-severity defects were being masked by the inability to run the suite, which is the report's central argument for prioritising test-harness repair (§5, fix list items 1–3). The "Confidence in correctness" score below was set with this class of risk already in mind.
+
 ---
 
 ## Strategic assessment

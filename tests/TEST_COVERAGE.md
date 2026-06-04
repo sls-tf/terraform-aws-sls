@@ -1,7 +1,18 @@
 # Test Coverage Documentation
 
 ## Overview
-**Total Tests: 28 (100% passing)**
+**As of 2026-06-04: 52 test files, 273 `run` blocks, 571 assertions, 105 fixtures.**
+
+> Status note (2026-06-04): the figures below in the older per-category sections
+> describe an earlier 28-test snapshot and undercount the current suite — they are
+> retained for historical context, not as a current inventory. Note also that many
+> of the legacy test files configure the AWS provider with a `dynamic "endpoints"`
+> block that the module's required `aws >= 6.0` provider rejects, so those files
+> cannot run as written under the pinned provider; newer tests use
+> `mock_provider "aws"` instead and run without LocalStack or AWS credentials. See
+> `docs/snapshot-review-2026-06-04-3cca7f5d.md` for the full assessment.
+
+The categories below are partial and historical:
 - Initial Development Tests: 18
 - Strategic Gap Coverage Tests: 10
 
@@ -171,6 +182,42 @@ and `null_resource.lambda_size_validation`. Pins the regression from commit
 fail `plan` trying to archive a non-existent `CodeUri` directory (report.md,
 Issue B). Uses `mock_provider "aws"`, so it runs with neither LocalStack nor AWS
 credentials.
+
+### SAM Plan Completion (regression)
+**File:** `tests/sam_plan_completes.tftest.hcl`
+
+| Test Name | Coverage |
+|-----------|----------|
+| `sam_template_plans_to_resources` | A representative SAM template plans through to Lambda + API Gateway resources |
+| `sam_globals_plan_to_resources` | A SAM template using `Globals` plans to at least one function |
+
+**Coverage:** ✅ Guards the "Inconsistent conditional result types" failure that
+blocked the entire SAM path at plan time under Terraform's structural type
+unification (`locals.tf` `parsed_config` and `sam-parser.tf`
+`sam_resources_translated`). Both were JSON-laundered to the dynamic `any` type.
+Uses `mock_provider "aws"`.
+
+### SAM Env Var Non-Scalar Guard (regression — report.md #2)
+**File:** `tests/sam_env_nonscalar_guard.tftest.hcl`
+
+| Test Name | Coverage |
+|-----------|----------|
+| `nonscalar_env_var_fails_loud` | A non-scalar (list/map) env value fails the `config_validation` precondition with a named error instead of an opaque `tostring()` type error |
+| `scalar_env_vars_pass` | String/number/bool env vars do not trip the guard |
+
+**Coverage:** ✅ Fail-loud on a leaked/unresolved CloudFormation intrinsic in
+`Environment.Variables`. Uses `mock_provider "aws"`.
+
+### API Gateway Method Key Uniqueness (regression)
+**File:** `tests/api_gateway_method_keys.tftest.hcl`
+
+| Test Name | Coverage |
+|-----------|----------|
+| `same_function_same_method_distinct_paths` | One function serving `GET /alpha` and `GET /beta` yields two methods + two integrations (previously a duplicate-key plan error) |
+| `same_path_distinct_methods` | `GET` and `POST` on the same path stay distinct |
+
+**Coverage:** ✅ The API Gateway method/integration `for_each` key now includes
+the path, not just function + method. Uses `mock_provider "aws"`.
 
 ---
 
