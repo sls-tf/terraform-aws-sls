@@ -96,11 +96,6 @@ resource "null_resource" "lambda_size_validation" {
       error_message = "Lambda function '${each.key}' deployment package is ${floor(data.archive_file.lambda_code[each.key].output_size / 1048576)} MB (compressed), which exceeds AWS Lambda's 50 MB direct upload limit. Consider: 1) Using S3 for packages >50MB, 2) Reducing dependencies, 3) Using Lambda layers, or 4) Switching to container images for packages >250MB uncompressed."
     }
 
-    # Warning for packages approaching the limit (>40 MB)
-    precondition {
-      condition     = data.archive_file.lambda_code[each.key].output_size <= 41943040 || data.archive_file.lambda_code[each.key].output_size > 41943040
-      error_message = data.archive_file.lambda_code[each.key].output_size > 41943040 ? "WARNING: Lambda function '${each.key}' deployment package is ${floor(data.archive_file.lambda_code[each.key].output_size / 1048576)} MB, approaching the 50 MB limit. Consider optimizing your package size." : ""
-    }
   }
 }
 
@@ -338,9 +333,12 @@ locals {
 
 # API Gateway Methods - One per HTTP event
 resource "aws_api_gateway_method" "endpoints" {
+  # Key includes the path: one function can serve several paths with the same
+  # method (e.g. GET /a and GET /b on a single handler), so function+method
+  # alone is not unique and would collide into a duplicate for_each key.
   for_each = length(local.http_events) > 0 ? {
     for event in local.http_events :
-    "${event.function_name}_${lower(event.http_method)}" => {
+    "${event.function_name}_${lower(event.http_method)}_${event.http_path}" => {
       function_name = event.function_name
       http_method   = event.http_method
       http_path     = event.http_path
@@ -357,7 +355,7 @@ resource "aws_api_gateway_method" "endpoints" {
 resource "aws_api_gateway_integration" "lambda" {
   for_each = length(local.http_events) > 0 ? {
     for event in local.http_events :
-    "${event.function_name}_${lower(event.http_method)}" => {
+    "${event.function_name}_${lower(event.http_method)}_${event.http_path}" => {
       function_name = event.function_name
       http_method   = event.http_method
       http_path     = event.http_path
@@ -366,7 +364,7 @@ resource "aws_api_gateway_integration" "lambda" {
 
   rest_api_id = aws_api_gateway_rest_api.this[0].id
   resource_id = local.all_api_resources[each.value.http_path].id
-  http_method = aws_api_gateway_method.endpoints["${each.value.function_name}_${lower(each.value.http_method)}"].http_method
+  http_method = aws_api_gateway_method.endpoints["${each.value.function_name}_${lower(each.value.http_method)}_${each.value.http_path}"].http_method
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"

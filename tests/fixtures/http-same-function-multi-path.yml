@@ -1,0 +1,18 @@
+service: test-service
+provider:
+  name: aws
+  runtime: nodejs18.x
+functions:
+  # A single handler serving two distinct paths under the SAME HTTP method.
+  # Before the path was added to the API Gateway for_each key, both events
+  # collapsed to the key "router_get" and Terraform raised a duplicate-key
+  # error at plan time, blocking this entirely valid configuration.
+  router:
+    handler: router.handle
+    events:
+      - http:
+          path: /alpha
+          method: GET
+      - http:
+          path: /beta
+          method: GET
