@@ -7,11 +7,8 @@
     "test": "node typescript-parser.js",
     "revendor:js-yaml": "vendor/js-yaml/revendor.sh"
   },
-  "comment": "The SAM path (sam-preprocessor.js) uses a vendored, tree-shaken js-yaml committed under vendor/js-yaml/ and needs no install. Only the optional TypeScript-config path needs the runtime dependencies — run `npm install` in this directory before using config_format=\"typescript\". js-yaml is a devDependency only: it is not needed at plan time (vendored), just for the offline elemental-to-serverless converter and re-vendoring.",
-  "dependencies": {
-    "ts-node": "^10.9.1",
-    "typescript": "^5.0.0"
-  },
+  "comment": "No install is needed at plan time. SAM uses a vendored, tree-shaken js-yaml (vendor/js-yaml/). TypeScript configs run on Node's native TS support (Node >= 22.7) with zero dependencies. ts-node + typescript are an OPTIONAL compatibility engine, auto-used if present, for legacy configs that rely on CommonJS require(), extensionless imports, or tsconfig path aliases: `npm install ts-node@^10 typescript@^5` in this directory. js-yaml is a devDependency only (offline elemental converter + re-vendoring), never used at plan time.",
+  "dependencies": {},
   "devDependencies": {
     "js-yaml": "^4.1.0"
   },

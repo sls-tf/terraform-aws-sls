@@ -23,12 +23,12 @@ data "external" "typescript_config" {
   program = [
     "node",
     fileexists("${path.cwd}/node_modules/sls-tf/scripts/typescript-parser.js")
-      ? "${path.cwd}/node_modules/sls-tf/scripts/typescript-parser.js"
-      : "${path.module}/scripts/typescript-parser.js"
+    ? "${path.cwd}/node_modules/sls-tf/scripts/typescript-parser.js"
+    : "${path.module}/scripts/typescript-parser.js"
   ]
 
   query = {
-    config_path      = var.config_path
+    config_path       = var.config_path
     working_directory = path.cwd
     using_local_npm   = fileexists("${path.cwd}/node_modules/sls-tf/scripts/typescript-parser.js")
   }
@@ -46,13 +46,16 @@ locals {
     try(data.external.typescript_config[0].result.error, null)
   ) : null
 
-  # Check if TypeScript dependencies are available
-  # Supports both local NPM installation and module paths
+  # Check that the parser scripts ship with the module. No `npm install` is
+  # required for the TypeScript path: it runs on Node's native TypeScript support
+  # (Node >= 22.7), falling back to ts-node only if it happens to be installed.
+  # Node-version / engine problems are reported at runtime by the parser itself
+  # (surfaced via typescript_parse_error) with actionable messages.
   typescript_dependencies_check = var.config_format == "typescript" ? (
     (fileexists("${path.cwd}/node_modules/sls-tf/scripts/typescript-parser.js") &&
-     fileexists("${path.cwd}/node_modules/sls-tf/scripts/package.json")) ||
+    fileexists("${path.cwd}/node_modules/sls-tf/scripts/ts-config-loader.mjs")) ||
     (fileexists("${path.module}/scripts/typescript-parser.js") &&
-     fileexists("${path.module}/scripts/package.json"))
+    fileexists("${path.module}/scripts/ts-config-loader.mjs"))
   ) : true
 
   # Enhanced file content handling for TypeScript
@@ -63,7 +66,7 @@ locals {
   # Error collection for TypeScript parsing
   typescript_errors = var.config_format == "typescript" ? concat(
     local.typescript_parse_error != null ? ["TypeScript parsing failed: ${local.typescript_parse_error}"] : [],
-    !local.typescript_dependencies_check ? ["TypeScript parser dependencies not found. Please run 'npm install' in the scripts directory."] : [],
+    !local.typescript_dependencies_check ? ["TypeScript parser scripts not found in the module installation (scripts/typescript-parser.js + ts-config-loader.mjs)."] : [],
     local.typescript_config_raw == null && local.typescript_parse_error == null ? ["Unknown TypeScript parsing error occurred."] : []
   ) : []
 

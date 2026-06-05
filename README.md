@@ -45,29 +45,36 @@ A Terraform module that parses and validates Serverless Framework configuration 
 - Null Provider >= 3.0
 - Archive Provider >= 2.0
 - External Provider >= 2.0 (for SAM and TypeScript config formats)
-- Node.js >= 14.0.0 (for SAM and TypeScript config formats — runs the parser at plan time)
-- npm (only for the TypeScript config format)
+- Node.js (for SAM and TypeScript config formats — runs the parser at plan time):
+  `>= 14` for SAM, `>= 22.7` for TypeScript
 
-YAML configs (`serverless.yml`) need no Node.js. SAM templates
-(`config_format = "sam"`) need `node` on PATH but **no `npm install`**: the SAM
-preprocessor uses a vendored, tree-shaken `js-yaml` committed under
-`scripts/vendor/` (see `scripts/vendor/js-yaml/VENDOR.md`), so `terraform plan`
-stays self-contained and works offline.
+**No `npm install` is required for any config format.** YAML (`serverless.yml`)
+needs no Node.js. SAM (`config_format = "sam"`) needs `node` on PATH and uses a
+vendored, tree-shaken `js-yaml` committed under `scripts/vendor/` (see
+`scripts/vendor/js-yaml/VENDOR.md`). TypeScript (`serverless.ts`) runs on Node's
+built-in TypeScript support (Node >= 22.7), so it too needs only `node`. Every
+path stays self-contained and works offline.
 
-### TypeScript Support Requirements
+### TypeScript Support
 
-The TypeScript config format (`serverless.ts`) is the only path that needs an
-install — it shells out to `ts-node`. Install its dependencies once:
+`serverless.ts` is executed at plan time. By default this uses **Node's native
+TypeScript support** (Node >= 22.7) with **zero dependencies** — nothing to
+install. This handles standard, self-contained config files.
+
+A config that relies on ts-node conventions — module-scope `require()`,
+extensionless relative imports (`from './types'`), or `tsconfig` path aliases —
+needs the optional ts-node compatibility engine, which the parser uses
+automatically when present:
 
 ```bash
-# Install TypeScript parsing dependencies (ts-node, typescript)
+# Optional: only for configs that use the ts-node-specific behaviours above
 cd /path/to/sls.tf/scripts
-npm install
+npm install ts-node@^10 typescript@^5
 ```
 
-If they are missing, the TypeScript path fails at plan time with an explicit
-"run `npm install` in the scripts directory" message rather than attempting a
-network install.
+If the native engine hits such a config, it fails at plan time with a message
+pointing to this command. On Node < 22.7 with ts-node absent, it likewise fails
+loud with upgrade/install guidance rather than attempting a network install.
 
 ## Usage
 

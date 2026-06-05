@@ -3,20 +3,108 @@
 /**
  * TypeScript Configuration Parser for sls.tf
  *
- * This script parses Serverless Framework TypeScript configuration files
- * and converts them to JSON for Terraform consumption.
+ * Parses Serverless Framework TypeScript configuration files (serverless.ts) and
+ * converts them to JSON for Terraform consumption.
  *
- * Usage: node typescript-parser.js <config-path> [working-directory]
+ * Two engines, auto-selected, both dependency-light:
+ *
+ *   1. Native (default, zero install): Node's built-in TypeScript support
+ *      (`--experimental-transform-types`, Node >= 22.7) executes the config
+ *      directly. No ts-node, no typescript package, no `npm install` — just
+ *      `node` on PATH. Handles standard, self-contained serverless.ts files.
+ *
+ *   2. ts-node (optional): used only when ts-node + typescript are installed in
+ *      scripts/. Adds CommonJS execution and loose module resolution, so configs
+ *      that use module-scope `require()`, extensionless relative imports, or
+ *      tsconfig path aliases keep working. Opt in with `npm install` in scripts/.
+ *
+ * Either way the config path is handed to a committed loader as an argument, so
+ * there is no generated temp script and no string-interpolation/code-injection
+ * surface (unlike the previous temp-.ts approach).
+ *
+ * Invoked by typescript-parser.tf as `node typescript-parser.js`, with the query
+ * (config_path, working_directory) delivered as JSON on stdin.
  */
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { spawnSync } = require('child_process');
+
+// Minimum Node for --experimental-transform-types (native TS execution).
+const MIN_NODE = [22, 7];
+
+function nodeSupportsTypeScript() {
+  const [major, minor] = process.versions.node.split('.').map(Number);
+  return major > MIN_NODE[0] || (major === MIN_NODE[0] && minor >= MIN_NODE[1]);
+}
+
+// Absolute path to ts-node's transpile-only register hook, or null if ts-node +
+// typescript are not installed in scripts/. Resolved to an absolute path (via the
+// package location, avoiding subpath-exports quirks) so the child node — which
+// runs in the user's working dir, not scripts/ — can `-r` it regardless of CWD.
+function tsNodeRegisterPath() {
+  try {
+    require.resolve('typescript');
+    const pkg = require.resolve('ts-node/package.json');
+    const register = path.join(path.dirname(pkg), 'register', 'transpile-only.js');
+    return fs.existsSync(register) ? register : null;
+  } catch {
+    return null;
+  }
+}
+
+// Choose how to execute the user's config. Returns the argv for a child `node`,
+// or an object with .reason set when neither engine is available.
+function selectEngine(configPath) {
+  const tsNodeRegister = tsNodeRegisterPath();
+  if (tsNodeRegister) {
+    return {
+      kind: 'ts-node',
+      args: ['-r', tsNodeRegister, path.join(__dirname, 'ts-config-loader.cjs'), configPath],
+      // Hermetic ts-node: ignore any project tsconfig.json (which may set options
+      // like module=NodeNext that conflict in transpile-only mode) and pin the
+      // classic CommonJS options that make `require()`, extensionless relative
+      // imports, and JSON imports work — the behaviour this engine exists to provide.
+      env: {
+        ...process.env,
+        TS_NODE_TRANSPILE_ONLY: 'true',
+        TS_NODE_SKIP_PROJECT: 'true',
+        TS_NODE_COMPILER_OPTIONS: JSON.stringify({
+          module: 'commonjs',
+          moduleResolution: 'node',
+          esModuleInterop: true,
+          resolveJsonModule: true,
+          allowJs: true,
+          target: 'ES2020'
+        })
+      }
+    };
+  }
+  if (nodeSupportsTypeScript()) {
+    return {
+      kind: 'native',
+      args: ['--experimental-transform-types', '--disable-warning=ExperimentalWarning', path.join(__dirname, 'ts-config-loader.mjs'), configPath]
+    };
+  }
+  return {
+    reason: `TypeScript config files need either Node >= ${MIN_NODE.join('.')} (native, no install) ` +
+      `or ts-node + typescript installed in the scripts directory; detected Node ${process.versions.node} ` +
+      `with ts-node not installed. Upgrade Node, run \`npm install ts-node typescript\` in scripts/, or use serverless.yml.`
+  };
+}
+
+// When the native engine fails to resolve a module or hits a CommonJS-ism, the
+// config likely relies on ts-node conventions. Point the user at the opt-in engine.
+function nativeFallbackHint(stderr) {
+  return /ERR_MODULE_NOT_FOUND|require is not defined|Cannot use import statement|ERR_REQUIRE_ESM/.test(stderr || '')
+    ? ' This config appears to use CommonJS `require()`, extensionless imports, or path aliases. ' +
+      'Run `npm install ts-node typescript` in the scripts directory to enable the ts-node compatibility engine.'
+    : '';
+}
 
 function main() {
   let input;
   try {
-    // Parse input from Terraform external data source
     input = JSON.parse(fs.readFileSync(0, 'utf8'));
     const { config_path, working_directory = '.' } = input;
 
@@ -24,62 +112,52 @@ function main() {
       throw new Error('config_path is required');
     }
 
-    // Resolve the config file path relative to working directory
     const resolvedWorkingDir = path.resolve(working_directory);
     const resolvedConfigPath = path.resolve(resolvedWorkingDir, config_path);
 
-    // Validate file exists
     if (!fs.existsSync(resolvedConfigPath)) {
       throw new Error(`Configuration file not found: ${resolvedConfigPath}`);
     }
 
-    // Check if TypeScript dependencies are available
-    try {
-      require.resolve('ts-node');
-      require.resolve('typescript');
-    } catch (error) {
-      throw new Error(`TypeScript dependencies not found. Please install: npm install ts-node typescript. Error: ${error.message}`);
+    // Pick the execution engine (ts-node if installed, else native Node). Flags
+    // go on the child (not this parent) so an unsupported-environment message is
+    // emitted cleanly instead of Node rejecting a flag with a cryptic "bad option".
+    const engine = selectEngine(resolvedConfigPath);
+    if (engine.reason) {
+      throw new Error(engine.reason);
     }
 
-    // Create a temporary TypeScript execution script
-    const tempScript = createTempScript(resolvedConfigPath, resolvedWorkingDir);
+    const result = spawnSync(
+      process.execPath,
+      engine.args,
+      { cwd: resolvedWorkingDir, encoding: 'utf8', timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'], env: engine.env || process.env }
+    );
 
-    try {
-      // Execute TypeScript parsing with ts-node
-      const result = execSync(`npx ts-node "${tempScript}"`, {
-        cwd: resolvedWorkingDir,
-        encoding: 'utf8',
-        timeout: 30000, // 30 second timeout
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
-
-      // Parse the result and validate it's valid JSON
-      let parsedConfig;
-      try {
-        parsedConfig = JSON.parse(result.trim());
-      } catch (parseError) {
-        throw new Error(`Failed to parse TypeScript output as JSON: ${parseError.message}. Output: ${result}`);
-      }
-
-      // Validate the parsed configuration
-      validateServerlessConfig(parsedConfig);
-
-      // Return success response
-      console.log(JSON.stringify({
-        status: 'success',
-        config: JSON.stringify(parsedConfig),
-        config_path: resolvedConfigPath
-      }));
-
-    } finally {
-      // Clean up temporary script
-      if (fs.existsSync(tempScript)) {
-        fs.unlinkSync(tempScript);
-      }
+    if (result.error) {
+      throw new Error(`Failed to execute TypeScript config: ${result.error.message}`);
     }
+    if (result.status !== 0) {
+      const stderr = (result.stderr || '').trim();
+      const hint = engine.kind === 'native' ? nativeFallbackHint(stderr) : '';
+      throw new Error(`TypeScript config execution failed: ${stderr || 'unknown error'}${hint}`);
+    }
+
+    let parsedConfig;
+    try {
+      parsedConfig = JSON.parse(result.stdout.trim());
+    } catch (parseError) {
+      throw new Error(`Failed to parse TypeScript output as JSON: ${parseError.message}. Output: ${result.stdout}`);
+    }
+
+    validateServerlessConfig(parsedConfig);
+
+    console.log(JSON.stringify({
+      status: 'success',
+      config: JSON.stringify(parsedConfig),
+      config_path: resolvedConfigPath
+    }));
 
   } catch (error) {
-    // Return error response
     console.log(JSON.stringify({
       status: 'error',
       error: error.message,
@@ -87,66 +165,6 @@ function main() {
     }));
     process.exit(1);
   }
-}
-
-/**
- * Create a temporary TypeScript script to load and parse the configuration
- */
-function createTempScript(configPath, workingDir) {
-  const tempScript = path.join(workingDir, `.temp-config-parser-${Date.now()}.ts`);
-
-  const scriptContent = `
-import * as path from 'path';
-import * as fs from 'fs';
-
-// Set working directory
-process.chdir('${workingDir.replace(/\\/g, '\\\\')}');
-
-async function loadConfig() {
-  try {
-    // Resolve config path relative to working directory
-    const resolvedPath = path.resolve('${configPath.replace(/\\/g, '\\\\')}');
-
-    // Import the TypeScript module
-    const configModule = await import(resolvedPath);
-
-    // Handle different export formats
-    let config = configModule.default || configModule;
-
-    // Handle async function exports
-    if (typeof config === 'function') {
-      config = await config();
-    }
-
-    // Handle Promise exports
-    if (config && typeof config.then === 'function') {
-      config = await config;
-    }
-
-    // Validate configuration object
-    if (!config || typeof config !== 'object') {
-      throw new Error('Configuration must export an object');
-    }
-
-    // Return the configuration as JSON
-    console.log(JSON.stringify(config, null, 2));
-
-  } catch (error) {
-    console.error('Error loading TypeScript configuration:', (error as Error).message);
-    console.error('Stack:', (error as Error).stack);
-    process.exit(1);
-  }
-}
-
-// Execute the configuration loading
-loadConfig().catch(error => {
-  console.error('Unhandled error:', (error as Error).message);
-  process.exit(1);
-});
-`;
-
-  fs.writeFileSync(tempScript, scriptContent);
-  return tempScript;
 }
 
 /**
@@ -161,7 +179,6 @@ function validateServerlessConfig(config) {
     throw new Error('Missing or invalid provider configuration. Provider name must be "aws".');
   }
 
-  // Validate functions if they exist
   if (config.functions) {
     for (const [funcName, funcConfig] of Object.entries(config.functions)) {
       if (!funcConfig.handler) {
@@ -171,9 +188,8 @@ function validateServerlessConfig(config) {
   }
 }
 
-// Execute the main function
 if (require.main === module) {
   main();
 }
 
-module.exports = { main, validateServerlessConfig };
+module.exports = { main, validateServerlessConfig, nodeSupportsTypeScript, tsNodeRegisterPath, selectEngine };
