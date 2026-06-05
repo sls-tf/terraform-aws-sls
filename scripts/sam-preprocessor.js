@@ -18,7 +18,10 @@
 //   account_id   — AWS account ID string (for AWS::AccountId pseudo-param)
 //   strict       — "true"/"false" — throw on unresolved refs (default: "true")
 
-const yaml = require('js-yaml');
+// Vendored, tree-shaken js-yaml (load + Type + DEFAULT_SCHEMA only) — committed to
+// the repo so `terraform plan` of a SAM template needs no node_modules / npm install.
+// See scripts/vendor/js-yaml/VENDOR.md for provenance and how to re-vendor.
+const yaml = require('./vendor/js-yaml/js-yaml.cjs');
 const fs   = require('fs');
 
 // ============================================================================

@@ -13,11 +13,12 @@
 data "external" "sam_yaml" {
   count = var.config_format == "sam" ? 1 : 0
 
-  # Auto-install js-yaml if node_modules is absent (first run after module download).
-  # Wraps sam-preprocessor.js which needs js-yaml from scripts/package.json.
+  # sam-preprocessor.js depends only on a vendored, tree-shaken js-yaml committed
+  # under scripts/vendor/ (plus Node built-ins), so the SAM path needs no
+  # node_modules and no npm install — `terraform plan` stays self-contained and
+  # works in Node-only, offline, and read-only environments. Requires `node` on PATH.
   program = [
-    "bash", "-c",
-    "SCRIPTS=\"${path.module}/scripts\" && { [ -d \"$SCRIPTS/node_modules\" ] || npm install --silent --prefix \"$SCRIPTS\" >&2; } && node \"$SCRIPTS/sam-preprocessor.js\""
+    "node", "${path.module}/scripts/sam-preprocessor.js"
   ]
 
   query = {

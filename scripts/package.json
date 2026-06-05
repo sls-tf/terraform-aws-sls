@@ -4,12 +4,16 @@
   "description": "TypeScript configuration parser for sls.tf Terraform module",
   "main": "typescript-parser.js",
   "scripts": {
-    "test": "node typescript-parser.js"
+    "test": "node typescript-parser.js",
+    "revendor:js-yaml": "vendor/js-yaml/revendor.sh"
   },
+  "comment": "The SAM path (sam-preprocessor.js) uses a vendored, tree-shaken js-yaml committed under vendor/js-yaml/ and needs no install. Only the optional TypeScript-config path needs the runtime dependencies — run `npm install` in this directory before using config_format=\"typescript\". js-yaml is a devDependency only: it is not needed at plan time (vendored), just for the offline elemental-to-serverless converter and re-vendoring.",
   "dependencies": {
-    "js-yaml": "^4.1.0",
     "ts-node": "^10.9.1",
     "typescript": "^5.0.0"
+  },
+  "devDependencies": {
+    "js-yaml": "^4.1.0"
   },
   "engines": {
     "node": ">=14.0.0"

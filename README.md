@@ -44,19 +44,30 @@ A Terraform module that parses and validates Serverless Framework configuration 
 - AWS Provider >= 6.0
 - Null Provider >= 3.0
 - Archive Provider >= 2.0
-- External Provider >= 2.0 (for TypeScript support)
-- Node.js >= 14.0.0 (for TypeScript support)
-- npm (for TypeScript support)
+- External Provider >= 2.0 (for SAM and TypeScript config formats)
+- Node.js >= 14.0.0 (for SAM and TypeScript config formats — runs the parser at plan time)
+- npm (only for the TypeScript config format)
+
+YAML configs (`serverless.yml`) need no Node.js. SAM templates
+(`config_format = "sam"`) need `node` on PATH but **no `npm install`**: the SAM
+preprocessor uses a vendored, tree-shaken `js-yaml` committed under
+`scripts/vendor/` (see `scripts/vendor/js-yaml/VENDOR.md`), so `terraform plan`
+stays self-contained and works offline.
 
 ### TypeScript Support Requirements
 
-If using TypeScript configuration files (`serverless.ts`):
+The TypeScript config format (`serverless.ts`) is the only path that needs an
+install — it shells out to `ts-node`. Install its dependencies once:
 
 ```bash
-# Install TypeScript parsing dependencies
+# Install TypeScript parsing dependencies (ts-node, typescript)
 cd /path/to/sls.tf/scripts
 npm install
 ```
+
+If they are missing, the TypeScript path fails at plan time with an explicit
+"run `npm install` in the scripts directory" message rather than attempting a
+network install.
 
 ## Usage
 
