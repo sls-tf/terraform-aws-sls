@@ -57,24 +57,24 @@ path stays self-contained and works offline.
 
 ### TypeScript Support
 
-`serverless.ts` is executed at plan time. By default this uses **Node's native
-TypeScript support** (Node >= 22.7) with **zero dependencies** — nothing to
-install. This handles standard, self-contained config files.
+`serverless.ts` is executed at plan time using **Node's native TypeScript
+support** (Node >= 22.7) with **zero dependencies** — nothing to install. This
+handles standard, self-contained config files.
 
-A config that relies on ts-node conventions — module-scope `require()`,
-extensionless relative imports (`from './types'`), or `tsconfig` path aliases —
-needs the optional ts-node compatibility engine, which the parser uses
-automatically when present:
+For a config that needs more than native type-stripping — module-scope
+`require()`, extensionless relative imports (`from './types'`), or `tsconfig`
+path aliases — set the `SLS_TF_TS_RUNNER` environment variable to a TypeScript
+runner that provides full module resolution, such as [`tsx`](https://tsx.is):
 
 ```bash
-# Optional: only for configs that use the ts-node-specific behaviours above
-cd /path/to/sls.tf/scripts
-npm install ts-node@^10 typescript@^5
+export SLS_TF_TS_RUNNER="npx tsx"   # or "ts-node", "bun", etc.
+terraform plan
 ```
 
-If the native engine hits such a config, it fails at plan time with a message
-pointing to this command. On Node < 22.7 with ts-node absent, it likewise fails
-loud with upgrade/install guidance rather than attempting a network install.
+The module then runs your config through that runner instead of native Node. If
+the native engine hits a config it can't resolve, it fails at plan time with a
+message pointing to this variable. On Node < 22.7 it likewise fails loud with
+upgrade / `SLS_TF_TS_RUNNER` guidance rather than attempting a network install.
 
 ## Usage
 

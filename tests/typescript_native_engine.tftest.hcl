@@ -1,9 +1,9 @@
 # TypeScript Native-Engine Tests
 #
 # The serverless.ts path runs on Node's built-in TypeScript support
-# (--experimental-transform-types, Node >= 22.7) by default, with NO ts-node,
-# NO typescript package, and NO npm install — only `node` on PATH. ts-node is an
-# optional compatibility engine, auto-used when installed, for legacy configs.
+# (--experimental-transform-types, Node >= 22.7) by default, with NO dependencies
+# and NO npm install — only `node` on PATH. Configs needing more than native
+# type-stripping can set SLS_TF_TS_RUNNER (e.g. "npx tsx") as an escape hatch.
 #
 # This test exercises the default (native, zero-install) engine end to end, the
 # CI-realistic path where scripts/node_modules has no ts-node. It uses a mock AWS

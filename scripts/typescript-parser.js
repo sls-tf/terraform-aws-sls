@@ -6,21 +6,22 @@
  * Parses Serverless Framework TypeScript configuration files (serverless.ts) and
  * converts them to JSON for Terraform consumption.
  *
- * Two engines, auto-selected, both dependency-light:
+ * Execution model — native by default, with an optional escape hatch:
  *
- *   1. Native (default, zero install): Node's built-in TypeScript support
- *      (`--experimental-transform-types`, Node >= 22.7) executes the config
- *      directly. No ts-node, no typescript package, no `npm install` — just
- *      `node` on PATH. Handles standard, self-contained serverless.ts files.
+ *   - Native (default, zero dependencies): Node's built-in TypeScript support
+ *     (`--experimental-transform-types`, Node >= 22.7) executes the config
+ *     directly. No ts-node, no typescript package, no `npm install` — just
+ *     `node` on PATH. Handles standard, self-contained serverless.ts files.
  *
- *   2. ts-node (optional): used only when ts-node + typescript are installed in
- *      scripts/. Adds CommonJS execution and loose module resolution, so configs
- *      that use module-scope `require()`, extensionless relative imports, or
- *      tsconfig path aliases keep working. Opt in with `npm install` in scripts/.
+ *   - Custom runner (opt-in): set the SLS_TF_TS_RUNNER env var to a TypeScript
+ *     runner command — e.g. SLS_TF_TS_RUNNER="npx tsx" — for configs that need
+ *     more than native type-stripping (module-scope `require()`, extensionless
+ *     relative imports, tsconfig path aliases). That command runs the loader
+ *     instead of `node`.
  *
- * Either way the config path is handed to a committed loader as an argument, so
- * there is no generated temp script and no string-interpolation/code-injection
- * surface (unlike the previous temp-.ts approach).
+ * Either way the config path is handed to a committed loader (ts-config-loader.mjs)
+ * as an argument, so there is no generated temp script and no
+ * string-interpolation/code-injection surface (unlike the previous temp-.ts approach).
  *
  * Invoked by typescript-parser.tf as `node typescript-parser.js`, with the query
  * (config_path, working_directory) delivered as JSON on stdin.
@@ -38,67 +39,40 @@ function nodeSupportsTypeScript() {
   return major > MIN_NODE[0] || (major === MIN_NODE[0] && minor >= MIN_NODE[1]);
 }
 
-// Absolute path to ts-node's transpile-only register hook, or null if ts-node +
-// typescript are not installed in scripts/. Resolved to an absolute path (via the
-// package location, avoiding subpath-exports quirks) so the child node — which
-// runs in the user's working dir, not scripts/ — can `-r` it regardless of CWD.
-function tsNodeRegisterPath() {
-  try {
-    require.resolve('typescript');
-    const pkg = require.resolve('ts-node/package.json');
-    const register = path.join(path.dirname(pkg), 'register', 'transpile-only.js');
-    return fs.existsSync(register) ? register : null;
-  } catch {
-    return null;
-  }
-}
-
-// Choose how to execute the user's config. Returns the argv for a child `node`,
-// or an object with .reason set when neither engine is available.
+// Choose how to execute the user's serverless.ts. Returns { kind, command, args }
+// for a child process, or { reason } when no engine is available.
 function selectEngine(configPath) {
-  const tsNodeRegister = tsNodeRegisterPath();
-  if (tsNodeRegister) {
-    return {
-      kind: 'ts-node',
-      args: ['-r', tsNodeRegister, path.join(__dirname, 'ts-config-loader.cjs'), configPath],
-      // Hermetic ts-node: ignore any project tsconfig.json (which may set options
-      // like module=NodeNext that conflict in transpile-only mode) and pin the
-      // classic CommonJS options that make `require()`, extensionless relative
-      // imports, and JSON imports work — the behaviour this engine exists to provide.
-      env: {
-        ...process.env,
-        TS_NODE_TRANSPILE_ONLY: 'true',
-        TS_NODE_SKIP_PROJECT: 'true',
-        TS_NODE_COMPILER_OPTIONS: JSON.stringify({
-          module: 'commonjs',
-          moduleResolution: 'node',
-          esModuleInterop: true,
-          resolveJsonModule: true,
-          allowJs: true,
-          target: 'ES2020'
-        })
-      }
-    };
+  const loader = path.join(__dirname, 'ts-config-loader.mjs');
+
+  // Escape hatch: an explicit TypeScript runner (e.g. "npx tsx") runs the loader.
+  const custom = (process.env.SLS_TF_TS_RUNNER || '').trim();
+  if (custom) {
+    const [command, ...runnerArgs] = custom.split(/\s+/);
+    return { kind: 'custom', command, args: [...runnerArgs, loader, configPath] };
   }
+
   if (nodeSupportsTypeScript()) {
     return {
       kind: 'native',
-      args: ['--experimental-transform-types', '--disable-warning=ExperimentalWarning', path.join(__dirname, 'ts-config-loader.mjs'), configPath]
+      command: process.execPath,
+      args: ['--experimental-transform-types', '--disable-warning=ExperimentalWarning', loader, configPath]
     };
   }
+
   return {
-    reason: `TypeScript config files need either Node >= ${MIN_NODE.join('.')} (native, no install) ` +
-      `or ts-node + typescript installed in the scripts directory; detected Node ${process.versions.node} ` +
-      `with ts-node not installed. Upgrade Node, run \`npm install ts-node typescript\` in scripts/, or use serverless.yml.`
+    reason: `TypeScript config files require Node >= ${MIN_NODE.join('.')} for native execution; ` +
+      `detected ${process.versions.node}. Upgrade Node, set SLS_TF_TS_RUNNER to a TypeScript runner ` +
+      `(e.g. "npx tsx"), or use serverless.yml.`
   };
 }
 
 // When the native engine fails to resolve a module or hits a CommonJS-ism, the
-// config likely relies on ts-node conventions. Point the user at the opt-in engine.
+// config needs more than native type-stripping. Point the user at the escape hatch.
 function nativeFallbackHint(stderr) {
   return /ERR_MODULE_NOT_FOUND|require is not defined|Cannot use import statement|ERR_REQUIRE_ESM/.test(stderr || '')
-    ? ' This config appears to use CommonJS `require()`, extensionless imports, or path aliases. ' +
-      'Run `npm install ts-node typescript` in the scripts directory to enable the ts-node compatibility engine.'
+    ? ' This config appears to use CommonJS `require()`, extensionless imports, or path aliases, which ' +
+      `Node's native TypeScript support does not handle. Set SLS_TF_TS_RUNNER to a TypeScript runner that ` +
+      'does — e.g. SLS_TF_TS_RUNNER="npx tsx" — and re-run.'
     : '';
 }
 
@@ -119,18 +93,18 @@ function main() {
       throw new Error(`Configuration file not found: ${resolvedConfigPath}`);
     }
 
-    // Pick the execution engine (ts-node if installed, else native Node). Flags
-    // go on the child (not this parent) so an unsupported-environment message is
-    // emitted cleanly instead of Node rejecting a flag with a cryptic "bad option".
+    // Pick the execution engine (custom SLS_TF_TS_RUNNER if set, else native Node).
+    // Flags go on the child (not this parent) so an unsupported-environment message
+    // is emitted cleanly instead of Node rejecting a flag with a cryptic "bad option".
     const engine = selectEngine(resolvedConfigPath);
     if (engine.reason) {
       throw new Error(engine.reason);
     }
 
     const result = spawnSync(
-      process.execPath,
+      engine.command,
       engine.args,
-      { cwd: resolvedWorkingDir, encoding: 'utf8', timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'], env: engine.env || process.env }
+      { cwd: resolvedWorkingDir, encoding: 'utf8', timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'] }
     );
 
     if (result.error) {
@@ -192,4 +166,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { main, validateServerlessConfig, nodeSupportsTypeScript, tsNodeRegisterPath, selectEngine };
+module.exports = { main, validateServerlessConfig, nodeSupportsTypeScript, selectEngine };

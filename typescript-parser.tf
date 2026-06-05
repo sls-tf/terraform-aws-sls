@@ -14,7 +14,8 @@
 # - Integration with existing validation pipeline
 
 # External data source for TypeScript configuration parsing
-# This executes a Node.js script with ts-node to parse TypeScript files
+# This executes a Node.js script that runs serverless.ts via Node's native
+# TypeScript support (or a custom SLS_TF_TS_RUNNER) and returns JSON
 # It supports both local NPM installation and module script paths
 data "external" "typescript_config" {
   count = var.config_format == "typescript" ? 1 : 0
@@ -48,7 +49,7 @@ locals {
 
   # Check that the parser scripts ship with the module. No `npm install` is
   # required for the TypeScript path: it runs on Node's native TypeScript support
-  # (Node >= 22.7), falling back to ts-node only if it happens to be installed.
+  # (Node >= 22.7), or a custom runner set via SLS_TF_TS_RUNNER (e.g. "npx tsx").
   # Node-version / engine problems are reported at runtime by the parser itself
   # (surfaced via typescript_parse_error) with actionable messages.
   typescript_dependencies_check = var.config_format == "typescript" ? (
