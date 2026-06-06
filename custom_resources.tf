@@ -207,13 +207,13 @@ resource "aws_sqs_queue" "custom" {
   content_based_deduplication = try(each.value.Properties.ContentBasedDeduplication, false)
 
   # Message retention and delays
-  message_retention_seconds  = try(each.value.Properties.MessageRetentionPeriod, 345600)  # 4 days default
+  message_retention_seconds  = try(each.value.Properties.MessageRetentionPeriod, 345600) # 4 days default
   delay_seconds              = try(each.value.Properties.DelaySeconds, 0)
   visibility_timeout_seconds = try(each.value.Properties.VisibilityTimeout, 30)
 
   # Delivery policy
   receive_wait_time_seconds = try(each.value.Properties.ReceiveMessageWaitTimeSeconds, 0)
-  max_message_size          = try(each.value.Properties.MaximumMessageSize, 262144)  # 256 KB default
+  max_message_size          = try(each.value.Properties.MaximumMessageSize, 262144) # 256 KB default
 
   # Dead letter queue configuration
   redrive_policy = try(each.value.Properties.RedrivePolicy, null) != null ? jsonencode({

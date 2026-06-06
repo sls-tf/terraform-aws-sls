@@ -180,8 +180,8 @@ variable "strict_sam_intrinsics" {
     continue to work; enable it once all parameters are fully supplied and you
     want hard failure on any unresolvable reference.
   DESC
-  type    = bool
-  default = false
+  type        = bool
+  default     = false
 }
 
 variable "stage_override" {

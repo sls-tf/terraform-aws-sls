@@ -53,7 +53,7 @@ resource "aws_s3_bucket" "website" {
 # Enable versioning for rollback capability
 resource "aws_s3_bucket_versioning" "website" {
   bucket = aws_s3_bucket.website.id
-  
+
   versioning_configuration {
     status = "Enabled"
   }
