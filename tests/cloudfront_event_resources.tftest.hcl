@@ -6,21 +6,7 @@
 # These tests validate CloudFront distribution creation from cloudFront events.
 # CloudFront support in LocalStack requires Pro edition.
 
-provider "aws" {
-  region                      = "us-east-1"
-  skip_credentials_validation = var.use_localstack
-  skip_metadata_api_check     = var.use_localstack
-  skip_requesting_account_id  = var.use_localstack
-  s3_use_path_style           = var.use_localstack
-
-  endpoints {
-    cloudfront = var.use_localstack ? var.localstack_endpoint : null
-    iam        = var.use_localstack ? var.localstack_endpoint : null
-    lambda     = var.use_localstack ? var.localstack_endpoint : null
-    s3         = var.use_localstack ? var.localstack_endpoint : null
-    sts        = var.use_localstack ? var.localstack_endpoint : null
-  }
-}
+mock_provider "aws" {}
 
 variables {
   use_localstack      = false
@@ -112,7 +98,7 @@ run "lambda_edge_association_in_default_behavior" {
   }
 
   assert {
-    condition     = aws_cloudfront_distribution.lambda_edge["default"].default_cache_behavior[0].lambda_function_association[0].event_type == "viewer-request"
+    condition     = one([for a in aws_cloudfront_distribution.lambda_edge["default"].default_cache_behavior[0].lambda_function_association : a.event_type]) == "viewer-request"
     error_message = "Lambda@Edge association should have viewer-request event type"
   }
 }
@@ -135,7 +121,7 @@ run "lambda_edge_ordered_behavior_for_path_pattern" {
   }
 
   assert {
-    condition     = aws_cloudfront_distribution.lambda_edge["default"].ordered_cache_behavior[0].lambda_function_association[0].event_type == "origin-request"
+    condition     = one([for a in aws_cloudfront_distribution.lambda_edge["default"].ordered_cache_behavior[0].lambda_function_association : a.event_type]) == "origin-request"
     error_message = "Ordered behavior Lambda@Edge should have origin-request event type"
   }
 }

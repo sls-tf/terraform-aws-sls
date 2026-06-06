@@ -1,6 +1,8 @@
 # Provider Setup Tests
 # Tests for archive provider initialization and lambda_code_path variable
 
+mock_provider "aws" {}
+
 provider "null" {}
 
 # Test 1: Archive provider initialization

@@ -2,6 +2,8 @@
 # Tests for aws_iam_role_policy resource creation
 
 # Test 1: Policy resource created for function with statements
+mock_provider "aws" {}
+
 run "policy_resource_created_with_statements" {
   command = plan
 

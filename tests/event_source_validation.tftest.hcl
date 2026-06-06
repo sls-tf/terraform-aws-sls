@@ -1,6 +1,8 @@
 # Event Source Validation Tests
 # Tests for DynamoDB Stream and SQS event configuration validation
 
+mock_provider "aws" {}
+
 run "test_dynamodb_invalid_batch_size" {
   command = plan
 

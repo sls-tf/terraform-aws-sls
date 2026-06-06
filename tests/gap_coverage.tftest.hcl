@@ -1,6 +1,8 @@
 # Gap Coverage Tests
 # Strategic tests to fill critical coverage gaps identified in Task 6.2
 
+mock_provider "aws" {}
+
 provider "null" {}
 
 # Test 1: Framework version 2.x validation

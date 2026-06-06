@@ -7,17 +7,7 @@
 # serverless.yml CloudFormation resources section.
 
 # Dual-mode provider configuration
-provider "aws" {
-  region                      = "us-east-1"
-  skip_credentials_validation = var.use_localstack
-  skip_metadata_api_check     = var.use_localstack
-  skip_requesting_account_id  = var.use_localstack
-
-  endpoints {
-    cloudfront = var.use_localstack ? var.localstack_endpoint : null
-    s3         = var.use_localstack ? var.localstack_endpoint : null
-  }
-}
+mock_provider "aws" {}
 
 variables {
   use_localstack      = false
@@ -178,25 +168,21 @@ run "cloudfront_error_responses_generation" {
     error_message = "WebApp distribution should have 2 custom error responses"
   }
 
+  # custom_error_response is a set (no addressable index): select by error_code.
   # Check 404 error response
   assert {
-    condition     = aws_cloudfront_distribution.custom["WebAppCloudFrontDistribution"].custom_error_response[0].error_code == 404
-    error_message = "First error response should be for 404"
-  }
-
-  assert {
-    condition     = aws_cloudfront_distribution.custom["WebAppCloudFrontDistribution"].custom_error_response[0].response_code == 200
+    condition     = one([for r in aws_cloudfront_distribution.custom["WebAppCloudFrontDistribution"].custom_error_response : r if r.error_code == 404]).response_code == 200
     error_message = "404 should respond with 200"
   }
 
   assert {
-    condition     = aws_cloudfront_distribution.custom["WebAppCloudFrontDistribution"].custom_error_response[0].response_page_path == "/index.html"
+    condition     = one([for r in aws_cloudfront_distribution.custom["WebAppCloudFrontDistribution"].custom_error_response : r if r.error_code == 404]).response_page_path == "/index.html"
     error_message = "404 should serve /index.html"
   }
 
-  # Check 403 error response
+  # Check 403 error response exists
   assert {
-    condition     = aws_cloudfront_distribution.custom["WebAppCloudFrontDistribution"].custom_error_response[1].error_code == 403
+    condition     = contains([for r in aws_cloudfront_distribution.custom["WebAppCloudFrontDistribution"].custom_error_response : r.error_code], 403)
     error_message = "Second error response should be for 403"
   }
 }
@@ -302,13 +288,14 @@ run "cloudfront_s3_origin_generation" {
     error_message = "Should create StaticSiteDistribution"
   }
 
+  # origin is a set (no addressable index): select the S3 origin by predicate.
   assert {
-    condition     = length(aws_cloudfront_distribution.custom["StaticSiteDistribution"].origin[0].s3_origin_config) == 1
+    condition     = length(one([for o in aws_cloudfront_distribution.custom["StaticSiteDistribution"].origin : o if length(o.s3_origin_config) > 0]).s3_origin_config) == 1
     error_message = "S3 origin should have s3_origin_config"
   }
 
   assert {
-    condition     = aws_cloudfront_distribution.custom["StaticSiteDistribution"].origin[0].s3_origin_config[0].origin_access_identity != ""
+    condition     = one([for o in aws_cloudfront_distribution.custom["StaticSiteDistribution"].origin : o if length(o.s3_origin_config) > 0]).s3_origin_config[0].origin_access_identity != ""
     error_message = "S3 origin should have OriginAccessIdentity"
   }
 

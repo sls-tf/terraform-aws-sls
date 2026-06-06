@@ -1,6 +1,8 @@
 # ${env:} Variable Resolution Tests
 # Tests for resolving ${env:} environment variables
 
+mock_provider "aws" {}
+
 run "test_resolve_env_with_value" {
   command = plan
 

@@ -1,0 +1,15 @@
+# Minimal valid Serverless config with a single function and NO variable
+# references. Used by the variable-resolution test suite to verify that configs
+# without ${self:}/${env:} variables parse and resolve unchanged (backward
+# compatibility), and that variable detection reports zero references.
+service: simple-function-service
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: dev
+  region: us-east-1
+
+functions:
+  hello:
+    handler: handler.hello

@@ -2,6 +2,8 @@
 # Tests for aws_lambda_function resource generation
 
 # Test 1: Lambda function created per function definition
+mock_provider "aws" {}
+
 run "lambda_function_per_definition" {
   command = plan
 

@@ -2,29 +2,7 @@
 # LocalStack Compatibility: FULL
 # Validates parsing of CloudFormation SQS queue resources from serverless.yml
 
-provider "aws" {
-  region                      = "us-east-1"
-  skip_credentials_validation = var.use_localstack
-  skip_metadata_api_check     = var.use_localstack
-  skip_requesting_account_id  = var.use_localstack
-  s3_use_path_style           = var.use_localstack
-
-  dynamic "endpoints" {
-    for_each = var.use_localstack ? [1] : []
-    content {
-      apigateway = var.localstack_endpoint
-      dynamodb   = var.localstack_endpoint
-      events     = var.localstack_endpoint
-      iam        = var.localstack_endpoint
-      lambda     = var.localstack_endpoint
-      route53    = var.localstack_endpoint
-      s3         = var.localstack_endpoint
-      sns        = var.localstack_endpoint
-      sqs        = var.localstack_endpoint
-      sts        = var.localstack_endpoint
-    }
-  }
-}
+mock_provider "aws" {}
 
 run "sqs_queue_parsing" {
   command = plan

@@ -7,17 +7,7 @@
 # resources section. They test locals without creating actual resources.
 
 # Dual-mode provider configuration
-provider "aws" {
-  region                      = "us-east-1"
-  skip_credentials_validation = var.use_localstack
-  skip_metadata_api_check     = var.use_localstack
-  skip_requesting_account_id  = var.use_localstack
-
-  endpoints {
-    cloudfront = var.use_localstack ? var.localstack_endpoint : null
-    s3         = var.use_localstack ? var.localstack_endpoint : null
-  }
-}
+mock_provider "aws" {}
 
 variables {
   use_localstack      = false

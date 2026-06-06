@@ -1,6 +1,8 @@
 # ${self:} Variable Resolution Tests
 # Tests for resolving ${self:} references to config properties
 
+mock_provider "aws" {}
+
 run "test_resolve_self_service" {
   command = plan
 

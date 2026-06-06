@@ -2,6 +2,8 @@
 # Tests for CloudWatch Event Rules, Targets, and Lambda Permissions
 
 # Test: Schedule rule creation with rate expression
+mock_provider "aws" {}
+
 run "schedule_rule_rate_expression" {
   command = plan
 

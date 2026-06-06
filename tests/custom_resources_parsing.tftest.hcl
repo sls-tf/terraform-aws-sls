@@ -2,6 +2,8 @@
 # Tests for CloudFormation resource extraction and categorization (Roadmap #9)
 
 # Test: S3 bucket resource parsing
+mock_provider "aws" {}
+
 run "s3_bucket_parsing" {
   command = plan
 

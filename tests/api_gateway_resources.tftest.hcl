@@ -3,34 +3,7 @@
 # Tests for creating API Gateway REST API, resources, methods, and integrations
 # These tests create actual API Gateway resources in LocalStack or AWS
 
-provider "aws" {
-  region = "us-east-1"
-
-  # Skip AWS-specific validations when using LocalStack
-  skip_credentials_validation = var.use_localstack
-  skip_metadata_api_check     = var.use_localstack
-  skip_requesting_account_id  = var.use_localstack
-
-  # CRITICAL: LocalStack requires S3 path-style access
-  s3_use_path_style = var.use_localstack
-
-  # Dynamic endpoints - only populated when use_localstack = true
-  dynamic "endpoints" {
-    for_each = var.use_localstack ? [1] : []
-    content {
-      apigateway = var.localstack_endpoint
-      dynamodb   = var.localstack_endpoint
-      events     = var.localstack_endpoint
-      iam        = var.localstack_endpoint
-      lambda     = var.localstack_endpoint
-      route53    = var.localstack_endpoint
-      s3         = var.localstack_endpoint
-      sns        = var.localstack_endpoint
-      sqs        = var.localstack_endpoint
-      sts        = var.localstack_endpoint
-    }
-  }
-}
+mock_provider "aws" {}
 
 run "rest_api_creation" {
   command = plan
@@ -113,18 +86,20 @@ run "method_creation" {
     error_message = "Should create one method for one HTTP event"
   }
 
+  # The for_each key includes the path (function_method_path) so a single
+  # function can serve several paths under one method without key collisions.
   assert {
-    condition     = contains(keys(aws_api_gateway_method.endpoints), "getUser_get")
-    error_message = "Should create method with function_method key"
+    condition     = anytrue([for k in keys(aws_api_gateway_method.endpoints) : startswith(k, "getUser_get_")])
+    error_message = "Should create method with function_method_path key"
   }
 
   assert {
-    condition     = aws_api_gateway_method.endpoints["getUser_get"].http_method == "GET"
+    condition     = one([for m in values(aws_api_gateway_method.endpoints) : m.http_method]) == "GET"
     error_message = "Method should use correct HTTP method"
   }
 
   assert {
-    condition     = aws_api_gateway_method.endpoints["getUser_get"].authorization == "NONE"
+    condition     = one([for m in values(aws_api_gateway_method.endpoints) : m.authorization]) == "NONE"
     error_message = "Method should have no authorization"
   }
 }
@@ -142,12 +117,12 @@ run "lambda_integration" {
   }
 
   assert {
-    condition     = aws_api_gateway_integration.lambda["getUser_get"].type == "AWS_PROXY"
+    condition     = one([for i in values(aws_api_gateway_integration.lambda) : i.type]) == "AWS_PROXY"
     error_message = "Integration should use AWS_PROXY type"
   }
 
   assert {
-    condition     = aws_api_gateway_integration.lambda["getUser_get"].integration_http_method == "POST"
+    condition     = one([for i in values(aws_api_gateway_integration.lambda) : i.integration_http_method]) == "POST"
     error_message = "Lambda integration should use POST method"
   }
 }

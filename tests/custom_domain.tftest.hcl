@@ -2,6 +2,8 @@
 # Tests for Route 53 & Custom Domain Management (Roadmap #12)
 
 # Test: Custom domain module not created when disabled
+mock_provider "aws" {}
+
 run "custom_domain_disabled_by_default" {
   command = plan
 

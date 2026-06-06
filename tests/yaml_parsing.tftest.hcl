@@ -2,6 +2,8 @@
 # These tests verify YAML parsing functionality with various configurations
 
 # Configure required providers for tests
+mock_provider "aws" {}
+
 provider "null" {}
 
 # Test 1: Valid YAML parsing with minimal serverless.yml

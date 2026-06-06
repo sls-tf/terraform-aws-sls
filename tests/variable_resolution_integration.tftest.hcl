@@ -1,6 +1,8 @@
 # Variable Resolution Integration Tests
 # End-to-end tests verifying variable resolution works with the full module
 
+mock_provider "aws" {}
+
 run "test_self_variables_in_complete_config" {
   command = plan
 

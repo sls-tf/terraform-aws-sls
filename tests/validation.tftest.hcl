@@ -1,6 +1,8 @@
 # Schema Validation Tests
 # These tests verify comprehensive validation logic and error collection
 
+mock_provider "aws" {}
+
 provider "null" {}
 
 # Test 1: Missing required field - service

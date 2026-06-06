@@ -6,21 +6,7 @@
 # Tests cloudFront event parsing from function definitions.
 # Validates locals without creating actual resources.
 
-provider "aws" {
-  region                      = "us-east-1"
-  skip_credentials_validation = var.use_localstack
-  skip_metadata_api_check     = var.use_localstack
-  skip_requesting_account_id  = var.use_localstack
-  s3_use_path_style           = var.use_localstack
-
-  endpoints {
-    cloudfront = var.use_localstack ? var.localstack_endpoint : null
-    iam        = var.use_localstack ? var.localstack_endpoint : null
-    lambda     = var.use_localstack ? var.localstack_endpoint : null
-    s3         = var.use_localstack ? var.localstack_endpoint : null
-    sts        = var.use_localstack ? var.localstack_endpoint : null
-  }
-}
+mock_provider "aws" {}
 
 variables {
   use_localstack      = false

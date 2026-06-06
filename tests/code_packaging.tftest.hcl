@@ -2,6 +2,8 @@
 # Tests for archive_file data source creation and ZIP file generation
 
 # Test 1: archive_file data source created per function
+mock_provider "aws" {}
+
 run "archive_file_per_function" {
   command = plan
 

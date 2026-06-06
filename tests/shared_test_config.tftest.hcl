@@ -39,37 +39,7 @@
 # ============================================================================
 
 # AWS Provider Configuration - Dual Mode (LocalStack/AWS)
-provider "aws" {
-  region = "us-east-1"
-
-  # Skip AWS-specific validations when using LocalStack
-  # LocalStack doesn't implement AWS metadata APIs
-  skip_credentials_validation = var.use_localstack
-  skip_metadata_api_check     = var.use_localstack
-  skip_requesting_account_id  = var.use_localstack
-
-  # CRITICAL: LocalStack requires S3 path-style access
-  # Without this, S3 operations will fail in LocalStack
-  s3_use_path_style = var.use_localstack
-
-  # Dynamic endpoints - only populated when use_localstack = true
-  # Points all AWS services to LocalStack gateway
-  dynamic "endpoints" {
-    for_each = var.use_localstack ? [1] : []
-    content {
-      apigateway = var.localstack_endpoint  # API Gateway REST APIs
-      dynamodb   = var.localstack_endpoint  # DynamoDB tables and streams
-      events     = var.localstack_endpoint  # CloudWatch Events/EventBridge
-      iam        = var.localstack_endpoint  # IAM roles and policies
-      lambda     = var.localstack_endpoint  # Lambda functions
-      route53    = var.localstack_endpoint  # Route 53 DNS
-      s3         = var.localstack_endpoint  # S3 buckets
-      sns        = var.localstack_endpoint  # SNS topics
-      sqs        = var.localstack_endpoint  # SQS queues
-      sts        = var.localstack_endpoint  # AWS STS
-    }
-  }
-}
+mock_provider "aws" {}
 
 # ============================================================================
 # Test Examples

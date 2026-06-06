@@ -6,9 +6,7 @@
 # Validates TypeScript compilation, async export handling, and error management.
 
 # Provider configuration for TypeScript tests
-provider "aws" {
-  region = "us-east-1"
-}
+mock_provider "aws" {}
 
 variables {
   use_localstack      = false

@@ -5,6 +5,8 @@
 # LocalStack Compatibility: FULL (no provider credentials required)
 # These tests verify validation errors for invalid cloudFront event configs.
 
+mock_provider "aws" {}
+
 provider "null" {}
 
 run "cloudfront_invalid_eventtype_rejected" {

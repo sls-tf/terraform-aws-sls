@@ -5,6 +5,8 @@
 # Tests that valid SAM templates are parsed and translated correctly.
 # Requires LocalStack (make localstack-start) or real AWS credentials.
 
+mock_provider "aws" {}
+
 run "sam_simple_parses_without_errors" {
   command = plan
 
@@ -19,8 +21,11 @@ run "sam_simple_parses_without_errors" {
   }
 
   assert {
-    condition     = local.parsed_config.service == "Simple SAM application with one function"
-    error_message = "Expected service name from SAM Description, got: ${local.parsed_config.service}"
+    # SAM has no service field; the Description is deliberately NOT used (too long
+    # for the 64-char IAM role-name limit). With no Metadata.ServiceName present in
+    # this fixture, the service falls back to the stable "sam-service".
+    condition     = local.parsed_config.service == "sam-service"
+    error_message = "Expected fallback service name 'sam-service', got: ${local.parsed_config.service}"
   }
 
   assert {

@@ -1,6 +1,8 @@
 # Variable Pattern Detection Tests
 # Tests for extracting and parsing variable patterns from configs
 
+mock_provider "aws" {}
+
 run "test_detect_self_variables" {
   command = plan
 

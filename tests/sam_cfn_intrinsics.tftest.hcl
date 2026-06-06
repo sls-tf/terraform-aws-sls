@@ -4,13 +4,15 @@
 # Tests that !Ref, !Sub, !If, !Equals, Condition: are properly evaluated.
 # Requires LocalStack (make localstack-start) or real AWS credentials.
 
+mock_provider "aws" {}
+
 run "intrinsics_sub_resolves_resources" {
   command = plan
 
   variables {
-    config_path            = "tests/fixtures/sam-intrinsics-policies.yaml"
-    config_format          = "sam"
-    strict_sam_intrinsics  = false
+    config_path           = "tests/fixtures/sam-intrinsics-policies.yaml"
+    config_format         = "sam"
+    strict_sam_intrinsics = false
     sam_template_parameters = {
       Environment = "dev"
       AppName     = "testapp"
@@ -41,9 +43,9 @@ run "intrinsics_if_condition_dev_excludes_prod_policy" {
   command = plan
 
   variables {
-    config_path            = "tests/fixtures/sam-intrinsics-policies.yaml"
-    config_format          = "sam"
-    strict_sam_intrinsics  = false
+    config_path           = "tests/fixtures/sam-intrinsics-policies.yaml"
+    config_format         = "sam"
+    strict_sam_intrinsics = false
     sam_template_parameters = {
       Environment = "dev"
       AppName     = "testapp"
@@ -64,9 +66,9 @@ run "intrinsics_if_condition_prod_includes_prod_policy" {
   command = plan
 
   variables {
-    config_path            = "tests/fixtures/sam-intrinsics-policies.yaml"
-    config_format          = "sam"
-    strict_sam_intrinsics  = false
+    config_path           = "tests/fixtures/sam-intrinsics-policies.yaml"
+    config_format         = "sam"
+    strict_sam_intrinsics = false
     sam_template_parameters = {
       Environment = "prod"
       AppName     = "testapp"
@@ -87,9 +89,9 @@ run "intrinsics_resource_level_condition_excludes_function" {
   command = plan
 
   variables {
-    config_path            = "tests/fixtures/sam-intrinsics-policies.yaml"
-    config_format          = "sam"
-    strict_sam_intrinsics  = false
+    config_path           = "tests/fixtures/sam-intrinsics-policies.yaml"
+    config_format         = "sam"
+    strict_sam_intrinsics = false
     sam_template_parameters = {
       Environment = "dev"
     }
@@ -106,9 +108,9 @@ run "intrinsics_resource_level_condition_includes_function_in_prod" {
   command = plan
 
   variables {
-    config_path            = "tests/fixtures/sam-intrinsics-policies.yaml"
-    config_format          = "sam"
-    strict_sam_intrinsics  = false
+    config_path           = "tests/fixtures/sam-intrinsics-policies.yaml"
+    config_format         = "sam"
+    strict_sam_intrinsics = false
     sam_template_parameters = {
       Environment = "prod"
     }
@@ -125,9 +127,9 @@ run "intrinsics_worker_has_rds_and_secrets_policies" {
   command = plan
 
   variables {
-    config_path            = "tests/fixtures/sam-intrinsics-policies.yaml"
-    config_format          = "sam"
-    strict_sam_intrinsics  = false
+    config_path           = "tests/fixtures/sam-intrinsics-policies.yaml"
+    config_format         = "sam"
+    strict_sam_intrinsics = false
     sam_template_parameters = {
       Environment = "dev"
     }
@@ -154,9 +156,9 @@ run "intrinsics_sub_2arg_resolves" {
   command = plan
 
   variables {
-    config_path            = "tests/fixtures/sam-sub-2arg.yaml"
-    config_format          = "sam"
-    strict_sam_intrinsics  = false
+    config_path           = "tests/fixtures/sam-sub-2arg.yaml"
+    config_format         = "sam"
+    strict_sam_intrinsics = false
     sam_template_parameters = {
       Env = "staging"
     }

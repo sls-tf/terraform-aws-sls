@@ -5,6 +5,8 @@
 # Tests that invalid SAM templates are rejected with clear error messages.
 # Requires LocalStack (make localstack-start) or real AWS credentials.
 
+mock_provider "aws" {}
+
 run "sam_invalid_transform_rejected" {
   command = plan
 

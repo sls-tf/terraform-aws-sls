@@ -2,6 +2,8 @@
 # Tests for CloudFormation to Terraform resource translation (Roadmap #9)
 
 # Test: S3 bucket translation
+mock_provider "aws" {}
+
 run "s3_bucket_translation" {
   command = plan
 

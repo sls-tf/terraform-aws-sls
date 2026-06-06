@@ -2,6 +2,8 @@
 # Tests for event flattening logic (Roadmap #7)
 
 # Test: Schedule event with rate expression (string syntax)
+mock_provider "aws" {}
+
 run "schedule_rate_string_syntax" {
   command = plan
 

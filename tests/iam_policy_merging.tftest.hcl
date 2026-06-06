@@ -2,6 +2,8 @@
 # Tests for merging provider-level and function-level IAM statements
 
 # Test 1: Provider statements only (applies to all functions)
+mock_provider "aws" {}
+
 run "provider_statements_only" {
   command = plan
 

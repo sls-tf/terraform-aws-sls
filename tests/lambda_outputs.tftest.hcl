@@ -2,6 +2,8 @@
 # Tests for Lambda function outputs
 
 # Test 1: function_arns map contains all functions
+mock_provider "aws" {}
+
 run "function_arns_output_populated" {
   command = plan
 

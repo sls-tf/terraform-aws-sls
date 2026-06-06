@@ -1,6 +1,8 @@
 # Variable Infrastructure Tests
 # Tests for variable input configuration and validation
 
+mock_provider "aws" {}
+
 run "test_default_variable_resolution_settings" {
   command = plan
 
@@ -31,9 +33,9 @@ run "test_environment_vars_input" {
   variables {
     config_path = "tests/fixtures/simple-function.yml"
     environment_vars = {
-      "NODE_ENV"    = "production"
-      "API_KEY"     = "test-key-123"
-      "AWS_REGION"  = "us-west-2"
+      "NODE_ENV"   = "production"
+      "API_KEY"    = "test-key-123"
+      "AWS_REGION" = "us-west-2"
     }
   }
 
@@ -53,7 +55,7 @@ run "test_strict_variable_resolution_flag" {
   command = plan
 
   variables {
-    config_path               = "tests/fixtures/simple-function.yml"
+    config_path                = "tests/fixtures/simple-function.yml"
     strict_variable_resolution = false
   }
 

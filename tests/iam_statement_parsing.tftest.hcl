@@ -2,6 +2,8 @@
 # Tests for parsing and normalizing iamRoleStatements
 
 # Test 1: Provider-level iamRoleStatements parsing
+mock_provider "aws" {}
+
 run "provider_level_statements_parsed" {
   command = plan
 

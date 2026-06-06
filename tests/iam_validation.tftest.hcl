@@ -2,6 +2,8 @@
 # Tests for validating IAM statement structure and required fields
 
 # Test 1: Invalid Effect value rejection
+mock_provider "aws" {}
+
 run "invalid_effect_value_rejected" {
   command = plan
 

@@ -2,6 +2,8 @@
 # Tests for IAM execution role creation and policy attachments
 
 # Test 1: One IAM role created per function
+mock_provider "aws" {}
+
 run "one_role_per_function" {
   command = plan
 
@@ -46,9 +48,9 @@ run "basic_execution_policy_attached" {
   assert {
     condition = alltrue([
       for key, attachment in aws_iam_role_policy_attachment.lambda_logs :
-      attachment.policy_arn == "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionPolicy"
+      attachment.policy_arn == "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
     ])
-    error_message = "AWSLambdaBasicExecutionPolicy should be attached to all Lambda execution roles"
+    error_message = "AWSLambdaBasicExecutionRole should be attached to all Lambda execution roles"
   }
 }
 
