@@ -1,4 +1,7 @@
-import { Serverless } from './types';
+// Node's native TypeScript support resolves ESM imports literally: relative
+// imports need an explicit extension, and a type-only import must use `import
+// type` so it is erased rather than resolved at runtime.
+import type { Serverless } from './types.ts';
 
 // Full-featured TypeScript Serverless configuration
 interface CustomConfig {

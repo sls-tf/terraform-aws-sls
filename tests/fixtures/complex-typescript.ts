@@ -1,4 +1,9 @@
-import { Serverless } from './types';
+import type { Serverless } from './types.ts';
+
+// Stand-in for a value that would otherwise come from package.json. Node's
+// native TypeScript support runs as ESM and does not provide CommonJS require();
+// a config that needs require()/JSON imports must use the SLS_TF_TS_RUNNER hook.
+const packageVersion = '1.0.0';
 
 // Complex TypeScript with imports and advanced features
 interface DatabaseConfig {
@@ -55,7 +60,7 @@ const serverless: Serverless = {
       DB_HOST: env.database.host,
       DB_PORT: env.database.port.toString(),
       DB_NAME: env.database.name,
-      SERVICE_VERSION: require('./package.json').version
+      SERVICE_VERSION: packageVersion
     }
   },
   functions: {
@@ -91,7 +96,7 @@ const serverless: Serverless = {
   },
   custom: {
     ...env,
-    serviceVersion: require('./package.json').version,
+    serviceVersion: packageVersion,
     deployTime: new Date().toISOString()
   },
   resources: {

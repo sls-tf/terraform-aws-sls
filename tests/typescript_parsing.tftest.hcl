@@ -62,10 +62,11 @@ run "typescript_full_parsing" {
     config_format = "typescript"
   }
 
-  # Should parse complex TypeScript configuration
+  # Should parse complex TypeScript configuration. The legacy object form
+  # `service: { name: ... }` is normalised to the string service name.
   assert {
-    condition     = local.parsed_config.service.name == "my-full-service"
-    error_message = "Service name object should be correctly parsed"
+    condition     = local.parsed_config.service == "my-full-service"
+    error_message = "Object-form service should be normalised to its name"
   }
 
   assert {
@@ -162,7 +163,12 @@ run "typescript_error_handling" {
     config_format = "typescript"
   }
 
-  # Should handle missing files gracefully
+  # A missing file is a fatal config error: it must surface through the locals and
+  # cause config_validation to reject the config (rather than crashing the plan).
+  expect_failures = [
+    null_resource.config_validation
+  ]
+
   assert {
     condition     = local.typescript_has_fatal_error == true
     error_message = "Missing TypeScript file should produce fatal error"
@@ -187,7 +193,12 @@ run "typescript_syntax_error" {
     config_format = "typescript"
   }
 
-  # Should handle TypeScript syntax errors
+  # A syntax error is fatal: surfaced through the locals and rejected by
+  # config_validation with a precise message.
+  expect_failures = [
+    null_resource.config_validation
+  ]
+
   assert {
     condition     = local.typescript_has_fatal_error == true
     error_message = "TypeScript syntax errors should produce fatal error"
@@ -214,7 +225,7 @@ run "typescript_validation_integration" {
   }
 
   assert {
-    condition     = local.runtime_validation_errors == null
+    condition     = length(local.runtime_validation_errors) == 0
     error_message = "Runtime validation should not trigger for valid config"
   }
 }
