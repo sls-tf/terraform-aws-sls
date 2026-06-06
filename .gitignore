@@ -15,6 +15,7 @@
 
 # Dependencies
 node_modules/
+package-lock.json
 
 # Website build output
 website/dist/
