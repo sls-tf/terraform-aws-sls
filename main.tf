@@ -236,15 +236,18 @@ resource "aws_lambda_function" "functions" {
 
 resource "null_resource" "config_validation" {
   lifecycle {
-    # Ensure file was read successfully
+    # Ensure file was read successfully. Skipped for the typescript format, whose
+    # parser reads the file itself and reports read/parse failures through
+    # local.typescript_all_errors (surfaced by the validation_errors check below).
     precondition {
-      condition     = local.file_content != null
+      condition     = local.file_content != null || var.config_format == "typescript"
       error_message = "Failed to read configuration file at '${var.config_path}'. Please verify the file exists and is readable."
     }
 
-    # Ensure YAML parsing succeeded
+    # Ensure parsing succeeded. Skipped for typescript for the same reason: a TS
+    # parse failure is reported with a precise message via validation_errors.
     precondition {
-      condition     = local.parsed_config != null
+      condition     = local.parsed_config != null || var.config_format == "typescript"
       error_message = "Failed to parse YAML configuration from '${var.config_path}'. Please verify the YAML syntax is valid."
     }
 

@@ -19,12 +19,26 @@ locals {
   # of the dynamic type `any` — which every downstream consumer already accesses
   # via try()/can(). Decoding a computed (non-literal) string is what forces the
   # `any` type and defeats the eager unification.
-  parsed_config = try(jsondecode(
+  _parsed_config_raw = try(jsondecode(
     var.config_format == "yaml" ? jsonencode(try(yamldecode(local.file_content), null)) :
     var.config_format == "typescript" ? jsonencode(local.parsed_config_with_typescript) :
     var.config_format == "sam" ? jsonencode(try(nonsensitive(local.sam_as_sls_config), null)) :
     "null"
   ), null)
+
+  # Normalise `service` to a string. Serverless Framework accepts both the v3+
+  # string form (`service: my-svc`) and the legacy object form
+  # (`service: { name: my-svc }`); downstream naming and variable resolution
+  # require a string. can(...service.name) is true only for the object form.
+  # JSON-laundered to `any`: the coerced branch (service: string) and the
+  # pass-through branch (service: object) are differently-shaped object types
+  # that a bare ternary cannot unify. Encoding both to a string and decoding once
+  # yields `any`, the same idiom used for the format dispatch above.
+  parsed_config = local._parsed_config_raw == null ? null : jsondecode(
+    can(local._parsed_config_raw.service.name) ?
+    jsonencode(merge(local._parsed_config_raw, { service = tostring(local._parsed_config_raw.service.name) })) :
+    jsonencode(local._parsed_config_raw)
+  )
 
   # Variable Resolution Integration (Feature #11)
   # The resolved_config from variable_resolution.tf contains the parsed config
@@ -42,7 +56,11 @@ locals {
   # nonsensitive(): validation messages are plain strings, never secrets. The taint
   # arrives via parsed_config_resolved → variable_resolution.tf → resolved_config.
   validation_errors = nonsensitive(local.parsed_config == null ? (
-    var.config_format == "sam" ? local.sam_validation_errors : []
+    # parsed_config is null: a parse/read failure. Surface the format-specific
+    # error (TS parser error, SAM parse error) so config_validation fails with a
+    # clear message rather than a generic "Failed to parse YAML".
+    var.config_format == "sam" ? local.sam_validation_errors :
+    var.config_format == "typescript" ? local.typescript_all_errors : []
     ) : concat(
     # SAM-specific validation (Handler missing, Transform wrong, etc.)
     var.config_format == "sam" ? local.sam_validation_errors : [],
@@ -190,7 +208,13 @@ locals {
   provider_with_defaults = local.parsed_config_resolved == null ? null : merge(
     try(local.parsed_config_resolved.provider, {}),
     {
-      stage      = coalesce(var.stage_override, try(local.parsed_config_resolved.provider.stage, null), "dev")
+      # Strip any unresolved ${...} markers from the stage before it is baked into
+      # resource names: an unresolved variable (e.g. a missing ${env:STAGE} with no
+      # default) would otherwise leak into IAM role / function names and fail the
+      # provider's name charset check with an opaque error. Falls back to "dev" if
+      # stripping leaves it empty. Strict variable validation still surfaces the
+      # underlying unresolved reference separately.
+      stage      = coalesce(replace(coalesce(var.stage_override, try(local.parsed_config_resolved.provider.stage, null), "dev"), "/\\$\\{[^}]*\\}/", ""), "dev")
       region     = coalesce(try(local.parsed_config_resolved.provider.region, null), var.aws_region, "us-east-1")
       memorySize = coalesce(try(local.parsed_config_resolved.provider.memorySize, null), 1024)
       timeout    = coalesce(try(local.parsed_config_resolved.provider.timeout, null), 6)
@@ -936,13 +960,21 @@ locals {
     && (var.resource_types == null || contains(var.resource_types, "AWS::CloudFront::Distribution"))
   }
 
+  log_groups = {
+    for logical_id, resource in local.custom_resources_raw :
+    logical_id => resource
+    if try(resource.Type, "") == "AWS::Logs::LogGroup"
+    && (var.resource_types == null || contains(var.resource_types, "AWS::Logs::LogGroup"))
+  }
+
   # Supported resource types
   supported_resource_types = toset([
     "AWS::S3::Bucket",
     "AWS::DynamoDB::Table",
     "AWS::SNS::Topic",
     "AWS::SQS::Queue",
-    "AWS::CloudFront::Distribution"
+    "AWS::CloudFront::Distribution",
+    "AWS::Logs::LogGroup"
   ])
 
   # Identify unsupported resource types for validation.
@@ -959,7 +991,7 @@ locals {
   # Validation errors for unsupported resources
   custom_resource_validation_errors = [
     for logical_id, type in local.unsupported_resources :
-    "Unsupported CloudFormation resource type '${type}' for resource '${logical_id}'. Supported types: S3::Bucket, DynamoDB::Table, SNS::Topic, SQS::Queue, CloudFront::Distribution."
+    "Unsupported CloudFormation resource type '${type}' for resource '${logical_id}'. Supported types: S3::Bucket, DynamoDB::Table, SNS::Topic, SQS::Queue, CloudFront::Distribution, Logs::LogGroup."
   ]
 
   # ============================================================================

@@ -132,12 +132,15 @@ function main() {
     }));
 
   } catch (error) {
+    // Exit 0 (not 1): Terraform's external data source treats a non-zero exit as
+    // a hard "External Program Execution Failed" that the module cannot catch.
+    // Emitting the error in the result and exiting 0 lets typescript-parser.tf
+    // surface it gracefully via local.typescript_parse_error.
     console.log(JSON.stringify({
       status: 'error',
       error: error.message,
       config_path: input ? input.config_path : 'unknown'
     }));
-    process.exit(1);
   }
 }
 

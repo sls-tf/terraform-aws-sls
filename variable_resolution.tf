@@ -43,22 +43,15 @@ locals {
   # ${env:VARIABLE_NAME} or ${env:VAR, 'default'} - Environment variables
   variable_pattern_regex = "\\$\\{([^}]+)\\}"
 
-  # Helper function to extract all variable references from a string value
-  # Returns list of variable expressions like ["self:provider.stage", "env:NODE_ENV"]
+  # Extract all variable references anywhere in the config (including values
+  # nested under provider/custom/functions/resources, not just top-level scalar
+  # keys) by scanning the JSON-encoded config. Keyed by "config" so the shape
+  # stays a map; callers only inspect its length / matches.
   extract_variable_refs = local.parsed_config != null ? {
-    for k, v in flatten([
-      for key, value in local.parsed_config : [
-        {
-          path  = key
-          value = tostring(value)
-          matches = try(
-            regexall(local.variable_pattern_regex, tostring(value)),
-            []
-          )
-        }
-      ]
-      if can(tostring(value))
-    ]) : v.path => v.matches if length(v.matches) > 0
+    for item in [{
+      key     = "config"
+      matches = try(regexall(local.variable_pattern_regex, jsonencode(local.parsed_config)), [])
+    }] : item.key => item.matches if length(item.matches) > 0
   } : {}
 
   # Parse variable expressions into structured format
@@ -103,13 +96,13 @@ locals {
         replace(
           tostring(value),
           "$${self:service}",
-          tostring(try(local.traverse_path_raw["service"], "$${self:service}"))
+          coalesce(try(local.traverse_path_raw["service"], null), "$${self:service}")
         ),
         "$${self:custom.defaultStage}",
-        tostring(try(local.traverse_path_raw["custom.defaultStage"], "$${self:custom.defaultStage}"))
+        coalesce(try(local.traverse_path_raw["custom.defaultStage"], null), "$${self:custom.defaultStage}")
       ),
       "$${self:custom.bucketName}",
-      tostring(try(local.traverse_path_raw["custom.bucketName"], "$${self:custom.bucketName}"))
+      coalesce(try(local.traverse_path_raw["custom.bucketName"], null), "$${self:custom.bucketName}")
     ) : value
   }
 
@@ -124,16 +117,16 @@ locals {
             replace(
               tostring(value),
               "$${self:service}",
-              tostring(try(local.traverse_path["service"], "$${self:service}"))
+              coalesce(try(local.traverse_path["service"], null), "$${self:service}")
             ),
             "$${self:provider.stage}",
-            tostring(try(local.traverse_path["provider.stage"], "$${self:provider.stage}"))
+            coalesce(try(local.traverse_path["provider.stage"], null), "$${self:provider.stage}")
           ),
           "$${self:provider.region}",
-          tostring(try(local.traverse_path["provider.region"], "$${self:provider.region}"))
+          coalesce(try(local.traverse_path["provider.region"], null), "$${self:provider.region}")
         ),
         "$${self:custom.defaultStage}",
-        tostring(try(local.traverse_path["custom.defaultStage"], "$${self:custom.defaultStage}"))
+        coalesce(try(local.traverse_path["custom.defaultStage"], null), "$${self:custom.defaultStage}")
       ) : value
       if can(tostring(value)) && can(regex("\\$\\{self:", tostring(value)))
     }
@@ -149,13 +142,13 @@ locals {
           replace(
             tostring(value),
             "$${self:service}",
-            tostring(try(local.traverse_path["service"], "$${self:service}"))
+            coalesce(try(local.traverse_path["service"], null), "$${self:service}")
           ),
           "$${self:provider.stage}",
-          tostring(try(local.traverse_path["provider.stage"], "$${self:provider.stage}"))
+          coalesce(try(local.traverse_path["provider.stage"], null), "$${self:provider.stage}")
         ),
         "$${self:custom.defaultStage}",
-        tostring(try(local.traverse_path["custom.defaultStage"], "$${self:custom.defaultStage}"))
+        coalesce(try(local.traverse_path["custom.defaultStage"], null), "$${self:custom.defaultStage}")
       ) : value
       if can(tostring(value)) && can(regex("\\$\\{self:", tostring(value)))
     }
@@ -175,16 +168,16 @@ locals {
               replace(
                 tostring(value),
                 "$${self:service}",
-                tostring(try(local.traverse_path["service"], "$${self:service}"))
+                coalesce(try(local.traverse_path["service"], null), "$${self:service}")
               ),
               "$${self:provider.stage}",
-              tostring(try(local.traverse_path["provider.stage"], "$${self:provider.stage}"))
+              coalesce(try(local.traverse_path["provider.stage"], null), "$${self:provider.stage}")
             ),
             "$${self:provider.region}",
-            tostring(try(local.traverse_path["provider.region"], "$${self:provider.region}"))
+            coalesce(try(local.traverse_path["provider.region"], null), "$${self:provider.region}")
           ),
           "$${self:custom.defaultStage}",
-          tostring(try(local.traverse_path["custom.defaultStage"], "$${self:custom.defaultStage}"))
+          coalesce(try(local.traverse_path["custom.defaultStage"], null), "$${self:custom.defaultStage}")
         )
         if can(tostring(value)) && can(regex("\\$\\{self:", tostring(value)))
       },
@@ -338,8 +331,47 @@ locals {
 
   config_with_env_resolved = local.config_with_env_pass3
 
+  # Deep ${self:} resolution. The per-object passes above only reach top-level,
+  # provider, and custom values; this resolves the enumerated self-paths ANYWHERE
+  # in the config (e.g. a CloudFront DomainName or a function env var nested in
+  # resources:) by string-replacing over the JSON-encoded config and decoding
+  # once. The five-replacement chain is applied twice so a path whose resolved
+  # value itself contains another self-reference (e.g. custom.bucketName ->
+  # provider.stage) converges. Unresolvable references are left intact.
+  # Each target maps the literal ${self:PATH} marker to its resolved value, or
+  # back to the marker itself when the path is absent/null (leave it intact).
+  # Explicit null checks are required: tostring(null) is null, not "", and a null
+  # replacement makes replace() raise "Invalid function argument".
+  _deep_self_targets = {
+    "$${self:service}"             = try(local.traverse_path["service"], null) != null ? tostring(local.traverse_path["service"]) : "$${self:service}"
+    "$${self:provider.stage}"      = try(local.traverse_path["provider.stage"], null) != null ? tostring(local.traverse_path["provider.stage"]) : "$${self:provider.stage}"
+    "$${self:provider.region}"     = try(local.traverse_path["provider.region"], null) != null ? tostring(local.traverse_path["provider.region"]) : "$${self:provider.region}"
+    "$${self:custom.defaultStage}" = try(local.traverse_path["custom.defaultStage"], null) != null ? tostring(local.traverse_path["custom.defaultStage"]) : "$${self:custom.defaultStage}"
+    "$${self:custom.bucketName}"   = try(local.traverse_path["custom.bucketName"], null) != null ? tostring(local.traverse_path["custom.bucketName"]) : "$${self:custom.bucketName}"
+  }
+
+  _deep_self_json_pass1 = local.config_with_env_resolved == null ? null : replace(replace(replace(replace(replace(
+    jsonencode(local.config_with_env_resolved),
+    "$${self:custom.bucketName}", local._deep_self_targets["$${self:custom.bucketName}"]),
+    "$${self:custom.defaultStage}", local._deep_self_targets["$${self:custom.defaultStage}"]),
+    "$${self:service}", local._deep_self_targets["$${self:service}"]),
+    "$${self:provider.stage}", local._deep_self_targets["$${self:provider.stage}"]),
+    "$${self:provider.region}", local._deep_self_targets["$${self:provider.region}"]
+  )
+
+  _deep_self_json_pass2 = local._deep_self_json_pass1 == null ? null : replace(replace(replace(replace(replace(
+    local._deep_self_json_pass1,
+    "$${self:custom.bucketName}", local._deep_self_targets["$${self:custom.bucketName}"]),
+    "$${self:custom.defaultStage}", local._deep_self_targets["$${self:custom.defaultStage}"]),
+    "$${self:service}", local._deep_self_targets["$${self:service}"]),
+    "$${self:provider.stage}", local._deep_self_targets["$${self:provider.stage}"]),
+    "$${self:provider.region}", local._deep_self_targets["$${self:provider.region}"]
+  )
+
+  config_deep_resolved = local._deep_self_json_pass2 == null ? null : jsondecode(local._deep_self_json_pass2)
+
   # Final resolved config - combines ${self:} and ${env:} resolution
-  resolved_config = local.config_with_env_resolved
+  resolved_config = local.config_deep_resolved
 
   # Variable resolution errors - collect unresolved variables if strict mode
   variable_resolution_errors = var.strict_variable_resolution && local.resolved_config != null ? flatten([

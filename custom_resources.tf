@@ -244,6 +244,41 @@ resource "aws_sqs_queue" "custom" {
 }
 
 # ============================================================================
+# CloudWatch Log Groups (AWS::Logs::LogGroup)
+# ============================================================================
+
+resource "aws_cloudwatch_log_group" "custom" {
+  for_each = local.log_groups
+
+  # Use LogGroupName property if specified, otherwise generate one.
+  name = try(
+    each.value.Properties.LogGroupName,
+    "/${local.to_snake_case[each.key]}/${local.provider_with_defaults.stage}"
+  )
+
+  # RetentionInDays maps directly; null/0 means never expire.
+  retention_in_days = try(each.value.Properties.RetentionInDays, null)
+
+  # Optional KMS encryption key.
+  kms_key_id = try(each.value.Properties.KmsKeyId, null)
+
+  tags = merge(
+    {
+      Name        = each.key
+      ManagedBy   = "sls.tf"
+      LogicalId   = each.key
+      Environment = local.provider_with_defaults.stage
+    },
+    try({
+      for tag in each.value.Properties.Tags :
+      tag.Key => tag.Value
+    }, {})
+  )
+
+  depends_on = [null_resource.config_validation]
+}
+
+# ============================================================================
 # CloudFront Distributions (Roadmap #12)
 # ============================================================================
 
