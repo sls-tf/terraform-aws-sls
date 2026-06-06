@@ -222,10 +222,20 @@ locals {
   # event's TYPE and INDEX (which feed for_each keys downstream) are known at plan even
   # when function values carry unknown resolved parameters. For SAM this is the
   # template-derived event map; otherwise the parsed-config events (known for yaml/ts).
-  _function_events = var.config_format == "sam" ? local.sam_function_events : {
-    for func_name in local._function_names :
-    func_name => try(local.functions_with_defaults_prevalidation[func_name].events, [])
-  }
+  #
+  # JSON-laundered to the dynamic `any` type: the SAM branch (sam_function_events,
+  # keyed by SAM logical IDs) and the yaml/ts branch (keyed by function names) are
+  # differently-shaped object types that a bare ternary cannot unify ("Inconsistent
+  # conditional result types"). Encoding both branches to a string and decoding once
+  # yields `any` — the same idiom used for parsed_config and sam_resources_translated.
+  # Values here are plan-known (template-/file-derived), so the laundering does not
+  # introduce unknowns and the downstream plan-known-key invariants are preserved.
+  _function_events = jsondecode(
+    var.config_format == "sam" ? jsonencode(local.sam_function_events) : jsonencode({
+      for func_name in local._function_names :
+      func_name => try(local.functions_with_defaults_prevalidation[func_name].events, [])
+    })
+  )
 
   # Structural "does this function declare a VPC config" flag, so the lambda_vpc
   # attachment's for_each keys are plan-known (length(func.vpc_config.subnet_ids) on
@@ -361,8 +371,11 @@ locals {
     func_name => [
       for stmt in stmts :
       merge(stmt, {
-        Action   = try(tolist(stmt.Action), [stmt.Action])
-        Resource = try(tolist(stmt.Resource), [stmt.Resource])
+        # Final [] fallback: a statement missing Action/Resource entirely must
+        # normalise to an empty list (not crash) so the IAM validation rules can
+        # report a clean error — tolist(<undefined>) and [<undefined>] both throw.
+        Action   = try(tolist(stmt.Action), [stmt.Action], [])
+        Resource = try(tolist(stmt.Resource), [stmt.Resource], [])
       })
     ]
   }

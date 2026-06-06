@@ -58,7 +58,7 @@ output "function_names" {
   # aws_lambda_function.function_name (which trickles through environment.variables).
   value = nonsensitive({
     for k, func in local.functions_with_defaults :
-    k => try(func.name, "${local.parsed_config_resolved.service}-${local.provider_with_defaults.stage}-${k}")
+    k => try(func.name, "${try(local.parsed_config_resolved.service, "unknown")}-${local.provider_with_defaults.stage}-${k}")
   })
 }
 
