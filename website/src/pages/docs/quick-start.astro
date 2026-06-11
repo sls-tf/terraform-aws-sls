@@ -76,6 +76,53 @@ functions:
       </section>
 
       <section class="section">
+        <h2>Prefer AWS SAM?</h2>
+        <p>
+          sls.tf reads AWS SAM templates too — a frequent choice for teams already using
+          <code>sam local</code>. Point <code>config_path</code> at your <code>template.yaml</code> and
+          set <code>config_format = "sam"</code>; the rest of the workflow is identical.
+        </p>
+
+        <div class="code-block">
+          <h4>main.tf</h4>
+          <pre is:raw><code>module "serverless" {
+  source = "git::https://github.com/sls-tf/sls.tf.git?ref=v0.3.16"
+
+  config_path   = "${path.root}/template.yaml"
+  config_format = "sam"
+}</code></pre>
+        </div>
+
+        <div class="code-block">
+          <h4>template.yaml</h4>
+          <pre is:raw><code>AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 10
+
+Resources:
+  Hello:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      Events:
+        HelloApi:
+          Type: Api
+          Properties:
+            Path: /hello
+            Method: get</code></pre>
+        </div>
+
+        <p>
+          See the <a href="/docs/examples/sam-template">SAM template example</a> for a complete walkthrough,
+          including <code>Parameters</code> and <code>sam_template_parameters</code> overrides.
+        </p>
+      </section>
+
+      <section class="section">
         <h2>4. Deploy</h2>
 
         <div class="code-block">

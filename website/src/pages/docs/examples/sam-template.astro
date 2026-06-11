@@ -1,0 +1,328 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+---
+
+<Layout title="AWS SAM Template Example - sls.tf">
+  <div class="container">
+    <div class="docs-header">
+      <h1>AWS SAM Template Example</h1>
+      <p class="docs-description">
+        Deploy an AWS SAM <code>template.yaml</code> with Terraform — no migration, no rewrite
+      </p>
+    </div>
+
+    <div class="content">
+      <section class="section">
+        <h2>What you'll build</h2>
+        <p>
+          The same HTTP API as the <a href="/docs/examples/basic-service">Basic Service</a> example,
+          but driven by an AWS SAM <code>template.yaml</code> instead of a <code>serverless.yml</code>.
+          sls.tf reads the SAM template directly, so the only change is
+          <code>config_format = "sam"</code> — everything else (Lambda, IAM, API Gateway, DynamoDB)
+          is provisioned the same way.
+        </p>
+      </section>
+
+      <section class="section">
+        <h2>Project structure</h2>
+
+        <div class="code-block">
+          <pre is:raw><code>my-api/
+  src/
+    list.js
+    create.js
+  template.yaml        # AWS SAM template
+  main.tf
+  outputs.tf</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>template.yaml</h2>
+        <p>
+          A standard SAM template. <code>Globals</code>, <code>Parameters</code>, and CloudFormation
+          intrinsics such as <code>!Ref</code> and <code>!Sub</code> are resolved at plan time.
+        </p>
+
+        <div class="code-block">
+          <pre is:raw><code>AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Items API (SAM)
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    MemorySize: 256
+    Timeout: 10
+    Environment:
+      Variables:
+        TABLE_NAME: !Sub "items-${Stage}"
+
+Resources:
+  ListItems:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/list.handler
+      Description: List all items
+      Events:
+        ListApi:
+          Type: Api
+          Properties:
+            Path: /items
+            Method: get
+
+  CreateItem:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/create.handler
+      Description: Create a new item
+      Events:
+        CreateApi:
+          Type: Api
+          Properties:
+            Path: /items
+            Method: post
+
+  ItemsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "items-${Stage}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>main.tf</h2>
+        <p>
+          Point the module at <code>template.yaml</code> and set
+          <code>config_format = "sam"</code>. Override template <code>Parameters</code> from Terraform
+          with <code>sam_template_parameters</code>:
+        </p>
+
+        <div class="code-block">
+          <pre is:raw><code>terraform {
+  required_version = ">= 1.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+module "serverless" {
+  source = "git::https://github.com/sls-tf/sls.tf.git?ref=v0.3.16"
+
+  config_path   = "${path.module}/template.yaml"
+  config_format = "sam"
+
+  # Override the template's Parameters Default values
+  sam_template_parameters = {
+    Stage = "prod"
+  }
+}</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>outputs.tf</h2>
+        <p>
+          Outputs are identical regardless of config format — SAM logical IDs become the function keys:
+        </p>
+
+        <div class="code-block">
+          <pre is:raw><code>output "api_url" {
+  description = "Base URL for the deployed API"
+  value       = module.serverless.api_gateway_invoke_url
+}
+
+output "list_items_arn" {
+  value = module.serverless.function_arns["ListItems"]
+}
+
+output "create_item_arn" {
+  value = module.serverless.function_arns["CreateItem"]
+}
+
+output "table_name" {
+  value = module.serverless.custom_dynamodb_table_names["ItemsTable"]
+}</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Deploy</h2>
+
+        <div class="code-block">
+          <pre is:raw><code>terraform init
+terraform plan
+terraform apply
+
+# Output example:
+# api_url = "https://abc123.execute-api.us-east-1.amazonaws.com/prod"</code></pre>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>SAM-specific behaviour</h2>
+        <ul>
+          <li><code>Globals.Function</code> defaults are merged into every function</li>
+          <li><code>!Ref</code>, <code>!Sub</code>, <code>!GetAtt</code>, and other intrinsics resolve at plan time</li>
+          <li><code>Parameters</code> use their <code>Default</code> unless overridden by <code>sam_template_parameters</code></li>
+          <li>Function keys are the SAM logical IDs (<code>ListItems</code>, <code>CreateItem</code>)</li>
+          <li><code>Policies</code> on a function become statements on its generated IAM role</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>Next steps</h2>
+        <ul>
+          <li><a href="/docs/examples/basic-service">Basic Service Example</a> — the same API as a serverless.yml</li>
+          <li><a href="/docs/api/resource-types">Resource Types</a> — SAM resources sls.tf understands</li>
+          <li><a href="/docs/configuration">Configuration Guide</a> — <code>sam_template_parameters</code> and more</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+
+  .docs-header {
+    text-align: center;
+    margin-bottom: 4rem;
+  }
+
+  .docs-header h1 {
+    font-size: 3rem;
+    font-weight: 700;
+    color: #1a202c;
+    margin-bottom: 1rem;
+  }
+
+  .docs-description {
+    font-size: 1.2rem;
+    color: #4a5568;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .content {
+    line-height: 1.7;
+  }
+
+  .section {
+    margin-bottom: 3rem;
+  }
+
+  .section h2 {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #1a202c;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 0.5rem;
+  }
+
+  .section p {
+    color: #4a5568;
+    margin-bottom: 1rem;
+  }
+
+  .section ul {
+    margin: 1rem 0;
+    padding-left: 2rem;
+  }
+
+  .section li {
+    color: #4a5568;
+    margin-bottom: 0.5rem;
+  }
+
+  .section a {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .section a:hover {
+    text-decoration: underline;
+  }
+
+  .section code {
+    background: #edf2f7;
+    padding: 0.1rem 0.4rem;
+    border-radius: 0.25rem;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9em;
+    color: #2d3748;
+  }
+
+  .code-block {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+  }
+
+  .code-block pre {
+    background: #1a202c;
+    color: #e2e8f0;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: 0;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .code-block code {
+    background: none;
+    padding: 0;
+    color: inherit;
+  }
+
+  @media (max-width: 768px) {
+    .container {
+      padding: 1rem;
+    }
+
+    .docs-header h1 {
+      font-size: 2rem;
+    }
+
+    .section h2 {
+      font-size: 1.5rem;
+    }
+
+    .code-block {
+      padding: 1rem;
+    }
+
+    .code-block pre {
+      font-size: 0.8rem;
+    }
+  }
+</style>

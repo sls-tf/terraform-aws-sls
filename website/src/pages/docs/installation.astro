@@ -35,7 +35,7 @@ import Layout from '../../layouts/Layout.astro';
         <div class="code-block">
           <h4>lambda.tf (or main.tf)</h4>
           <pre is:raw><code>module "my_service" {
-  source = "git::https://github.com/sls-tf/sls.tf.git?ref=v0.3.4"
+  source = "git::https://github.com/sls-tf/sls.tf.git?ref=v0.3.16"
 
   config_path   = "${path.module}/../serverless.yml"
   config_format = "serverless"
@@ -44,7 +44,7 @@ import Layout from '../../layouts/Layout.astro';
         </div>
 
         <p>
-          Pin to a specific version tag (<code>?ref=v0.3.4</code>) so your infrastructure doesn't
+          Pin to a specific version tag (<code>?ref=v0.3.16</code>) so your infrastructure doesn't
           change unexpectedly. Check the <a href="https://github.com/sls-tf/sls.tf/releases">releases page</a>
           for the latest version.
         </p>
@@ -54,7 +54,7 @@ import Layout from '../../layouts/Layout.astro';
         <div class="code-block">
           <h4>SAM template</h4>
           <pre is:raw><code>module "my_service" {
-  source = "git::https://github.com/sls-tf/sls.tf.git?ref=v0.3.4"
+  source = "git::https://github.com/sls-tf/sls.tf.git?ref=v0.3.16"
 
   config_path   = "${path.module}/../template.yaml"
   config_format = "sam"

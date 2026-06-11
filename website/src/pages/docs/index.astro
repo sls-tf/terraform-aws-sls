@@ -69,6 +69,10 @@ import Layout from '../../layouts/Layout.astro';
             <h3>🏠 Basic Service</h3>
             <p>Simple HTTP API with Lambda functions</p>
           </a>
+          <a href="/docs/examples/sam-template" class="doc-link">
+            <h3>📦 AWS SAM Template</h3>
+            <p>Deploy a SAM template.yaml with Terraform</p>
+          </a>
           <a href="/docs/examples/typescript-config" class="doc-link">
             <h3>📘 TypeScript Config</h3>
             <p>Advanced configuration using TypeScript</p>
@@ -79,15 +83,52 @@ import Layout from '../../layouts/Layout.astro';
 
     <div class="quick-start">
       <h2>Quick Start Example</h2>
+      <p class="quick-start-intro">
+        Convert an existing <code>serverless.yml</code> to Terraform in two steps. See the full
+        <a href="/docs/quick-start">Quick Start guide</a> for outputs and next steps.
+      </p>
+
       <div class="example-code">
-        <h3>1. Add sls.tf to your project</h3>
-        <p>Add the sls.tf submodule to your project and initialize it.</p>
+        <div class="example-step">
+          <h3>1. Reference sls.tf in your Terraform</h3>
+          <p>
+            Point the module at your existing <code>serverless.yml</code>. No cloning or submodules —
+            Terraform downloads sls.tf on <code>init</code>:
+          </p>
+          <div class="code-block">
+            <h4>main.tf</h4>
+            <pre is:raw><code>provider "aws" {
+  region = "us-east-1"
+}
 
-        <h3>2. Create your Terraform configuration</h3>
-        <p>Create a simple Terraform configuration file that references your serverless.yml.</p>
+module "serverless" {
+  source = "git::https://github.com/sls-tf/sls.tf.git?ref=v0.3.16"
 
-        <h3>3. Deploy with Terraform</h3>
-        <p>Run the standard Terraform commands to deploy your infrastructure.</p>
+  config_path = "${path.module}/serverless.yml"
+}</code></pre>
+          </div>
+        </div>
+
+        <div class="example-step">
+          <h3>2. Deploy with Terraform</h3>
+          <p>
+            sls.tf infers the Lambda functions, IAM roles, API Gateway, and permissions from your
+            <code>serverless.yml</code> — deploy them with the standard workflow:
+          </p>
+          <div class="code-block">
+            <pre is:raw><code>terraform init
+terraform plan
+terraform apply</code></pre>
+          </div>
+        </div>
+
+        <div class="sam-tip">
+          <p>
+            <strong>Using AWS SAM?</strong> Point <code>config_path</code> at your
+            <code>template.yaml</code> and add <code>config_format = "sam"</code> — everything else is
+            the same. See the <a href="/docs/examples/sam-template">SAM template example</a>.
+          </p>
+        </div>
       </div>
     </div>
   </div>
@@ -169,32 +210,52 @@ import Layout from '../../layouts/Layout.astro';
   }
 
   .quick-start {
-    background: #f7fafc;
+    background: var(--bg-2);
     padding: 2rem;
-    border-radius: 1rem;
-    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    border: 1px solid var(--border-bright);
   }
 
   .quick-start h2 {
     font-size: 1.5rem;
     font-weight: 600;
-    color: #1a202c;
+    margin-bottom: 1rem;
+  }
+
+  .quick-start-intro {
     margin-bottom: 2rem;
   }
 
   .example-code {
     display: grid;
-    gap: 2rem;
+    gap: 2.5rem;
   }
 
-  .example-code h3 {
+  .example-step h3 {
     font-size: 1.1rem;
     font-weight: 600;
-    color: #1a202c;
+    margin-bottom: 0.5rem;
+  }
+
+  .example-step p {
     margin-bottom: 1rem;
   }
 
-  
+  .sam-tip {
+    background: var(--accent-dim);
+    border-left: 2px solid var(--accent);
+    padding: 1rem 1.25rem;
+  }
+
+  .sam-tip p {
+    margin-bottom: 0;
+  }
+
+  .sam-tip a {
+    color: var(--accent);
+  }
+
+
   @media (max-width: 768px) {
     .container {
       padding: 1rem;

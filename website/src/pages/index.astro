@@ -10,14 +10,14 @@ import Layout from '../layouts/Layout.astro';
 
       <div class="hero-left">
         <span class="hero-label">TERRAFORM MODULE</span>
-        <h1 class="hero-h1">serverless.yml<br/><span class="arrow">&rarr;</span> Terraform</h1>
-        <p class="hero-sub">Drop your serverless.yml. Get production Terraform. No rewrites.</p>
+        <h1 class="hero-h1">Serverless &amp; SAM<br/><span class="arrow">&rarr;</span> Terraform</h1>
+        <p class="hero-sub">Drop your SAM template.yaml or serverless.yml. Get production Terraform. No rewrites.</p>
         <div class="hero-cta">
           <a href="/docs" class="btn-primary">Get Started &rarr;</a>
           <a href="https://github.com/sls-tf/sls.tf" target="_blank" rel="noopener noreferrer" class="btn-ghost">View on GitHub</a>
         </div>
         <div class="hero-stats">
-          <span class="stat">v0.3.4</span>
+          <span class="stat">v0.3.16</span>
           <span class="stat-sep">/</span>
           <span class="stat">MIT License</span>
           <span class="stat-sep">/</span>
@@ -73,10 +73,10 @@ import Layout from '../layouts/Layout.astro';
             </div>
             <pre is:raw class="window-code"><span class="kw">module</span> <span class="str">"api"</span> {
   source = <span class="str">"git::https://github.com/</span>
-<span class="str">    sls-tf/sls.tf.git?ref=v0.3.4"</span>
+<span class="str">    sls-tf/sls.tf.git?ref=v0.3.16"</span>
 
-  serverless_config = <span class="str">"./serverless.yml"</span>
-  environment       = <span class="str">"prod"</span>
+  config_path   = <span class="str">"./serverless.yml"</span>
+  aws_region    = <span class="str">"us-east-1"</span>
 }
 
 <span class="cm"># Lambda, API GW, IAM roles —</span>
@@ -98,9 +98,9 @@ import Layout from '../layouts/Layout.astro';
         <div class="cap-item">
           <div class="cap-header">
             <span class="cap-arrow">&rarr;</span>
-            <strong>SAM Support</strong>
+            <strong>AWS SAM Support</strong>
           </div>
-          <p>Reads both Serverless Framework serverless.yml and AWS SAM template.yaml — no migration step required.</p>
+          <p>First-class support for AWS SAM template.yaml — Globals, Parameters, and CloudFormation intrinsics included. Serverless Framework serverless.yml works the same way. Point at either; no migration step.</p>
         </div>
 
         <div class="cap-item">
@@ -161,11 +161,11 @@ import Layout from '../layouts/Layout.astro';
           <span class="window-title">main.tf</span>
         </div>
         <pre is:raw class="window-code large-code"><span class="kw">module</span> <span class="str">"service"</span> {
-  source = <span class="str">"git::https://github.com/sls-tf/sls.tf.git?ref=v0.3.4"</span>
+  source = <span class="str">"git::https://github.com/sls-tf/sls.tf.git?ref=v0.3.16"</span>
 
-  serverless_config = <span class="str">"./serverless.yml"</span>  <span class="cm"># or template.yaml</span>
-  environment       = <span class="str">"production"</span>
-  aws_region        = <span class="str">"us-east-1"</span>
+  config_path   = <span class="str">"./template.yaml"</span>  <span class="cm"># serverless.yml, template.yaml, or serverless.ts</span>
+  config_format = <span class="str">"sam"</span>             <span class="cm"># yaml | sam | typescript</span>
+  aws_region    = <span class="str">"us-east-1"</span>
 }</pre>
       </div>
 
@@ -178,7 +178,7 @@ import Layout from '../layouts/Layout.astro';
         <div class="callout-divider"></div>
         <div class="callout">
           <div class="callout-label">Pin a version</div>
-          <div class="callout-value"><code>?ref=v0.3.4</code></div>
+          <div class="callout-value"><code>?ref=v0.3.16</code></div>
           <div class="callout-desc">Semver tags on every release. Upgrade on your schedule.</div>
         </div>
       </div>
