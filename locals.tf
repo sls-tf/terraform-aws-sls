@@ -227,15 +227,16 @@ locals {
   # keys as set(string) rather than any-typed, preventing for_each unknown-key errors
   # when sam_template_parameters contains computed ARNs from co-planned resources.
   #
-  # SAM: derive names straight from the parsed template (local.sam_raw), NOT from
-  # local.parsed_config.functions. parsed_config embeds resolved sam_template_parameters
-  # in each function's values; when any parameter is a co-planned ARN (unknown at plan,
-  # e.g. on a greenfield apply) iterating parsed_config.functions yields unknown KEYS,
-  # which propagates into every for_each/count derived from it. sam_raw depends only on
-  # the template file, so its resource keys are always known at plan.
+  # SAM: derive names from the STRUCTURAL template parse (local.sam_structure), NOT
+  # from local.parsed_config.functions and NOT from local.sam_raw. parsed_config and
+  # sam_raw both embed resolved sam_template_parameters: when any parameter is a
+  # co-planned ARN (unknown at plan, e.g. on a greenfield apply) the resolved
+  # data-source read is DEFERRED to apply and everything derived from it is unknown,
+  # which propagates into every for_each/count. sam_structure depends only on the
+  # template file, so its resource keys are always known at plan.
   _function_names = toset(
-    var.config_format == "sam" && local.sam_raw != null ? [
-      for logical_id, resource in try(local.sam_raw.Resources, {}) : tostring(logical_id)
+    var.config_format == "sam" && local.sam_structure != null ? [
+      for logical_id, resource in try(local.sam_structure.Resources, {}) : tostring(logical_id)
       if try(resource.Type, "") == "AWS::Serverless::Function"
       ] : [
       for k, v in try(local.parsed_config.functions, {}) : tostring(k)
@@ -264,8 +265,8 @@ locals {
   # Structural "does this function declare a VPC config" flag, so the lambda_vpc
   # attachment's for_each keys are plan-known (length(func.vpc_config.subnet_ids) on
   # the resolved function goes unknown when subnet IDs come from co-planned values).
-  _function_has_vpc = var.config_format == "sam" && local.sam_raw != null ? {
-    for logical_id, resource in try(local.sam_raw.Resources, {}) :
+  _function_has_vpc = var.config_format == "sam" && local.sam_structure != null ? {
+    for logical_id, resource in try(local.sam_structure.Resources, {}) :
     logical_id => try(resource.Properties.VpcConfig, null) != null
     if try(resource.Type, "") == "AWS::Serverless::Function"
     } : {
@@ -277,16 +278,17 @@ locals {
   # requires both to be known at plan for Zip-package functions; reading them from the
   # resolved function object makes them unknown whenever any sam_template_parameter is a
   # co-planned (unknown) value, because the parsed object is dynamically typed and a
-  # single unknown leaf renders the whole object unknown. These depend only on sam_raw.
-  _function_handler = var.config_format == "sam" && local.sam_raw != null ? {
+  # single unknown leaf renders the whole object unknown. These depend only on
+  # sam_structure (the plan-time-known parse).
+  _function_handler = var.config_format == "sam" && local.sam_structure != null ? {
     for fn in local._function_names :
-    fn => tostring(try(local.sam_raw.Resources[fn].Properties.Handler, "index.handler"))
+    fn => tostring(try(local.sam_structure.Resources[fn].Properties.Handler, "index.handler"))
   } : {}
-  _function_runtime = var.config_format == "sam" && local.sam_raw != null ? {
+  _function_runtime = var.config_format == "sam" && local.sam_structure != null ? {
     for fn in local._function_names :
     fn => try(coalesce(
-      try(tostring(local.sam_raw.Resources[fn].Properties.Runtime), null),
-      try(tostring(local.sam_function_globals.Runtime), null),
+      try(tostring(local.sam_structure.Resources[fn].Properties.Runtime), null),
+      try(tostring(local.sam_structure.Globals.Function.Runtime), null),
     ), null)
   } : {}
 
@@ -294,15 +296,34 @@ locals {
   # template so the lambda's s3_key stays known at plan regardless of unknown params.
   _function_code_uri = {
     for fn in local._function_names :
-    fn => var.config_format == "sam" && local.sam_raw != null ?
-    tostring(try(local.sam_raw.Resources[fn].Properties.CodeUri, "")) :
+    fn => var.config_format == "sam" && local.sam_structure != null ?
+    tostring(try(local.sam_structure.Resources[fn].Properties.CodeUri, "")) :
     tostring(try(local.functions_with_defaults[fn].code_uri, ""))
   }
 
+  # Structural custom resources: logical ID → resource from the plan-time-known
+  # source. SAM: the structural parse (parameter-independent). YAML/TS: parsed_config,
+  # which is file-derived and known at plan (only resolved_config can go unknown).
+  # Drives custom-resource for_each KEYS, Type categorization, and property-presence
+  # filters; resource VALUES still come from resolved_config via custom_resources_raw.
+  # JSON-laundered to `any`: the two branches are differently-shaped object types
+  # that a bare ternary cannot unify ("Inconsistent conditional result types").
+  _custom_resources_structure = jsondecode(
+    var.config_format == "sam" ? jsonencode(local.sam_custom_resources_structure) : jsonencode(try(local.parsed_config.resources.Resources, {}))
+  )
+
   # Concrete set(string) of CloudFormation custom resource logical IDs — same fix.
   _custom_resource_names = toset([
-    for k, v in try(local.parsed_config.resources.Resources, {}) : tostring(k)
+    for k, v in local._custom_resources_structure : tostring(k)
   ])
+
+  # Plan-time-known CloudFormation Type per custom resource. The category maps below
+  # MUST filter on this (never on the resolved resource values): on greenfield the
+  # resolved values are unknown, and a for-expression whose `if` condition is unknown
+  # makes the whole resulting map unknown → "Invalid for_each argument".
+  _custom_resource_types = {
+    for k, v in local._custom_resources_structure : tostring(k) => tostring(try(v.Type, ""))
+  }
 
   # Function-level default inheritance (before validation)
   # Used for parsing events - cannot depend on validation_errors
@@ -367,8 +388,14 @@ locals {
   ] : []
 
   # IAM Role Statement Parsing (Roadmap #3)
-  # Provider-level iamRoleStatements
-  provider_iam_statements = try(local.parsed_config.provider.iamRoleStatements, [])
+  # Provider-level iamRoleStatements.
+  # SAM: statically [] — sam_as_sls_config.provider never defines iamRoleStatements,
+  # and reading through the (possibly unknown-at-plan) parsed_config would make
+  # length() checks in key-driving locals (_function_has_policies) unknown.
+  # JSON-laundered to `any` — the [] and tuple branches cannot unify in a bare ternary.
+  provider_iam_statements = jsondecode(
+    var.config_format == "sam" ? "[]" : jsonencode(try(local.parsed_config.provider.iamRoleStatements, []))
+  )
 
   # Normalize provider-level statements (Action/Resource: string -> array)
   provider_iam_statements_normalized = [
@@ -419,8 +446,8 @@ locals {
   # the provider declares statements, or the template attaches Policies to it. (Using
   # length(statements) on merged_iam_statements would go unknown when statement Resource
   # values are co-planned ARNs.)
-  _function_has_policies = var.config_format == "sam" && local.sam_raw != null ? {
-    for logical_id, resource in try(local.sam_raw.Resources, {}) :
+  _function_has_policies = var.config_format == "sam" && local.sam_structure != null ? {
+    for logical_id, resource in try(local.sam_structure.Resources, {}) :
     logical_id => (
       length(local.provider_iam_statements_normalized) > 0 ||
       length(flatten([
@@ -928,42 +955,42 @@ locals {
   s3_buckets = {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource
-    if try(resource.Type, "") == "AWS::S3::Bucket"
+    if local._custom_resource_types[logical_id] == "AWS::S3::Bucket"
     && (var.resource_types == null || contains(var.resource_types, "AWS::S3::Bucket"))
   }
 
   dynamodb_tables = {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource
-    if try(resource.Type, "") == "AWS::DynamoDB::Table"
+    if local._custom_resource_types[logical_id] == "AWS::DynamoDB::Table"
     && (var.resource_types == null || contains(var.resource_types, "AWS::DynamoDB::Table"))
   }
 
   sns_topics = {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource
-    if try(resource.Type, "") == "AWS::SNS::Topic"
+    if local._custom_resource_types[logical_id] == "AWS::SNS::Topic"
     && (var.resource_types == null || contains(var.resource_types, "AWS::SNS::Topic"))
   }
 
   sqs_queues = {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource
-    if try(resource.Type, "") == "AWS::SQS::Queue"
+    if local._custom_resource_types[logical_id] == "AWS::SQS::Queue"
     && (var.resource_types == null || contains(var.resource_types, "AWS::SQS::Queue"))
   }
 
   cloudfront_distributions = {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource
-    if try(resource.Type, "") == "AWS::CloudFront::Distribution"
+    if local._custom_resource_types[logical_id] == "AWS::CloudFront::Distribution"
     && (var.resource_types == null || contains(var.resource_types, "AWS::CloudFront::Distribution"))
   }
 
   log_groups = {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource
-    if try(resource.Type, "") == "AWS::Logs::LogGroup"
+    if local._custom_resource_types[logical_id] == "AWS::Logs::LogGroup"
     && (var.resource_types == null || contains(var.resource_types, "AWS::Logs::LogGroup"))
   }
 
@@ -981,11 +1008,11 @@ locals {
   # Only reports types that would actually be created (i.e. not excluded by resource_types),
   # so a resource_types allowlist silences errors for intentionally-skipped types.
   unsupported_resources = {
-    for logical_id, resource in local.custom_resources_raw :
-    logical_id => resource.Type
-    if try(resource.Type, "") != ""
-    && !contains(local.supported_resource_types, resource.Type)
-    && (var.resource_types == null || contains(var.resource_types, try(resource.Type, "")))
+    for logical_id, type in local._custom_resource_types :
+    logical_id => type
+    if type != ""
+    && !contains(local.supported_resource_types, type)
+    && (var.resource_types == null || contains(var.resource_types, type))
   }
 
   # Validation errors for unsupported resources

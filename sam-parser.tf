@@ -30,12 +30,58 @@ data "external" "sam_yaml" {
   }
 }
 
+# Structural (plan-time-known) parse of the SAM template.
+#
+# The resolved parse above embeds var.sam_template_parameters in its query. When a
+# consumer passes parameter values computed in the SAME plan (e.g.
+# aws_secretsmanager_secret.x.arn on a greenfield/ephemeral account), the query is
+# unknown at plan, Terraform DEFERS the data source read to apply, and sam_raw —
+# and every local derived from it — becomes wholly unknown. That collapses every
+# for_each/count key in the module ("Invalid for_each argument"). On already-applied
+# environments the same parameters are known from state, the read happens at plan,
+# and everything works — which is why the failure is greenfield-only.
+#
+# This second read has a fully static query (no parameter values), so it ALWAYS
+# executes at plan. It resolves intrinsics against template Defaults only
+# (non-strict: unresolvable refs become __UNRESOLVED__ markers instead of failing).
+# It must drive STRUCTURE only — logical IDs, resource Types, event shapes,
+# handler/runtime/CodeUri, property PRESENCE — never resolved parameter VALUES.
+# Values must keep coming from local.sam_raw so applied environments see exactly
+# the same rendered configuration as before (no-op plan).
+data "external" "sam_yaml_structure" {
+  count = var.config_format == "sam" ? 1 : 0
+
+  program = [
+    "node", "${path.module}/scripts/sam-preprocessor.js"
+  ]
+
+  query = {
+    config_path = var.config_path
+    parameters  = jsonencode({})
+    region      = data.aws_region.current.region
+    account_id  = data.aws_caller_identity.current.account_id
+    strict      = "false"
+  }
+}
+
 locals {
   # Raw SAM parse — only active when config_format is "sam".
   # Decoded from the external preprocessor result (handles !Ref/!Sub/!If etc.).
   sam_raw = var.config_format == "sam" ? (
     try(data.external.sam_yaml[0].result.content, "") != "" ?
     try(jsondecode(data.external.sam_yaml[0].result.content), null) :
+    null
+  ) : null
+
+  # Structural twin of sam_raw — identical document shape, parameter references
+  # resolved against Defaults/markers only. Always known at plan. Use this (and
+  # only this) for anything that feeds for_each/count keys, `if` filters, or
+  # dynamic-block conditions. Constraint this implies for templates: Parameters
+  # must not change template STRUCTURE (e.g. an !If on a parameter that adds or
+  # removes resources/events) — the standard Terraform for_each constraint.
+  sam_structure = var.config_format == "sam" ? (
+    try(data.external.sam_yaml_structure[0].result.content, "") != "" ?
+    try(jsondecode(data.external.sam_yaml_structure[0].result.content), null) :
     null
   ) : null
 
@@ -64,8 +110,9 @@ locals {
 
   # Helper: map S3 bucket logical IDs to their actual bucket names.
   # Used to resolve !Ref references in S3 event Properties.Bucket.
-  sam_s3_bucket_names = var.config_format == "sam" && local.sam_raw != null ? {
-    for logical_id, resource in try(local.sam_raw.Resources, {}) :
+  # Structural source: bucket keys feed event/bucket for_each keys downstream.
+  sam_s3_bucket_names = var.config_format == "sam" && local.sam_structure != null ? {
+    for logical_id, resource in try(local.sam_structure.Resources, {}) :
     logical_id => try(
       resource.Properties.BucketName,
       lower(logical_id)
@@ -84,8 +131,16 @@ locals {
   # produces for native SLS event lists. The can(event.X) checks in the existing
   # event parsing code then work correctly against these decoded values.
 
-  sam_function_event_json_strings = var.config_format == "sam" && local.sam_raw != null ? {
-    for logical_id, resource in try(local.sam_raw.Resources, {}) :
+  # Structural source: event maps (schedule_event_map, eventbridge_event_map,
+  # s3/sqs/stream wiring, http_events → API Gateway resources) all derive their
+  # for_each KEYS from these lists, so the lists must be known at plan. This means
+  # event Properties (Schedule rate, Queue/Stream ARN, paths) are resolved against
+  # template Defaults / pseudo-params (region, account id) — NOT against
+  # var.sam_template_parameters. Constraint: do not feed event Properties from
+  # template Parameters; use literals, !Sub with pseudo-params, or !Ref/!GetAtt to
+  # co-defined template resources (all identical in both parses).
+  sam_function_event_json_strings = var.config_format == "sam" && local.sam_structure != null ? {
+    for logical_id, resource in try(local.sam_structure.Resources, {}) :
     logical_id => [
       for event_name, event in try(resource.Properties.Events, {}) :
       (
@@ -215,6 +270,33 @@ locals {
       try(resource.Type, "")
     )
   } : {}
+
+  # Structural twin of sam_resources_translated: logical ID → translated
+  # CloudFormation resource, from the plan-time-known parse. Drives custom-resource
+  # categorization (Type) and property-PRESENCE checks (VersioningConfiguration,
+  # AccessControl) so the custom_resources.tf for_each keys stay known at plan even
+  # when sam_template_parameters carry co-planned (unknown) values. Resource VALUES
+  # continue to come from the resolved document.
+  # JSON-laundered to the dynamic `any` type (same idiom as sam_resources_translated):
+  # the per-resource objects are differently shaped, which a bare map/ternary cannot
+  # unify ("Inconsistent conditional result types").
+  sam_custom_resources_structure = jsondecode(
+    var.config_format == "sam" && local.sam_structure != null ? jsonencode({
+      for logical_id, resource in try(local.sam_structure.Resources, {}) :
+      logical_id => jsondecode(
+        # AWS::Serverless::SimpleTable → AWS::DynamoDB::Table (same translation as above)
+        try(resource.Type, "") == "AWS::Serverless::SimpleTable" ? jsonencode({
+          Type       = "AWS::DynamoDB::Table"
+          Properties = try(resource.Properties, {})
+        }) :
+        jsonencode(resource)
+      )
+      if !contains(
+        ["AWS::Serverless::Function", "AWS::Serverless::Api", "AWS::Serverless::LayerVersion", "AWS::Serverless::Application"],
+        try(resource.Type, "")
+      )
+    }) : jsonencode({})
+  )
 
   # ============================================================================
   # SAM → SLS Config Translation

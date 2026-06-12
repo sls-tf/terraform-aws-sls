@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM app with a parameter wired into a function env var plus custom resources
+
+Parameters:
+  RelaySecretArn:
+    Type: String
+    Description: Secret ARN injected by the consumer (unknown at greenfield plan)
+  LambdaSecurityGroupId:
+    Type: String
+    Description: SG id from the same plan (unknown at greenfield plan)
+
+Resources:
+  HelloFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/index.handler
+      Runtime: nodejs18.x
+      MemorySize: 256
+      Timeout: 10
+      Environment:
+        Variables:
+          RELAY_SECRET_ARN: !Ref RelaySecretArn
+      VpcConfig:
+        SubnetIds:
+          - subnet-aaaa1111
+          - subnet-bbbb2222
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroupId
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !Ref RelaySecretArn
+
+  UploadBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: my-upload-bucket
+
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: users-table
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+  AlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: alerts-topic
+
+  JobsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: jobs-queue
+
+  AppLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /app/logs
+      RetentionInDays: 14

@@ -36,12 +36,14 @@ resource "aws_s3_bucket" "custom" {
 }
 
 # S3 bucket versioning configuration
-# Created when VersioningConfiguration exists in properties
+# Created when VersioningConfiguration exists in properties.
+# Presence is tested on the STRUCTURAL resource so the for_each keys stay known at
+# plan when resolved values are unknown (greenfield); values stay resolved.
 resource "aws_s3_bucket_versioning" "custom" {
   for_each = {
     for logical_id, resource in local.s3_buckets :
     logical_id => resource
-    if try(resource.Properties.VersioningConfiguration, null) != null
+    if try(local._custom_resources_structure[logical_id].Properties.VersioningConfiguration, null) != null
   }
 
   bucket = aws_s3_bucket.custom[each.key].id
@@ -52,12 +54,13 @@ resource "aws_s3_bucket_versioning" "custom" {
 }
 
 # S3 bucket ACL configuration
-# Created when AccessControl property exists
+# Created when AccessControl property exists (structural presence test — see
+# aws_s3_bucket_versioning above).
 resource "aws_s3_bucket_acl" "custom" {
   for_each = {
     for logical_id, resource in local.s3_buckets :
     logical_id => resource
-    if try(resource.Properties.AccessControl, null) != null
+    if try(local._custom_resources_structure[logical_id].Properties.AccessControl, null) != null
   }
 
   bucket = aws_s3_bucket.custom[each.key].id
