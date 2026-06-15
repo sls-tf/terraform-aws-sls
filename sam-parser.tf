@@ -30,6 +30,24 @@ data "external" "sam_yaml" {
   }
 }
 
+# Discover which template Parameters the Conditions section references. Static
+# query (no parameter values) → always plan-known. These are the parameters that
+# decide resource EXISTENCE (a resource's `Condition`), so the structure parse
+# below must see their real values; every OTHER parameter stays empty so an
+# unknown-at-plan value can't make the structure read unknown.
+data "external" "sam_condition_params" {
+  count = var.config_format == "sam" ? 1 : 0
+
+  program = [
+    "node", "${path.module}/scripts/sam-preprocessor.js"
+  ]
+
+  query = {
+    config_path = var.config_path
+    mode        = "condition-params"
+  }
+}
+
 # Structural (plan-time-known) parse of the SAM template.
 #
 # The resolved parse above embeds var.sam_template_parameters in its query. When a
@@ -41,13 +59,19 @@ data "external" "sam_yaml" {
 # environments the same parameters are known from state, the read happens at plan,
 # and everything works — which is why the failure is greenfield-only.
 #
-# This second read has a fully static query (no parameter values), so it ALWAYS
-# executes at plan. It resolves intrinsics against template Defaults only
-# (non-strict: unresolvable refs become __UNRESOLVED__ markers instead of failing).
-# It must drive STRUCTURE only — logical IDs, resource Types, event shapes,
-# handler/runtime/CodeUri, property PRESENCE — never resolved parameter VALUES.
-# Values must keep coming from local.sam_raw so applied environments see exactly
-# the same rendered configuration as before (no-op plan).
+# This second read resolves intrinsics against template Defaults plus ONLY the
+# condition-relevant parameters (local.sam_structure_params) — so a resource's
+# `Condition` evaluates against its real per-env value and resources are kept/
+# dropped from the for_each KEYS correctly, while every other (possibly
+# unknown-at-plan) parameter stays empty so the read remains plan-known. It still
+# drives STRUCTURE only — logical IDs, Types, event shapes, handler/runtime/
+# CodeUri, property PRESENCE, and condition-gated existence — never non-condition
+# parameter VALUES. Those keep coming from local.sam_raw so applied environments
+# see exactly the same rendered configuration as before.
+#
+# Constraint: any parameter a `Condition` references must be plan-known (e.g. an
+# SSM/remote-state read, not an in-plan resource attribute) — otherwise this read
+# defers and for_each keys go unknown, exactly as the resolved parse does.
 data "external" "sam_yaml_structure" {
   count = var.config_format == "sam" ? 1 : 0
 
@@ -57,7 +81,7 @@ data "external" "sam_yaml_structure" {
 
   query = {
     config_path = var.config_path
-    parameters  = jsonencode({})
+    parameters  = jsonencode(local.sam_structure_params)
     region      = data.aws_region.current.region
     account_id  = data.aws_caller_identity.current.account_id
     strict      = "false"
@@ -65,6 +89,24 @@ data "external" "sam_yaml_structure" {
 }
 
 locals {
+  # Parameter names referenced by the template's Conditions (from the static
+  # discovery read). Empty for templates with no parameter-driven conditions —
+  # in which case the structure parse runs with an empty parameter set exactly
+  # as before.
+  sam_condition_param_names = var.config_format == "sam" ? try(
+    jsondecode(data.external.sam_condition_params[0].result.content).condition_params,
+    []
+  ) : []
+
+  # The condition-relevant subset of the caller's parameters, fed to the
+  # structure parse so resource `Condition`s resolve against real per-env values
+  # while non-condition parameters stay empty (and thus can't make the read
+  # unknown at plan).
+  sam_structure_params = {
+    for k in local.sam_condition_param_names :
+    k => tostring(try(var.sam_template_parameters[k], ""))
+  }
+
   # Raw SAM parse — only active when config_format is "sam".
   # Decoded from the external preprocessor result (handles !Ref/!Sub/!If etc.).
   sam_raw = var.config_format == "sam" ? (

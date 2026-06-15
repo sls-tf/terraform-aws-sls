@@ -497,6 +497,44 @@ function evaluateTemplate(parsed, opts) {
 }
 
 // ============================================================================
+// Condition-parameter discovery
+// ============================================================================
+// Return the names of template Parameters referenced (directly via !Ref, or via
+// !Sub "${Name}") anywhere in the Conditions section. The structure pass uses
+// this to feed ONLY the condition-relevant parameter values — which are the ones
+// that decide resource EXISTENCE / for_each keys — while keeping every other
+// parameter empty (so an unknown-at-plan parameter can't make the structure read
+// unknown). Parameters whose values gate resource conditions MUST be plan-known.
+function collectConditionParamRefs(parsed) {
+  const paramNames = new Set(Object.keys((parsed && parsed.Parameters) || {}));
+  const refs = new Set();
+  const addSubRefs = (tmpl) => {
+    if (typeof tmpl !== 'string') return;
+    for (const m of tmpl.matchAll(/\$\{([^}]+)\}/g)) {
+      const name = m[1].trim();
+      if (paramNames.has(name)) refs.add(name);
+    }
+  };
+  const walk = (node) => {
+    if (node == null || typeof node !== 'object') return;
+    if (Array.isArray(node)) { node.forEach(walk); return; }
+    // CFN-tag form: { __cfn: 'Ref'|'Sub'|..., v: ... }
+    if (typeof node.__cfn === 'string') {
+      if (node.__cfn === 'Ref' && typeof node.v === 'string' && paramNames.has(node.v)) refs.add(node.v);
+      if (node.__cfn === 'Sub') addSubRefs(Array.isArray(node.v) ? node.v[0] : node.v);
+      walk(node.v);
+      return;
+    }
+    // Plain-JSON intrinsic form: { "Ref": "X" } / { "Fn::Sub": ... }
+    if (typeof node.Ref === 'string' && paramNames.has(node.Ref)) refs.add(node.Ref);
+    if (node['Fn::Sub'] !== undefined) addSubRefs(Array.isArray(node['Fn::Sub']) ? node['Fn::Sub'][0] : node['Fn::Sub']);
+    for (const k of Object.keys(node)) walk(node[k]);
+  };
+  for (const condDef of Object.values((parsed && parsed.Conditions) || {})) walk(condDef);
+  return [...refs];
+}
+
+// ============================================================================
 // stdin → stdout protocol
 // ============================================================================
 
@@ -511,6 +549,7 @@ process.stdin.on('end', () => {
       region,
       account_id,
       strict = 'true',
+      mode = 'evaluate',
     } = JSON.parse(input || '{}');
 
     if (!config_path || !fs.existsSync(config_path)) {
@@ -520,6 +559,16 @@ process.stdin.on('end', () => {
 
     const raw    = fs.readFileSync(config_path, 'utf8');
     const parsed = yaml.load(raw, { schema: CFN_SCHEMA });
+
+    // Discovery mode: return only the parameter names the Conditions reference.
+    // Static (no parameter values), so the data source is always plan-known.
+    if (mode === 'condition-params') {
+      process.stdout.write(JSON.stringify({
+        content: JSON.stringify({ condition_params: collectConditionParamRefs(parsed) }),
+        error: '',
+      }));
+      return;
+    }
 
     let paramOverrides = {};
     if (parameters) {
