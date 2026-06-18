@@ -150,6 +150,63 @@ locals {
     null
   ) : null
 
+  # ============================================================================
+  # SAM HttpApi (apigatewayv2) Authorizer Parsing
+  # ============================================================================
+  # SAM declares HTTP API Lambda authorizers under an AWS::Serverless::HttpApi
+  # resource's Properties.Auth.Authorizers and/or Globals.HttpApi.Auth.Authorizers,
+  # keyed by authorizer name. An HttpApi function event then references one by name
+  # via Properties.Authorizer.
+  #
+  # We support REQUEST (Lambda) authorizers only. The authorizer's Lambda is
+  # referenced via FunctionArn / FunctionInvokeArn — typically a !GetAtt/!Ref to a
+  # Function defined in the same template. The preprocessor resolves !GetAtt
+  # "<LogicalId>.Arn" to a string ARN; we recover the template logical ID from that
+  # ARN's trailing :function:<name> segment so the v2 file can map it to
+  # aws_lambda_function.functions[<logicalId>]. If the ARN's function name does not
+  # match a template logical ID (e.g. an explicit FunctionName or an external Lambda)
+  # we fall back to the raw value and emit no managed permission for it.
+  #
+  # Structural source (sam_structure): authorizer NAMES feed for_each keys, so they
+  # must be plan-known. Authorizer VALUES (uri etc.) are derived downstream from the
+  # resolved functions map.
+  #
+  # ASSUMPTION: the authorizer FunctionArn/FunctionInvokeArn resolves to one of the
+  # template's Function logical IDs (the common SAM pattern). Authorizers whose lambda
+  # cannot be mapped to a template function are still emitted but reference the raw
+  # function key, which is reported by validation if it is not a known function.
+  sam_http_api_authorizers_raw = var.config_format == "sam" && local.sam_structure != null ? merge(
+    try(local.sam_structure.Globals.HttpApi.Auth.Authorizers, {}),
+    merge([
+      for logical_id, resource in try(local.sam_structure.Resources, {}) :
+      try(resource.Properties.Auth.Authorizers, {})
+      if try(resource.Type, "") == "AWS::Serverless::HttpApi"
+    ]...)
+  ) : {}
+
+  # Normalised authorizer definitions, keyed by authorizer name.
+  #   function_ref : template Function logical ID (preferred) or raw arn/ref string
+  #   api_id       : shared API id this authorizer attaches to (from DefaultAuthorizer
+  #                  host resource ApiId, or any v2 event that uses this authorizer)
+  #   identity_sources, result_ttl : passthrough with SAM-compatible defaults
+  sam_http_api_authorizers = {
+    for auth_name, auth_def in local.sam_http_api_authorizers_raw :
+    auth_name => {
+      # Prefer the trailing function name of a resolved Lambda ARN
+      # (arn:...:function:<name>); fall back to the raw FunctionArn/FunctionInvokeArn.
+      function_ref = try(
+        element(split(":", tostring(try(auth_def.FunctionArn, auth_def.FunctionInvokeArn))), length(split(":", tostring(try(auth_def.FunctionArn, auth_def.FunctionInvokeArn)))) - 1),
+        tostring(try(auth_def.FunctionArn, auth_def.FunctionInvokeArn, ""))
+      )
+      identity_sources = try(
+        tolist(auth_def.Identity.Headers) != null ? [for h in tolist(auth_def.Identity.Headers) : "$request.header.${h}"] : null,
+        ["$request.header.Authorization"]
+      )
+      enable_simple_responses = try(auth_def.EnableSimpleResponses, true)
+      result_ttl              = try(auth_def.AuthorizerResultTtlInSeconds, auth_def.ResultTtlInSeconds, 0)
+    }
+  }
+
   # Helper: map S3 bucket logical IDs to their actual bucket names.
   # Used to resolve !Ref references in S3 event Properties.Bucket.
   # Structural source: bucket keys feed event/bucket for_each keys downstream.
@@ -187,10 +244,19 @@ locals {
       for event_name, event in try(resource.Properties.Events, {}) :
       (
         # Api / HttpApi → http
+        # `type` distinguishes v1 REST (Api) from v2 HTTP (HttpApi). `apiId`,
+        # when present on an HttpApi event, targets an EXISTING/shared
+        # apigatewayv2 API (attach-only mode) instead of self-creating a REST
+        # API; locals.tf routes those events to http-api-v2.tf. `authorizer`
+        # is the name of a SAM HttpApi authorizer (resolved in locals.tf).
         contains(["Api", "HttpApi"], try(event.Type, "")) ? jsonencode({
           http = {
-            path   = try(event.Properties.Path, "/")
-            method = lower(try(event.Properties.Method, "any"))
+            path                 = try(event.Properties.Path, "/")
+            method               = lower(try(event.Properties.Method, "any"))
+            type                 = try(event.Type, "")
+            apiId                = try(event.Properties.ApiId, null)
+            payloadFormatVersion = try(event.Properties.PayloadFormatVersion, "2.0")
+            authorizer           = try(event.Properties.Authorizer, null)
           }
         }) :
 
@@ -308,7 +374,7 @@ locals {
     # - Api → route table handled via http events on functions
     # - LayerVersion and Application → not yet supported, excluded silently
     if !contains(
-      ["AWS::Serverless::Function", "AWS::Serverless::Api", "AWS::Serverless::LayerVersion", "AWS::Serverless::Application"],
+      ["AWS::Serverless::Function", "AWS::Serverless::Api", "AWS::Serverless::HttpApi", "AWS::Serverless::LayerVersion", "AWS::Serverless::Application"],
       try(resource.Type, "")
     )
   } : {}
@@ -334,7 +400,7 @@ locals {
         jsonencode(resource)
       )
       if !contains(
-        ["AWS::Serverless::Function", "AWS::Serverless::Api", "AWS::Serverless::LayerVersion", "AWS::Serverless::Application"],
+        ["AWS::Serverless::Function", "AWS::Serverless::Api", "AWS::Serverless::HttpApi", "AWS::Serverless::LayerVersion", "AWS::Serverless::Application"],
         try(resource.Type, "")
       )
     }) : jsonencode({})

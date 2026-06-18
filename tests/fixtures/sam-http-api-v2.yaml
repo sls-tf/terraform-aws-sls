@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM template exercising apigatewayv2 (HTTP API) attach-to-existing + REQUEST authorizer
+
+Metadata:
+  ServiceName: device-sample
+
+Resources:
+  SharedHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Auth:
+        Authorizers:
+          MachineAuthAuthorizer:
+            FunctionArn: !GetAtt AuthorizerFunction.Arn
+            Identity:
+              Headers:
+                - Authorization
+            EnableSimpleResponses: true
+            AuthorizerPayloadFormatVersion: '2.0'
+
+  DeviceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      Runtime: nodejs18.x
+      Events:
+        CreateSite:
+          Type: HttpApi
+          Properties:
+            ApiId: my-shared-api-id
+            Path: /sites
+            Method: POST
+            PayloadFormatVersion: '2.0'
+            Authorizer: MachineAuthAuthorizer
+        GetSite:
+          Type: HttpApi
+          Properties:
+            ApiId: my-shared-api-id
+            Path: /sites/{id}
+            Method: GET
+            Authorizer: MachineAuthAuthorizer
+
+  HardwareFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      Runtime: nodejs18.x
+      Events:
+        LinkHardware:
+          Type: HttpApi
+          Properties:
+            ApiId: my-shared-api-id
+            Path: /hardware/link
+            Method: POST
+
+  AuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      Runtime: nodejs18.x

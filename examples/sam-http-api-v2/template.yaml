@@ -1,0 +1,73 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Example SAM template exercising the API Gateway v2 (HTTP API) attach-to-existing
+  path: two functions whose HttpApi events carry an explicit ApiId (a shared,
+  externally-managed apigatewayv2 API), plus one REQUEST Lambda authorizer.
+
+Metadata:
+  ServiceName: device-sample
+
+Parameters:
+  SharedHttpApiId:
+    Type: String
+    Description: ID of the pre-existing shared apigatewayv2 (HTTP API).
+    Default: abc123def4
+
+Resources:
+  # Shared HTTP API authorizer definition (Lambda REQUEST authorizer).
+  # The gateway/API itself is managed elsewhere; we only declare the authorizer
+  # so functions can reference it by name from their HttpApi events.
+  SharedHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Auth:
+        Authorizers:
+          MachineAuthAuthorizer:
+            FunctionArn: !GetAtt AuthorizerFunction.Arn
+            Identity:
+              Headers:
+                - Authorization
+            EnableSimpleResponses: true
+            AuthorizerPayloadFormatVersion: '2.0'
+
+  DeviceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      Runtime: nodejs18.x
+      Events:
+        CreateSite:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SharedHttpApiId
+            Path: /sites
+            Method: POST
+            PayloadFormatVersion: '2.0'
+            Authorizer: MachineAuthAuthorizer
+        GetSite:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SharedHttpApiId
+            Path: /sites/{id}
+            Method: GET
+            Authorizer: MachineAuthAuthorizer
+
+  HardwareFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      Runtime: nodejs18.x
+      Events:
+        LinkHardware:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SharedHttpApiId
+            Path: /hardware/link
+            Method: POST
+
+  AuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      Runtime: nodejs18.x

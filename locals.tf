@@ -90,6 +90,9 @@ locals {
     # HTTP event validations (Roadmap #4)
     local.parsed_config != null ? local.http_event_validation_errors : [],
 
+    # API Gateway v2 (HTTP API) authorizer validations
+    local.parsed_config != null ? local.http_api_v2_authorizer_errors : [],
+
     # S3 event validations (Roadmap #5)
     local.parsed_config != null ? local.all_s3_validations : [],
 
@@ -494,6 +497,17 @@ locals {
           origin  = null
           headers = null
         }
+        # API Gateway v2 (HTTP API) attach-to-existing fields. For native SLS
+        # (yaml/ts) configs these stay at their defaults, so http_events behaves
+        # exactly as before and every event flows down the v1 REST path.
+        #   api_id != null            → attach to a shared apigatewayv2 API (v2 path)
+        #   type                      → "Api" (v1 REST) or "HttpApi" (v2)
+        #   payload_format_version    → AWS_PROXY payload version for v2 integrations
+        #   authorizer                → SAM HttpApi authorizer name, or null
+        api_id                 = null
+        type                   = ""
+        payload_format_version = "2.0"
+        authorizer             = null
         }, {
         # Parse short-form: "http: GET /users/{id}"
         # Parse long-form: "http: { path: /users, method: GET, cors: true }"
@@ -511,14 +525,76 @@ locals {
           origin  = null
           headers = null
         }
+
+        # v2 fields — only present on SAM HttpApi events (parser emits them);
+        # native SLS http events leave these as the defaults above.
+        api_id                 = try(event.http.apiId, null)
+        type                   = tostring(try(event.http.type, ""))
+        payload_format_version = tostring(try(event.http.payloadFormatVersion, "2.0"))
+        authorizer             = try(event.http.authorizer, null)
       })
       if can(event.http)
     ]
   ]))
 
-  # Deduplicate functions with HTTP events for permissions
+  # HTTP events that drive the self-created v1 REST API (main.tf). An event with
+  # a non-null api_id targets an EXISTING shared apigatewayv2 (HTTP API) instead,
+  # so it must NOT create any v1 REST resources. For native SLS configs no event
+  # ever carries an api_id, so http_v1_events == http_events and the v1 path is
+  # unchanged.
+  http_v1_events = [
+    for event in local.http_events : event if event.api_id == null
+  ]
+
+  # HTTP events that attach to an existing apigatewayv2 API (v2 path, http-api-v2.tf).
+  http_api_v2_events = [
+    for event in local.http_events : event if event.api_id != null
+  ]
+
+  # Keyed map for the v2 path: "<function>-<METHOD>-<sanitized_path>" → event.
+  # Path is sanitized (/{} → _) so the key is a valid for_each key and unique
+  # per method+path on a function.
+  http_api_v2_event_map = {
+    for event in local.http_api_v2_events :
+    "${event.function_name}-${upper(event.http_method)}-${replace(replace(replace(trimprefix(event.http_path, "/"), "/", "_"), "{", ""), "}", "")}" => event
+  }
+
+  # Resolved HttpApi authorizer defs (http-api-v2.tf for_each source), keyed by
+  # authorizer name. Only authorizers actually referenced by a v2 event are kept,
+  # and the api_id is taken from the referencing event(s) so the authorizer
+  # attaches to the same shared API as its routes.
+  # function_name is mapped to a template Function logical ID when the parsed
+  # function_ref matches one (so aws_lambda_function.functions[...] resolves);
+  # otherwise it stays as the raw ref and validation surfaces the mismatch.
+  http_api_v2_authorizers = {
+    for auth_name, auth_def in local.sam_http_api_authorizers :
+    auth_name => merge(auth_def, {
+      api_id = try([
+        for event in local.http_api_v2_events :
+        event.api_id if event.authorizer == auth_name
+      ][0], null)
+      # function_ref is the parsed Function logical ID (the common case). It maps
+      # directly to aws_lambda_function.functions[<id>]; if it does not match a
+      # template function, http_api_v2_authorizer_errors surfaces the mismatch.
+      function_name = auth_def.function_ref
+    })
+    # Only emit authorizers a route references, and only when their API is known.
+    if length([for event in local.http_api_v2_events : event if event.authorizer == auth_name]) > 0
+  }
+
+  # Validation: an HttpApi authorizer must resolve to a template Function logical
+  # ID (so aws_lambda_function.functions[...] exists). Reported up-front rather
+  # than failing with an opaque for_each/index error in http-api-v2.tf.
+  http_api_v2_authorizer_errors = [
+    for auth_name, auth in local.http_api_v2_authorizers :
+    "HttpApi authorizer '${auth_name}' references function '${auth.function_name}', which is not a Function in the template. Its FunctionArn/FunctionInvokeArn must !Ref/!GetAtt a template AWS::Serverless::Function."
+    if !contains(local._function_names, auth.function_name)
+  ]
+
+  # Deduplicate functions with HTTP events for permissions (v1 path only — v2
+  # emits its own per-route permissions in http-api-v2.tf).
   functions_with_http_events = toset([
-    for event in local.http_events : event.function_name
+    for event in local.http_v1_events : event.function_name
   ])
 
   # HTTP event validation errors
@@ -543,9 +619,10 @@ locals {
   ])
 
   # Path Parsing and Resource Tree Building (Phase 2)
-  # Extract unique paths from HTTP events
+  # Extract unique paths from HTTP events. v1 ONLY — v2 (api_id != null) events
+  # do not build a REST resource tree; they emit apigatewayv2 routes directly.
   all_paths = toset([
-    for event in local.http_events : event.http_path
+    for event in local.http_v1_events : event.http_path
   ])
 
   # Parse each path into array of segments
@@ -591,18 +668,18 @@ locals {
     path => {
       # Check if any event on this path has CORS enabled
       enabled = anytrue([
-        for event in local.http_events :
+        for event in local.http_v1_events :
         event.http_path == path && event.cors_enabled
       ])
       # Collect all methods on this path
       methods = distinct([
-        for event in local.http_events :
+        for event in local.http_v1_events :
         event.http_method if event.http_path == path
       ])
       # Merge custom CORS configs (take first non-null custom config if any)
       custom_config = try(
         [
-          for event in local.http_events :
+          for event in local.http_v1_events :
           event.cors_config if event.http_path == path && event.cors_config.origin != null
         ][0],
         {

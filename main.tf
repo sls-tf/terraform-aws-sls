@@ -276,7 +276,7 @@ resource "null_resource" "config_validation" {
 
 # REST API - Created only when HTTP events exist
 resource "aws_api_gateway_rest_api" "this" {
-  count = length(local.http_events) > 0 ? 1 : 0
+  count = length(local.http_v1_events) > 0 ? 1 : 0
 
   name        = "${local.parsed_config_resolved.service}-${local.provider_with_defaults.stage}"
   description = "API Gateway for ${local.parsed_config_resolved.service}"
@@ -290,7 +290,7 @@ resource "aws_api_gateway_rest_api" "this" {
 
 # API Gateway Resources - Depth 1 (root level paths like /users)
 resource "aws_api_gateway_resource" "depth_1" {
-  for_each = length(local.http_events) > 0 ? local.resources_by_depth[1] : {}
+  for_each = length(local.http_v1_events) > 0 ? local.resources_by_depth[1] : {}
 
   rest_api_id = aws_api_gateway_rest_api.this[0].id
   parent_id   = aws_api_gateway_rest_api.this[0].root_resource_id
@@ -299,7 +299,7 @@ resource "aws_api_gateway_resource" "depth_1" {
 
 # API Gateway Resources - Depth 2 (paths like /users/{id})
 resource "aws_api_gateway_resource" "depth_2" {
-  for_each = length(local.http_events) > 0 && local.max_depth >= 2 ? local.resources_by_depth[2] : {}
+  for_each = length(local.http_v1_events) > 0 && local.max_depth >= 2 ? local.resources_by_depth[2] : {}
 
   rest_api_id = aws_api_gateway_rest_api.this[0].id
   parent_id   = aws_api_gateway_resource.depth_1[each.value.parent_path].id
@@ -308,7 +308,7 @@ resource "aws_api_gateway_resource" "depth_2" {
 
 # API Gateway Resources - Depth 3 (paths like /users/{id}/posts)
 resource "aws_api_gateway_resource" "depth_3" {
-  for_each = length(local.http_events) > 0 && local.max_depth >= 3 ? local.resources_by_depth[3] : {}
+  for_each = length(local.http_v1_events) > 0 && local.max_depth >= 3 ? local.resources_by_depth[3] : {}
 
   rest_api_id = aws_api_gateway_rest_api.this[0].id
   parent_id   = aws_api_gateway_resource.depth_2[each.value.parent_path].id
@@ -317,7 +317,7 @@ resource "aws_api_gateway_resource" "depth_3" {
 
 # API Gateway Resources - Depth 4 (paths like /users/{id}/posts/{postId})
 resource "aws_api_gateway_resource" "depth_4" {
-  for_each = length(local.http_events) > 0 && local.max_depth >= 4 ? local.resources_by_depth[4] : {}
+  for_each = length(local.http_v1_events) > 0 && local.max_depth >= 4 ? local.resources_by_depth[4] : {}
 
   rest_api_id = aws_api_gateway_rest_api.this[0].id
   parent_id   = aws_api_gateway_resource.depth_3[each.value.parent_path].id
@@ -327,10 +327,10 @@ resource "aws_api_gateway_resource" "depth_4" {
 # Local to unify all depth resources for easy reference
 locals {
   all_api_resources = merge(
-    length(local.http_events) > 0 ? aws_api_gateway_resource.depth_1 : {},
-    length(local.http_events) > 0 && local.max_depth >= 2 ? aws_api_gateway_resource.depth_2 : {},
-    length(local.http_events) > 0 && local.max_depth >= 3 ? aws_api_gateway_resource.depth_3 : {},
-    length(local.http_events) > 0 && local.max_depth >= 4 ? aws_api_gateway_resource.depth_4 : {}
+    length(local.http_v1_events) > 0 ? aws_api_gateway_resource.depth_1 : {},
+    length(local.http_v1_events) > 0 && local.max_depth >= 2 ? aws_api_gateway_resource.depth_2 : {},
+    length(local.http_v1_events) > 0 && local.max_depth >= 3 ? aws_api_gateway_resource.depth_3 : {},
+    length(local.http_v1_events) > 0 && local.max_depth >= 4 ? aws_api_gateway_resource.depth_4 : {}
   )
 }
 
@@ -339,8 +339,8 @@ resource "aws_api_gateway_method" "endpoints" {
   # Key includes the path: one function can serve several paths with the same
   # method (e.g. GET /a and GET /b on a single handler), so function+method
   # alone is not unique and would collide into a duplicate for_each key.
-  for_each = length(local.http_events) > 0 ? {
-    for event in local.http_events :
+  for_each = length(local.http_v1_events) > 0 ? {
+    for event in local.http_v1_events :
     "${event.function_name}_${lower(event.http_method)}_${event.http_path}" => {
       function_name = event.function_name
       http_method   = event.http_method
@@ -356,8 +356,8 @@ resource "aws_api_gateway_method" "endpoints" {
 
 # API Gateway Lambda Integrations - AWS_PROXY type
 resource "aws_api_gateway_integration" "lambda" {
-  for_each = length(local.http_events) > 0 ? {
-    for event in local.http_events :
+  for_each = length(local.http_v1_events) > 0 ? {
+    for event in local.http_v1_events :
     "${event.function_name}_${lower(event.http_method)}_${event.http_path}" => {
       function_name = event.function_name
       http_method   = event.http_method
@@ -376,7 +376,7 @@ resource "aws_api_gateway_integration" "lambda" {
 
 # CORS OPTIONS Methods
 resource "aws_api_gateway_method" "cors_options" {
-  for_each = length(local.http_events) > 0 ? local.cors_headers : {}
+  for_each = length(local.http_v1_events) > 0 ? local.cors_headers : {}
 
   rest_api_id   = aws_api_gateway_rest_api.this[0].id
   resource_id   = local.all_api_resources[each.key].id
@@ -386,7 +386,7 @@ resource "aws_api_gateway_method" "cors_options" {
 
 # CORS OPTIONS Integrations - MOCK type
 resource "aws_api_gateway_integration" "cors_options" {
-  for_each = length(local.http_events) > 0 ? local.cors_headers : {}
+  for_each = length(local.http_v1_events) > 0 ? local.cors_headers : {}
 
   rest_api_id = aws_api_gateway_rest_api.this[0].id
   resource_id = local.all_api_resources[each.key].id
@@ -401,7 +401,7 @@ resource "aws_api_gateway_integration" "cors_options" {
 
 # CORS OPTIONS Method Response
 resource "aws_api_gateway_method_response" "cors_options_200" {
-  for_each = length(local.http_events) > 0 ? local.cors_headers : {}
+  for_each = length(local.http_v1_events) > 0 ? local.cors_headers : {}
 
   rest_api_id = aws_api_gateway_rest_api.this[0].id
   resource_id = local.all_api_resources[each.key].id
@@ -421,7 +421,7 @@ resource "aws_api_gateway_method_response" "cors_options_200" {
 
 # CORS OPTIONS Integration Response
 resource "aws_api_gateway_integration_response" "cors_options_200" {
-  for_each = length(local.http_events) > 0 ? local.cors_headers : {}
+  for_each = length(local.http_v1_events) > 0 ? local.cors_headers : {}
 
   rest_api_id = aws_api_gateway_rest_api.this[0].id
   resource_id = local.all_api_resources[each.key].id
@@ -439,7 +439,7 @@ resource "aws_api_gateway_integration_response" "cors_options_200" {
 
 # Lambda Permissions - Allow API Gateway to invoke Lambda functions
 resource "aws_lambda_permission" "api_gateway" {
-  for_each = length(local.http_events) > 0 ? local.functions_with_http_events : toset([])
+  for_each = length(local.http_v1_events) > 0 ? local.functions_with_http_events : toset([])
 
   statement_id  = "AllowAPIGatewayInvoke-${each.key}"
   action        = "lambda:InvokeFunction"
@@ -452,7 +452,7 @@ resource "aws_lambda_permission" "api_gateway" {
 
 # API Gateway Deployment - Triggered on configuration changes
 resource "aws_api_gateway_deployment" "this" {
-  count = length(local.http_events) > 0 ? 1 : 0
+  count = length(local.http_v1_events) > 0 ? 1 : 0
 
   rest_api_id = aws_api_gateway_rest_api.this[0].id
 
@@ -482,7 +482,7 @@ resource "aws_api_gateway_deployment" "this" {
 
 # API Gateway Stage
 resource "aws_api_gateway_stage" "this" {
-  count = length(local.http_events) > 0 ? 1 : 0
+  count = length(local.http_v1_events) > 0 ? 1 : 0
 
   deployment_id = aws_api_gateway_deployment.this[0].id
   rest_api_id   = aws_api_gateway_rest_api.this[0].id
@@ -496,7 +496,7 @@ resource "aws_api_gateway_stage" "this" {
 module "custom_domain" {
   source = "./modules/custom-domain"
 
-  count = var.enable_custom_domain && try(local.provider_with_defaults.customDomain, null) != null && length(local.http_events) > 0 ? 1 : 0
+  count = var.enable_custom_domain && try(local.provider_with_defaults.customDomain, null) != null && length(local.http_v1_events) > 0 ? 1 : 0
 
   domain_config        = local.provider_with_defaults.customDomain
   api_gateway_rest_api = aws_api_gateway_rest_api.this[0].id
