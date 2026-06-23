@@ -119,11 +119,13 @@ output "s3_bucket_arns" {
   description = "Map of S3 bucket ARNs by bucket name"
   value = merge(
     { for k, v in aws_s3_bucket.event_buckets : k => v.arn },
-    # Include existing buckets with constructed ARNs
+    # Include existing buckets with constructed ARNs. distinct() dedups buckets
+    # referenced by more than one S3 event (else a duplicate map key errors).
     {
-      for evt in local.s3_events_normalized :
-      evt.bucket_name => "arn:aws:s3:::${evt.bucket_name}"
-      if evt.existing
+      for name in distinct([
+        for evt in local.s3_events_normalized : evt.bucket_name if evt.existing
+      ]) :
+      name => "arn:aws:s3:::${name}"
     }
   )
 }

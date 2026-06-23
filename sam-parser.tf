@@ -450,6 +450,10 @@ locals {
         # Explicit FunctionName (already resolved by the preprocessor).
         name = try(tostring(resource.Properties.FunctionName), null)
 
+        # Explicit execution role (SAM `Role` property, a resolved ARN). When
+        # present the module honors it instead of creating a per-function role.
+        role = try(tostring(resource.Properties.Role), null)
+
         # CodeUri: per-function source directory (SAM-specific).
         # main.tf uses this as source_dir for the per-function archive.
         code_uri = try(tostring(resource.Properties.CodeUri), null)

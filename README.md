@@ -364,6 +364,8 @@ module "serverless" {
 | `AWS::Serverless::HttpApi` (self-created) | `aws_apigatewayv2_api` (HTTP) + routes/integrations/stage/authorizer |
 | `AWS::ApiGatewayV2::Api` (WEBSOCKET) | `aws_apigatewayv2_api` (WEBSOCKET) + routes/integrations/stage |
 | `AWS::Serverless::StateMachine` | `aws_sfn_state_machine` + execution role |
+| `AWS::IAM::Role` | `aws_iam_role` + inline policies + managed-policy attachments |
+| `AWS::Lambda::EventSourceMapping` (standalone) | `aws_lambda_event_source_mapping` |
 
 ### Supported SAM Event Types
 
@@ -412,6 +414,15 @@ target functions via the `!Ref`/`!GetAtt` references in `Target`/`IntegrationUri
 to `lambda_code_path`) is rendered with `DefinitionSubstitutions` (the `${Key}`
 placeholders), and `Policies` entries — `LambdaInvokePolicy` templates and inline
 `Statement` documents — are translated into the role's policy.
+
+### IAM roles and shared execution roles
+
+`AWS::IAM::Role` resources become `aws_iam_role` (assume-role policy + inline
+`Policies` + `ManagedPolicyArns`). By default each function gets a module-created
+execution role built from its `Policies`; if a function instead sets an explicit
+`Role:` (a shared role, common in hand-written SAM), that role is honored and no
+per-function role is created. A `Role` that references a template `AWS::IAM::Role`
+binds to the created role; an external ARN is used as-is.
 
 ### SAM Globals Section
 

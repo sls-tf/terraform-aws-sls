@@ -40,12 +40,24 @@ locals {
   # name — which equals the explicit FunctionName when one is set, else the
   # logical ID. This lets us recover the logical ID either way so
   # aws_lambda_function.functions[<logicalId>] resolves.
+  # Includes three key forms so a reference resolves regardless of which parse it
+  # came from: the logical ID; the RESOLVED FunctionName (resolved parse, uses
+  # caller parameter values); and the STRUCTURAL FunctionName (resolved against
+  # template Defaults). The last matters because cross-resource references
+  # (WebSocket IntegrationUri, authorizer FunctionArn) are read from the
+  # structural parse, where a parameter like Enviroment takes its Default — which
+  # can differ from the value the caller passes for the resolved parse.
   _function_name_to_logical = merge(
     { for lid in local._function_names : lid => lid },
     {
       for lid in local._function_names :
       tostring(local.functions_with_defaults[lid].name) => lid
       if try(local.functions_with_defaults[lid].name, null) != null
+    },
+    {
+      for lid in local._function_names :
+      tostring(try(local.sam_structure.Resources[lid].Properties.FunctionName, "")) => lid
+      if var.config_format == "sam" && local.sam_structure != null && tostring(try(local.sam_structure.Resources[lid].Properties.FunctionName, "")) != ""
     }
   )
 

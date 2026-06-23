@@ -3,6 +3,35 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.5.1
+
+Additive, backward compatible. Builds on v0.5.0 so a SAM app that uses shared
+IAM roles deploys as-is.
+
+### Added
+
+- **`AWS::IAM::Role` resources.** Created as `aws_iam_role` with the assume-role
+  policy, inline `Policies` (→ `aws_iam_role_policy`), and `ManagedPolicyArns`
+  (→ attachments). Role name = `RoleName` if set, else the logical ID — matching
+  how the preprocessor fabricates `!GetAtt <Role>.Arn`, so references stay
+  consistent. (`iam-roles.tf`)
+- **Honor a function's explicit `Role`.** A Lambda with `Role:` no longer gets a
+  module-created execution role; it uses the given role. A `Role` that
+  `!GetAtt`/`!Ref`s a template `AWS::IAM::Role` binds directly to the created
+  resource; an external ARN is used verbatim. Functions without `Role` are
+  unchanged (per-function role from `Policies`).
+
+### Fixed
+
+- `s3_bucket_arns` output deduplicates buckets referenced by more than one S3
+  event (previously a duplicate-map-key error).
+- `s3_artefact_names` (S3 code source) handles `CodeUri: ./` (code at the
+  template root) instead of failing on an empty path-segment list.
+- Cross-resource function references (WebSocket IntegrationUri, authorizer
+  FunctionArn) resolve when a parameter's caller value differs from its template
+  Default — the function-name lookup now covers logical ID, resolved name, and
+  structural (Default-resolved) name.
+
 ## v0.5.0
 
 Adds full SAM-as-is support for HTTP-API/WebSocket/Step-Functions apps. All

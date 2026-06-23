@@ -371,7 +371,10 @@ locals {
   s3_artefact_names = {
     for func_name in local._function_names :
     func_name => (
-      local._function_code_uri[func_name] != "" ?
+      # Guard on the FILTERED segment list, not just code_uri != "": a CodeUri of
+      # "./" (function code at the template root) trims to an empty segment list,
+      # which element() rejects — fall back to the function name in that case.
+      length([for seg in split("/", trimsuffix(trimsuffix(trimprefix(local._function_code_uri[func_name], "./"), "/"), "/dist")) : seg if seg != "" && seg != "dist"]) > 0 ?
       element(
         [for seg in split("/", trimsuffix(trimsuffix(trimprefix(local._function_code_uri[func_name], "./"), "/"), "/dist")) : seg if seg != "" && seg != "dist"],
         length([for seg in split("/", trimsuffix(trimsuffix(trimprefix(local._function_code_uri[func_name], "./"), "/"), "/dist")) : seg if seg != "" && seg != "dist"]) - 1
@@ -473,11 +476,13 @@ locals {
     func_name => length(try(local.merged_iam_statements[func_name], [])) > 0
   }
 
-  # Functions requiring custom policies (non-empty statements)
+  # Functions requiring custom policies (non-empty statements). Functions that
+  # use an explicit Role are excluded — they own their permissions, and the
+  # module creates no per-function role to attach a policy to.
   functions_with_policies = nonsensitive({
     for func_name in local._function_names :
     func_name => local.merged_iam_statements[func_name]
-    if try(local._function_has_policies[func_name], false)
+    if try(local._function_has_policies[func_name], false) && !try(local._function_has_explicit_role[func_name], false)
   })
 
   # HTTP Event Parsing (Roadmap #4)
@@ -1084,6 +1089,8 @@ locals {
     "AWS::SQS::Queue",
     "AWS::CloudFront::Distribution",
     "AWS::Logs::LogGroup",
+    # IAM roles (iam-roles.tf)
+    "AWS::IAM::Role",
     # WebSocket API (websocket-api.tf): the Api drives creation; Route/Integration/
     # Stage are consumed by it; Deployment is subsumed by stage auto_deploy.
     "AWS::ApiGatewayV2::Api",
