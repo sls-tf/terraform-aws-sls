@@ -125,8 +125,14 @@ resource "aws_dynamodb_table" "custom" {
     }
   }
 
-  # Stream specification
-  stream_enabled   = try(each.value.Properties.StreamSpecification.StreamEnabled, false)
+  # Stream specification. CloudFormation enables the stream when
+  # StreamSpecification (with a StreamViewType) is present; StreamEnabled is
+  # optional. Mirror that, otherwise the provider rejects stream_view_type being
+  # set while stream_enabled is false (and the stream never turns on).
+  stream_enabled = try(
+    tobool(each.value.Properties.StreamSpecification.StreamEnabled),
+    try(each.value.Properties.StreamSpecification.StreamViewType, null) != null
+  )
   stream_view_type = try(each.value.Properties.StreamSpecification.StreamViewType, null)
 
   # Tags

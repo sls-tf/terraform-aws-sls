@@ -1,0 +1,191 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Full SAM app exercising self HttpApi + WebSocket + StateMachine + S3 events + DynamoDB stream + SQS together
+
+Metadata:
+  ServiceName: full-vv
+
+Parameters:
+  Enviroment:
+    Type: String
+    Default: dev
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 30
+    Environment:
+      Variables:
+        videosS3Bucket: !Sub texecom-vv-videos-${Enviroment}
+
+Resources:
+  # ---- Self-created HTTP API (v2) + REQUEST authorizer + CORS ----
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Auth:
+        Authorizers:
+          TexecomCloudAuth:
+            AuthorizerType: REQUEST
+            EnableSimpleResponses: true
+            FunctionArn: !GetAtt APIAuthFunction.Arn
+            Identity:
+              Headers:
+                - token
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowMethods:
+          - "*"
+
+  APIAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub APIAuthFunction-${Enviroment}
+      Handler: auth.check
+
+  GetVideosFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub GetVideos-${Enviroment}
+      Handler: videoLogAPI.get
+      Events:
+        GetByPanel:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            PayloadFormatVersion: "1.0"
+            Path: /videos/{panelID}
+            Method: get
+            Auth:
+              Authorizer: TexecomCloudAuth
+
+  # ---- S3 bucket + S3 event (Bucket via !Ref) ----
+  VideosS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub texecom-vv-videos-${Enviroment}
+
+  ProcessRawVideoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ProcessRawVideo-${Enviroment}
+      Handler: videoUpload.processrawvideo
+      Events:
+        CreateThumbnailEvent:
+          Type: S3
+          Properties:
+            Bucket: !Ref VideosS3Bucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: "input"
+
+  # ---- WebSocket API ----
+  CommsWebSocket:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub realtime-comms-${Enviroment}
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: "$request.body.action"
+
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref CommsWebSocket
+      RouteKey: $connect
+      AuthorizationType: NONE
+      Target: !Join ["/", ["integrations", !Ref ConnectIntegration]]
+
+  ConnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref CommsWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri:
+        Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ConnectMessageFunction.Arn}/invocations
+
+  ConnectMessageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ConnectMessage-${Enviroment}
+      Handler: signalling.connectMessage
+
+  Stage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      StageName: !Sub ${Enviroment}
+      ApiId: !Ref CommsWebSocket
+
+  # ---- DynamoDB table + stream event source mapping ----
+  VideoLogDynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub VideoLog-${Enviroment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: type
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: type
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+  VideoLogStreamHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub VideoLogStreamHandler-${Enviroment}
+      Handler: videoLog.streamHandler
+
+  VideoLogStream:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 10
+      Enabled: true
+      EventSourceArn: !GetAtt VideoLogDynamoDBTable.StreamArn
+      FunctionName: !GetAtt VideoLogStreamHandlerFunction.Arn
+      StartingPosition: LATEST
+
+  # ---- SQS queue + handler ----
+  PortalAPIQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub PortalAPIQueue-${Enviroment}
+      VisibilityTimeout: 60
+
+  PortalQueueHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub PortalQueueHandler-${Enviroment}
+      Handler: videoLog.portalQueueHandler
+      Events:
+        MySQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt PortalAPIQueue.Arn
+            BatchSize: 10
+
+  # ---- Step Functions ----
+  SaveStreamFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub SaveStream-${Enviroment}
+      Handler: upload.save_stream
+
+  EventClipStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: !Sub eventClipStateMachine-${Enviroment}
+      DefinitionUri: tests/fixtures/sfn-definition.json
+      DefinitionSubstitutions:
+        SaveStreamFunctionArn: !GetAtt SaveStreamFunction.Arn
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref SaveStreamFunction

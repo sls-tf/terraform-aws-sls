@@ -1,0 +1,16 @@
+{
+  "Comment": "Test timer state machine",
+  "StartAt": "Wait",
+  "States": {
+    "Wait": {
+      "Type": "Wait",
+      "SecondsPath": "$.seconds",
+      "Next": "Invoke"
+    },
+    "Invoke": {
+      "Type": "Task",
+      "Resource": "${SaveStreamFunctionArn}",
+      "End": true
+    }
+  }
+}
