@@ -3,6 +3,15 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.5.2
+
+### Added
+
+- Outputs for the v0.5.x resources so consumers can wire endpoints/ARNs:
+  `http_api_ids`, `http_api_endpoints` (self-created HTTP API v2),
+  `websocket_api_ids`, `websocket_api_endpoints`, `state_machine_arns`,
+  `iam_role_arns`.
+
 ## v0.5.1
 
 Additive, backward compatible. Builds on v0.5.0 so a SAM app that uses shared

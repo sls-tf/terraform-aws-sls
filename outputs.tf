@@ -302,3 +302,37 @@ output "lambda_edge_distribution_count" {
   description = "Total count of Lambda@Edge CloudFront distributions created from cloudFront events"
   value       = length(aws_cloudfront_distribution.lambda_edge)
 }
+
+# ============================================================================
+# Self-created HTTP API (v2), WebSocket API, Step Functions, IAM roles
+# ============================================================================
+
+output "http_api_ids" {
+  description = "Map of self-created HTTP API (v2) IDs keyed by AWS::Serverless::HttpApi logical ID"
+  value       = { for k, v in aws_apigatewayv2_api.self : k => v.id }
+}
+
+output "http_api_endpoints" {
+  description = "Map of self-created HTTP API (v2) invoke endpoints keyed by logical ID"
+  value       = { for k, v in aws_apigatewayv2_api.self : k => v.api_endpoint }
+}
+
+output "websocket_api_ids" {
+  description = "Map of WebSocket API IDs keyed by AWS::ApiGatewayV2::Api logical ID"
+  value       = { for k, v in aws_apigatewayv2_api.websocket : k => v.id }
+}
+
+output "websocket_api_endpoints" {
+  description = "Map of WebSocket API endpoints (wss://) keyed by logical ID"
+  value       = { for k, v in aws_apigatewayv2_api.websocket : k => v.api_endpoint }
+}
+
+output "state_machine_arns" {
+  description = "Map of Step Functions state machine ARNs keyed by logical ID"
+  value       = { for k, v in aws_sfn_state_machine.this : k => v.arn }
+}
+
+output "iam_role_arns" {
+  description = "Map of created AWS::IAM::Role ARNs keyed by logical ID"
+  value       = { for k, v in aws_iam_role.custom : k => v.arn }
+}
