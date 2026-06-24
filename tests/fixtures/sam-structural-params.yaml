@@ -1,0 +1,33 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Param (Enviroment) used in resource names + referenced by an event
+
+Metadata:
+  ServiceName: struct-vv
+
+Parameters:
+  Enviroment:
+    Type: String
+    Default: dev
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+
+Resources:
+  VideosBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub vids-${Enviroment}
+
+  ProcessFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub Process-${Enviroment}
+      Handler: index.handler
+      Events:
+        S3Ev:
+          Type: S3
+          Properties:
+            Bucket: !Ref VideosBucket
+            Events: s3:ObjectCreated:*

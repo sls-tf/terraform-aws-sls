@@ -102,10 +102,23 @@ locals {
   # structure parse so resource `Condition`s resolve against real per-env values
   # while non-condition parameters stay empty (and thus can't make the read
   # unknown at plan).
-  sam_structure_params = {
-    for k in local.sam_condition_param_names :
-    k => tostring(try(var.sam_template_parameters[k], ""))
-  }
+  sam_structure_params = merge(
+    {
+      for k in local.sam_condition_param_names :
+      k => tostring(try(var.sam_template_parameters[k], ""))
+    },
+    # Caller-declared structural parameters: known-at-plan params (e.g. an
+    # environment suffix used in !Sub resource names/ARNs) that must resolve in
+    # the structural parse so event/cross-resource names match the resolved
+    # resources. Only safe for params whose values are always known at plan
+    # (literals/SSM/remote-state) — never in-plan resource attributes, which
+    # would defer the structural read and collapse for_each keys.
+    {
+      for k in var.structural_sam_parameters :
+      k => tostring(try(var.sam_template_parameters[k], ""))
+      if can(var.sam_template_parameters[k])
+    }
+  )
 
   # Raw SAM parse — only active when config_format is "sam".
   # Decoded from the external preprocessor result (handles !Ref/!Sub/!If etc.).
