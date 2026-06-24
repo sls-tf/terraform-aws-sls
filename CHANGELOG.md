@@ -3,6 +3,18 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.5.3
+
+### Added
+
+- `structural_sam_parameters` variable: names of known-at-plan SAM Parameters
+  (e.g. an environment suffix used in `!Sub` resource names/ARNs) that should be
+  resolved in the **structural** parse, not just the parameters referenced by
+  Conditions. Without this, when a caller's parameter value differs from the
+  template Default, event sources and cross-resource references (S3 bucket names,
+  SQS/DynamoDB stream ARNs) resolved against the Default and pointed at the wrong
+  resource names. Default `[]` — fully backward compatible.
+
 ## v0.5.2
 
 ### Added

@@ -184,6 +184,28 @@ variable "strict_sam_intrinsics" {
   default     = false
 }
 
+variable "structural_sam_parameters" {
+  description = <<-DESC
+    Names of SAM template Parameters that are known at plan time AND affect
+    resource STRUCTURE or names — e.g. an environment suffix used in !Sub
+    resource names/ARNs (`Enviroment` -> `texecom-vv-videos-$${Enviroment}`).
+
+    These are resolved in the structural (plan-time-known) parse, in addition to
+    the parameters referenced by template Conditions, so that event sources and
+    cross-resource references (S3 bucket names, SQS/DynamoDB ARNs, stream ARNs)
+    resolve to the SAME names as the resolved resources. Without this, a caller
+    value that differs from the template Default makes the structural parse use
+    the Default — wiring then points at the wrong (Default-named) resources.
+
+    Only list parameters whose values are ALWAYS known at plan (literals, SSM,
+    remote state). Never list a parameter fed from an in-plan resource attribute
+    (e.g. a co-planned ARN): that would defer the structural read and collapse
+    every for_each key.
+  DESC
+  type        = list(string)
+  default     = []
+}
+
 variable "stage_override" {
   description = <<-DESC
     Overrides the deployment "stage" used in every generated resource name
