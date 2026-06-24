@@ -256,7 +256,9 @@ locals {
             type                 = try(event.Type, "")
             apiId                = try(event.Properties.ApiId, null)
             payloadFormatVersion = try(event.Properties.PayloadFormatVersion, "2.0")
-            authorizer           = try(event.Properties.Authorizer, null)
+            # SAM nests the authorizer name under Properties.Auth.Authorizer; some
+            # templates put it directly under Properties.Authorizer. Accept both.
+            authorizer = try(event.Properties.Auth.Authorizer, event.Properties.Authorizer, null)
           }
         }) :
 
@@ -264,9 +266,13 @@ locals {
         # that are created either via the Resources section or pre-existing)
         try(event.Type, "") == "S3" ? jsonencode({
           s3 = {
+            # Bucket may be a !Ref to a template AWS::S3::Bucket — which the
+            # preprocessor leaves as "__UNRESOLVED__!Ref <LogicalId>". Strip the
+            # marker so the logical ID resolves to the bucket's real name; a
+            # literal bucket name simply misses the lookup and is used as-is.
             bucket = try(
-              local.sam_s3_bucket_names[tostring(event.Properties.Bucket)],
-              lower(tostring(try(event.Properties.Bucket, event_name)))
+              local.sam_s3_bucket_names[replace(tostring(event.Properties.Bucket), local._unresolved_ref_prefix, "")],
+              lower(replace(tostring(try(event.Properties.Bucket, event_name)), local._unresolved_ref_prefix, ""))
             )
             event    = try(event.Properties.Events, "s3:ObjectCreated:*")
             existing = true
@@ -336,48 +342,52 @@ locals {
   # Translates SAM-specific resource types to CloudFormation-equivalent types
   # that custom_resources.tf already handles, then passes everything else through.
 
-  sam_resources_translated = var.config_format == "sam" && local.sam_raw != null ? {
-    for logical_id, resource in try(local.sam_raw.Resources, {}) :
-    # JSON-laundered to the dynamic `any` type: the SimpleTable-translation branch
-    # and the pass-through `resource` branch are differently-shaped objects, which
-    # a bare ternary cannot unify ("Inconsistent conditional result types"). Both
-    # branches are encoded to a string and decoded once — the same idiom used for
-    # sam_function_events above.
-    logical_id => jsondecode(
-      # AWS::Serverless::SimpleTable → AWS::DynamoDB::Table (PAY_PER_REQUEST)
-      try(resource.Type, "") == "AWS::Serverless::SimpleTable" ? jsonencode({
-        Type = "AWS::DynamoDB::Table"
-        Properties = {
-          TableName   = try(resource.Properties.TableName, logical_id)
-          BillingMode = "PAY_PER_REQUEST"
-          AttributeDefinitions = [{
-            AttributeName = try(resource.Properties.PrimaryKey.Name, "id")
-            AttributeType = (
-              try(resource.Properties.PrimaryKey.Type, "String") == "Number" ? "N" :
-              try(resource.Properties.PrimaryKey.Type, "String") == "Binary" ? "B" : "S"
-            )
-          }]
-          KeySchema = [{
-            AttributeName = try(resource.Properties.PrimaryKey.Name, "id")
-            KeyType       = "HASH"
-          }]
-          Tags = try(resource.Properties.Tags, null)
-        }
-      }) :
+  # JSON-laundered to the dynamic `any` type. Two levels of laundering are needed:
+  # (1) per-value, so the SimpleTable-translation branch and the pass-through
+  # `resource` branch unify; and (2) the WHOLE map, so a template with
+  # heterogeneously-shaped resources (e.g. ApiGatewayV2 Api + Route + Integration
+  # alongside S3/DynamoDB) does not produce a concrete object type that fails to
+  # unify with the empty-map `: {}` branch. Same idiom as
+  # sam_custom_resources_structure below.
+  sam_resources_translated = jsondecode(
+    var.config_format == "sam" && local.sam_raw != null ? jsonencode({
+      for logical_id, resource in try(local.sam_raw.Resources, {}) :
+      logical_id => jsondecode(
+        # AWS::Serverless::SimpleTable → AWS::DynamoDB::Table (PAY_PER_REQUEST)
+        try(resource.Type, "") == "AWS::Serverless::SimpleTable" ? jsonencode({
+          Type = "AWS::DynamoDB::Table"
+          Properties = {
+            TableName   = try(resource.Properties.TableName, logical_id)
+            BillingMode = "PAY_PER_REQUEST"
+            AttributeDefinitions = [{
+              AttributeName = try(resource.Properties.PrimaryKey.Name, "id")
+              AttributeType = (
+                try(resource.Properties.PrimaryKey.Type, "String") == "Number" ? "N" :
+                try(resource.Properties.PrimaryKey.Type, "String") == "Binary" ? "B" : "S"
+              )
+            }]
+            KeySchema = [{
+              AttributeName = try(resource.Properties.PrimaryKey.Name, "id")
+              KeyType       = "HASH"
+            }]
+            Tags = try(resource.Properties.Tags, null)
+          }
+        }) :
 
-      # All other resource types (AWS::S3::Bucket, AWS::DynamoDB::Table, etc.)
-      # pass through unchanged for custom_resources.tf to handle.
-      jsonencode(resource)
-    )
-    # Exclude SAM-specific types that are handled elsewhere:
-    # - Function → becomes a Lambda function via functions map
-    # - Api → route table handled via http events on functions
-    # - LayerVersion and Application → not yet supported, excluded silently
-    if !contains(
-      ["AWS::Serverless::Function", "AWS::Serverless::Api", "AWS::Serverless::HttpApi", "AWS::Serverless::LayerVersion", "AWS::Serverless::Application"],
-      try(resource.Type, "")
-    )
-  } : {}
+        # All other resource types (AWS::S3::Bucket, AWS::DynamoDB::Table, etc.)
+        # pass through unchanged for custom_resources.tf to handle.
+        jsonencode(resource)
+      )
+      # Exclude SAM-specific types that are handled elsewhere:
+      # - Function → becomes a Lambda function via functions map
+      # - Api / HttpApi → route table handled via http events on functions
+      # - LayerVersion and Application → not yet supported, excluded silently
+      if !contains(
+        ["AWS::Serverless::Function", "AWS::Serverless::Api", "AWS::Serverless::HttpApi", "AWS::Serverless::LayerVersion", "AWS::Serverless::Application"],
+        try(resource.Type, "")
+      )
+    }) : jsonencode({})
+  )
 
   # Structural twin of sam_resources_translated: logical ID → translated
   # CloudFormation resource, from the plan-time-known parse. Drives custom-resource
@@ -439,6 +449,10 @@ locals {
       logical_id => {
         # Explicit FunctionName (already resolved by the preprocessor).
         name = try(tostring(resource.Properties.FunctionName), null)
+
+        # Explicit execution role (SAM `Role` property, a resolved ARN). When
+        # present the module honors it instead of creating a per-function role.
+        role = try(tostring(resource.Properties.Role), null)
 
         # CodeUri: per-function source directory (SAM-specific).
         # main.tf uses this as source_dir for the per-function archive.

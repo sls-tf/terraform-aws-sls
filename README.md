@@ -24,9 +24,12 @@ A Terraform module that parses and validates Serverless Framework configuration 
 
 ### Event Source Integration
 - **API Gateway REST API**: HTTP event triggers with CORS support and path-based routing
+- **API Gateway HTTP API (v2)**: self-created or attach-to-existing, with REQUEST Lambda authorizers and CORS
+- **API Gateway WebSocket API**: routes/integrations/stage from `AWS::ApiGatewayV2::Api` (WEBSOCKET)
+- **Step Functions**: `AWS::Serverless::StateMachine` with definition substitutions and policy templates
 - **S3 Event Notifications**: Object created/removed triggers with prefix/suffix filtering
 - **EventBridge & CloudWatch Rules**: Schedule (cron/rate) and event pattern triggers
-- **DynamoDB Streams & SQS**: Event source mappings with batch processing configuration
+- **DynamoDB Streams & SQS**: Event source mappings (function `Events:` or standalone `AWS::Lambda::EventSourceMapping`) with batch processing configuration
 
 ### Advanced Features
 - **IAM Role & Policy Management**: Custom `iamRoleStatements` translated to IAM policies
@@ -358,17 +361,68 @@ module "serverless" {
 | `AWS::SNS::Topic` | `aws_sns_topic` |
 | `AWS::SQS::Queue` | `aws_sqs_queue` |
 | `AWS::CloudFront::Distribution` | `aws_cloudfront_distribution` |
+| `AWS::Serverless::HttpApi` (self-created) | `aws_apigatewayv2_api` (HTTP) + routes/integrations/stage/authorizer |
+| `AWS::ApiGatewayV2::Api` (WEBSOCKET) | `aws_apigatewayv2_api` (WEBSOCKET) + routes/integrations/stage |
+| `AWS::Serverless::StateMachine` | `aws_sfn_state_machine` + execution role |
+| `AWS::IAM::Role` | `aws_iam_role` + inline policies + managed-policy attachments |
+| `AWS::Lambda::EventSourceMapping` (standalone) | `aws_lambda_event_source_mapping` |
 
 ### Supported SAM Event Types
 
 | SAM Event | SLS Equivalent | Notes |
 |---|---|---|
-| `Api` / `HttpApi` | `http` | Path and method routing |
+| `Api` / `HttpApi` | `http` | Path and method routing; self-created or attach-to-existing HTTP API |
 | `S3` | `s3` | Object created/removed triggers |
 | `DynamoDB` | `stream` | Stream event source mappings |
 | `SQS` | `sqs` | Queue event source mappings |
 | `Schedule` | `schedule` | cron/rate expressions |
 | `EventBridgeRule` | `eventBridge` | Event pattern rules |
+
+### HTTP APIs (v2): self-created vs attach-to-existing
+
+An `HttpApi` function event is handled in one of three ways, chosen automatically
+from its `ApiId`:
+
+- **No `ApiId`** — a v1 REST API (`aws_api_gateway_rest_api`) is self-created (the
+  original behaviour).
+- **`ApiId: !Ref <HttpApiLogicalId>`** referencing an inline
+  `AWS::Serverless::HttpApi` resource — the module **self-creates** the HTTP API
+  (`aws_apigatewayv2_api`, protocol `HTTP`) with its integrations, routes, a
+  `$default` auto-deploy stage, CORS from the resource's `CorsConfiguration`, and
+  a REQUEST Lambda authorizer from `Auth.Authorizers`.
+- **`ApiId: <real-api-id>`** (a literal id owned by another stack) — the routes
+  **attach to that existing** HTTP API; the API itself is not managed here.
+
+The authorizer name on an event is read from either `Properties.Auth.Authorizer`
+(standard SAM) or `Properties.Authorizer`.
+
+### WebSocket APIs
+
+An `AWS::ApiGatewayV2::Api` with `ProtocolType: WEBSOCKET`, together with its
+`AWS::ApiGatewayV2::Route`, `::Integration`, and `::Stage` resources, is created
+as a Terraform WebSocket API: `aws_apigatewayv2_api` (WEBSOCKET) +
+`_integration` (AWS_PROXY) + `_route` + `_stage` (auto-deploy) + Lambda invoke
+permissions. Routes are wired to their integrations and integrations to their
+target functions via the `!Ref`/`!GetAtt` references in `Target`/`IntegrationUri`.
+`AWS::ApiGatewayV2::Deployment` is subsumed by stage auto-deploy, and explicit
+`AWS::Lambda::Permission` resources are subsumed by the module's own permissions.
+
+### Step Functions (State Machines)
+
+`AWS::Serverless::StateMachine` (and `AWS::StepFunctions::StateMachine`) become
+`aws_sfn_state_machine` plus an execution role. The `DefinitionUri` JSON (relative
+to `lambda_code_path`) is rendered with `DefinitionSubstitutions` (the `${Key}`
+placeholders), and `Policies` entries — `LambdaInvokePolicy` templates and inline
+`Statement` documents — are translated into the role's policy.
+
+### IAM roles and shared execution roles
+
+`AWS::IAM::Role` resources become `aws_iam_role` (assume-role policy + inline
+`Policies` + `ManagedPolicyArns`). By default each function gets a module-created
+execution role built from its `Policies`; if a function instead sets an explicit
+`Role:` (a shared role, common in hand-written SAM), that role is honored and no
+per-function role is created. A `Role` that references a template `AWS::IAM::Role`
+binds to the created role; an external ARN is used as-is.
 
 ### SAM Globals Section
 
@@ -378,12 +432,17 @@ route configuration is driven by per-function events.
 
 ### CloudFormation Intrinsic Functions
 
-Terraform's `yamldecode` resolves YAML tags as their scalar values:
-- `!Ref MyBucket` → the string `"MyBucket"`
-- `!GetAtt Table.StreamArn` → the string `"Table.StreamArn"`
+A vendored Node preprocessor (`scripts/sam-preprocessor.js`) evaluates CFN
+intrinsics before the template reaches Terraform. Both the **short tag** form
+(`!Sub`, `!Ref`, `!GetAtt`, `!Join`, `!If`, …) and the **full object** form
+(`Fn::Sub`, `Ref`, `Fn::GetAtt`, `Fn::Join`, …) are supported and may be mixed in
+the same template. `!Ref`/`!GetAtt` to template resources resolve to the
+resource's deterministic name/ARN (region + account + resolved name); references
+that can't be resolved are left as a marker string the module recognises (e.g.
+when wiring routes/integrations by logical ID).
 
 For `DynamoDB` and `SQS` events that use `!GetAtt`/`!Ref` to reference stream ARNs or
-queue ARNs, these string values are passed through to the event source mapping resource
+queue ARNs, these values are passed through to the event source mapping resource
 and resolved at apply time by AWS. ARN format validation is skipped for SAM format.
 
 ### Controlling Which Resources Get Created

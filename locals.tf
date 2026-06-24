@@ -371,7 +371,10 @@ locals {
   s3_artefact_names = {
     for func_name in local._function_names :
     func_name => (
-      local._function_code_uri[func_name] != "" ?
+      # Guard on the FILTERED segment list, not just code_uri != "": a CodeUri of
+      # "./" (function code at the template root) trims to an empty segment list,
+      # which element() rejects — fall back to the function name in that case.
+      length([for seg in split("/", trimsuffix(trimsuffix(trimprefix(local._function_code_uri[func_name], "./"), "/"), "/dist")) : seg if seg != "" && seg != "dist"]) > 0 ?
       element(
         [for seg in split("/", trimsuffix(trimsuffix(trimprefix(local._function_code_uri[func_name], "./"), "/"), "/dist")) : seg if seg != "" && seg != "dist"],
         length([for seg in split("/", trimsuffix(trimsuffix(trimprefix(local._function_code_uri[func_name], "./"), "/"), "/dist")) : seg if seg != "" && seg != "dist"]) - 1
@@ -473,11 +476,13 @@ locals {
     func_name => length(try(local.merged_iam_statements[func_name], [])) > 0
   }
 
-  # Functions requiring custom policies (non-empty statements)
+  # Functions requiring custom policies (non-empty statements). Functions that
+  # use an explicit Role are excluded — they own their permissions, and the
+  # module creates no per-function role to attach a policy to.
   functions_with_policies = nonsensitive({
     for func_name in local._function_names :
     func_name => local.merged_iam_statements[func_name]
-    if try(local._function_has_policies[func_name], false)
+    if try(local._function_has_policies[func_name], false) && !try(local._function_has_explicit_role[func_name], false)
   })
 
   # HTTP Event Parsing (Roadmap #4)
@@ -547,8 +552,12 @@ locals {
   ]
 
   # HTTP events that attach to an existing apigatewayv2 API (v2 path, http-api-v2.tf).
+  # Excludes self-created HttpApi events (ApiId is a !Ref to a template
+  # AWS::Serverless::HttpApi resource — handled by http-api-v2-self.tf) so a
+  # self-targeted event never reaches the attach path with an unresolved ApiId.
   http_api_v2_events = [
-    for event in local.http_events : event if event.api_id != null
+    for event in local.http_events : event
+    if event.api_id != null && !contains(local.sam_all_http_api_ids, replace(tostring(event.api_id), local._unresolved_ref_prefix, ""))
   ]
 
   # Keyed map for the v2 path: "<function>-<METHOD>-<sanitized_path>" → event.
@@ -573,10 +582,11 @@ locals {
         for event in local.http_api_v2_events :
         event.api_id if event.authorizer == auth_name
       ][0], null)
-      # function_ref is the parsed Function logical ID (the common case). It maps
-      # directly to aws_lambda_function.functions[<id>]; if it does not match a
-      # template function, http_api_v2_authorizer_errors surfaces the mismatch.
-      function_name = auth_def.function_ref
+      # function_ref is the parsed Function logical ID or its resolved
+      # FunctionName; map either back to the logical ID so
+      # aws_lambda_function.functions[<id>] resolves. If it matches neither,
+      # http_api_v2_authorizer_errors surfaces the mismatch.
+      function_name = try(local._function_name_to_logical[auth_def.function_ref], auth_def.function_ref)
     })
     # Only emit authorizers a route references, and only when their API is known.
     if length([for event in local.http_api_v2_events : event if event.authorizer == auth_name]) > 0
@@ -1078,7 +1088,24 @@ locals {
     "AWS::SNS::Topic",
     "AWS::SQS::Queue",
     "AWS::CloudFront::Distribution",
-    "AWS::Logs::LogGroup"
+    "AWS::Logs::LogGroup",
+    # IAM roles (iam-roles.tf)
+    "AWS::IAM::Role",
+    # WebSocket API (websocket-api.tf): the Api drives creation; Route/Integration/
+    # Stage are consumed by it; Deployment is subsumed by stage auto_deploy.
+    "AWS::ApiGatewayV2::Api",
+    "AWS::ApiGatewayV2::Route",
+    "AWS::ApiGatewayV2::Integration",
+    "AWS::ApiGatewayV2::Stage",
+    "AWS::ApiGatewayV2::Deployment",
+    # Step Functions (step-functions.tf)
+    "AWS::Serverless::StateMachine",
+    "AWS::StepFunctions::StateMachine",
+    # Explicit Lambda invoke permissions are subsumed by the module's own
+    # auto-generated aws_lambda_permission resources for its APIs.
+    "AWS::Lambda::Permission",
+    # Standalone event source mappings (event-source-mappings-cfn.tf)
+    "AWS::Lambda::EventSourceMapping"
   ])
 
   # Identify unsupported resource types for validation.

@@ -1,0 +1,79 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM template exercising a self-created AWS::Serverless::HttpApi (v2) with REQUEST authorizer + CORS
+
+Metadata:
+  ServiceName: self-vv
+
+Parameters:
+  Enviroment:
+    Type: String
+    Default: dev
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 30
+
+Resources:
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Auth:
+        Authorizers:
+          TexecomCloudAuth:
+            AuthorizerPayloadFormatVersion: '2.0'
+            AuthorizerType: REQUEST
+            EnableSimpleResponses: true
+            FunctionArn: !GetAtt APIAuthFunction.Arn
+            Identity:
+              Headers:
+                - token
+      CorsConfiguration:
+        AllowHeaders:
+          - Content-Type
+          - token
+        ExposeHeaders:
+          - token
+        AllowOrigins:
+          - "*"
+        AllowMethods:
+          - "*"
+
+  APIAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub APIAuthFunction-${Enviroment}
+      Handler: auth.check
+
+  SaveStreamFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub SaveStream-${Enviroment}
+      Handler: upload.save_stream
+      Events:
+        SaveStream:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            PayloadFormatVersion: "1.0"
+            Path: /saveStream
+            Method: post
+            Auth:
+              Authorizer: TexecomCloudAuth
+
+  GetVideosFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub GetVideos-${Enviroment}
+      Handler: videoLogAPI.get
+      Events:
+        GetByPanel:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            PayloadFormatVersion: "1.0"
+            Path: /videos/{panelID}
+            Method: get
+            Auth:
+              Authorizer: TexecomCloudAuth

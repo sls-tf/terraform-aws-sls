@@ -1,0 +1,33 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM template exercising AWS::Serverless::StateMachine
+
+Metadata:
+  ServiceName: sfn-vv
+
+Parameters:
+  Enviroment:
+    Type: String
+    Default: dev
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+
+Resources:
+  SaveStreamFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub SaveStream-${Enviroment}
+      Handler: upload.save_stream
+
+  EventClipStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: !Sub eventClipStateMachine-${Enviroment}
+      DefinitionUri: tests/fixtures/sfn-definition.json
+      DefinitionSubstitutions:
+        SaveStreamFunctionArn: !GetAtt SaveStreamFunction.Arn
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref SaveStreamFunction

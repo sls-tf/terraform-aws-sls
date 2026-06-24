@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM template exercising a WebSocket API (AWS::ApiGatewayV2::Api WEBSOCKET)
+
+Metadata:
+  ServiceName: ws-vv
+
+Parameters:
+  Enviroment:
+    Type: String
+    Default: dev
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+
+Resources:
+  CommsWebSocket:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub realtime-comms-${Enviroment}
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: "$request.body.action"
+
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref CommsWebSocket
+      RouteKey: $connect
+      AuthorizationType: NONE
+      Target: !Join
+        - "/"
+        - - "integrations"
+          - !Ref ConnectIntegration
+
+  ConnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref CommsWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri:
+        Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ConnectMessageFunction.Arn}/invocations
+
+  ConnectMessageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ConnectMessage-${Enviroment}
+      Handler: signalling.connectMessage
+
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref CommsWebSocket
+      RouteKey: $disconnect
+      AuthorizationType: NONE
+      Target: !Join
+        - "/"
+        - - "integrations"
+          - !Ref DisconnectIntegration
+
+  DisconnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref CommsWebSocket
+      IntegrationType: AWS_PROXY
+      IntegrationUri:
+        Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${OnDisconnectFunction.Arn}/invocations
+
+  OnDisconnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub OnDisconnect-${Enviroment}
+      Handler: signalling.disconnect
+
+  Deployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn:
+      - DisconnectRoute
+    Properties:
+      ApiId: !Ref CommsWebSocket
+
+  Stage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      StageName: !Sub ${Enviroment}
+      DeploymentId: !Ref Deployment
+      ApiId: !Ref CommsWebSocket

@@ -99,9 +99,13 @@ resource "null_resource" "lambda_size_validation" {
   }
 }
 
-# IAM execution role for each Lambda function
+# IAM execution role for each Lambda function (skipped for functions that
+# declare an explicit Role — those are honored as-is).
 resource "aws_iam_role" "lambda_execution" {
-  for_each = local.functions_with_defaults
+  for_each = {
+    for fn, cfg in local.functions_with_defaults :
+    fn => cfg if !try(local._function_has_explicit_role[fn], false)
+  }
 
   name = "${try(local.parsed_config_resolved.service, "unknown")}-${local.provider_with_defaults.stage}-${each.key}-role"
 
@@ -130,7 +134,10 @@ resource "aws_iam_role" "lambda_execution" {
 
 # Attach basic execution policy for CloudWatch Logs
 resource "aws_iam_role_policy_attachment" "lambda_logs" {
-  for_each = local.functions_with_defaults
+  for_each = {
+    for fn, cfg in local.functions_with_defaults :
+    fn => cfg if !try(local._function_has_explicit_role[fn], false)
+  }
 
   role       = aws_iam_role.lambda_execution[each.key].name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
@@ -140,7 +147,7 @@ resource "aws_iam_role_policy_attachment" "lambda_logs" {
 resource "aws_iam_role_policy_attachment" "lambda_vpc" {
   for_each = toset([
     for func_name in local._function_names : func_name
-    if try(local._function_has_vpc[func_name], false)
+    if try(local._function_has_vpc[func_name], false) && !try(local._function_has_explicit_role[func_name], false)
   ])
 
   role       = aws_iam_role.lambda_execution[each.key].name
@@ -175,7 +182,8 @@ resource "aws_lambda_function" "functions" {
 
   # Explicit FunctionName from SAM template overrides the auto-generated name.
   function_name = try(each.value.name, null) != null ? each.value.name : "${try(local.parsed_config_resolved.service, "unknown")}-${local.provider_with_defaults.stage}-${each.key}"
-  role          = aws_iam_role.lambda_execution[each.key].arn
+  # Honor an explicit Role; otherwise use the per-function role created above.
+  role = try(local._function_has_explicit_role[each.key], false) ? local._function_role_arn[each.key] : aws_iam_role.lambda_execution[each.key].arn
 
   # Code source: either local zip (data.archive_file) or S3 (artefact built
   # in CI and promoted via the SHA pin in var.lambda_code_source).

@@ -1,0 +1,54 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM template exercising AWS::IAM::Role + a function honoring an explicit Role
+
+Metadata:
+  ServiceName: iam-vv
+
+Parameters:
+  Enviroment:
+    Type: String
+    Default: dev
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+
+Resources:
+  StreamingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: allowStream
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kinesisvideo:*
+                  - sts:AssumeRole
+                Resource: "*"
+
+  # Honors the shared StreamingRole — no per-function role should be created.
+  VideoStreamFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub VideoStream-${Enviroment}
+      Handler: upload.get_stream_config
+      Role: !GetAtt StreamingRole.Arn
+
+  # No Role -> the module creates a per-function execution role (existing behaviour).
+  PlainFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub Plain-${Enviroment}
+      Handler: index.handler

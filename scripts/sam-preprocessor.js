@@ -34,6 +34,10 @@ const CFN_TAGS = [
   'Base64', 'Cidr', 'Condition', 'Transform',
 ];
 
+// Recognized intrinsic names for the long form ({ "Fn::<Name>": ... }). Mirrors
+// CFN_TAGS so short (!Sub) and long (Fn::Sub) forms support the same set.
+const INTRINSIC_TAGS = new Set(CFN_TAGS);
+
 const types = CFN_TAGS.flatMap(tag =>
   ['scalar', 'sequence', 'mapping'].map(kind =>
     new yaml.Type(`!${tag}`, {
@@ -83,6 +87,26 @@ function evaluate(node, ctx) {
   }
 
   if (typeof node === 'object') {
+    // Full-form (object) intrinsics: { "Fn::Sub": ... }, { "Ref": ... }, etc.
+    // js-yaml's CFN_SCHEMA only tags the SHORT forms (!Sub, !Ref, …) with __cfn;
+    // the long forms arrive as ordinary single-key objects. CloudFormation allows
+    // both interchangeably, and real templates mix them, so evaluate the long form
+    // here too. A single key of "Ref" or "Fn::<Name>" (Name a known intrinsic) is
+    // treated as that intrinsic; anything else is a plain object.
+    const keys = Object.keys(node);
+    if (keys.length === 1) {
+      const k = keys[0];
+      if (k === 'Ref') {
+        return evalIntrinsic('Ref', node[k], ctx);
+      }
+      if (k.startsWith('Fn::')) {
+        const tag = k.slice(4);
+        if (INTRINSIC_TAGS.has(tag)) {
+          return evalIntrinsic(tag, node[k], ctx);
+        }
+      }
+    }
+
     const result = {};
     for (const [k, v] of Object.entries(node)) {
       const val = evaluate(v, ctx);
