@@ -79,6 +79,26 @@ data "archive_file" "lambda_code" {
   ]
 }
 
+# S3 code-source mode: read each function's artefact metadata so its ETag can
+# drive source_code_hash. Without this, an S3 source with a constant key (e.g.
+# CI publishing to .../latest.zip) is created once and NEVER redeployed —
+# terraform sees no change because source_code_hash is null and the key string
+# is stable. The ETag is a deterministic change-token that moves whenever CI
+# republishes the key; terraform only compares config↔state for source_code_hash
+# (it doesn't recompute the package sha256 for S3 sources), so a non-sha token is
+# fine — this mirrors the established latest.zip + hash-trigger pattern. Cheap:
+# the data source reads object metadata (HEAD), not the zip body.
+data "aws_s3_object" "lambda_artefact" {
+  for_each = {
+    for func_name in local._function_names :
+    func_name => func_name
+    if var.lambda_code_source.type == "s3"
+  }
+
+  bucket = var.lambda_code_source.bucket
+  key    = "${var.lambda_code_source.key_prefix}/${local.s3_artefact_names[each.key]}/${var.lambda_code_source.sha}.zip"
+}
+
 # Lambda package size validation (local mode only — S3-sourced packages
 # are AWS's responsibility to validate at upload time, and there is no local
 # archive to measure).
@@ -180,7 +200,7 @@ resource "aws_lambda_function" "functions" {
   # Code source: either local zip (data.archive_file) or S3 (artefact built
   # in CI and promoted via the SHA pin in var.lambda_code_source).
   filename         = var.lambda_code_source.type == "local" ? data.archive_file.lambda_code[each.key].output_path : null
-  source_code_hash = var.lambda_code_source.type == "local" ? data.archive_file.lambda_code[each.key].output_base64sha256 : null
+  source_code_hash = var.lambda_code_source.type == "local" ? data.archive_file.lambda_code[each.key].output_base64sha256 : try(data.aws_s3_object.lambda_artefact[each.key].etag, null)
   s3_bucket        = var.lambda_code_source.type == "s3" ? var.lambda_code_source.bucket : null
   s3_key           = var.lambda_code_source.type == "s3" ? "${var.lambda_code_source.key_prefix}/${local.s3_artefact_names[each.key]}/${var.lambda_code_source.sha}.zip" : null
 
