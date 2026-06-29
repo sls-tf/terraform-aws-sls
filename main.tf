@@ -264,6 +264,19 @@ resource "aws_lambda_function" "functions" {
 
 resource "null_resource" "config_validation" {
   lifecycle {
+    # FAIL LOUDLY when the SAM preprocessor's PLAN-KNOWN reads (structure /
+    # condition-params, which drive every for_each KEY) error. Without this, an
+    # error result is coalesced to null (sam_structure) / swallowed by try()
+    # (condition-params) and the module produces ZERO resources SILENTLY, the
+    # failure only surfacing far downstream (e.g. an aws_lambda_permission "Function
+    # not found" in a consumer). sam-validation.tf reports the resolved-read error,
+    # but that read DEFERS on a greenfield/ephemeral plan — so this check is what
+    # catches the silent zero-resources case at plan time.
+    precondition {
+      condition     = length(local.sam_preprocessor_errors) == 0
+      error_message = "SAM template preprocessing failed for '${var.config_path}', which would otherwise produce ZERO resources silently. scripts/sam-preprocessor.js reported:\n- ${join("\n- ", distinct(local.sam_preprocessor_errors))}\nVerify the template exists at the resolved path, contains valid YAML/intrinsics, and that 'node' is available on PATH."
+    }
+
     # Ensure file was read successfully. Skipped for the typescript format, whose
     # parser reads the file itself and reports read/parse failures through
     # local.typescript_all_errors (surfaced by the validation_errors check below).

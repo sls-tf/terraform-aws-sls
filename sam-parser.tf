@@ -140,6 +140,29 @@ locals {
     null
   ) : null
 
+  # Errors from the PLAN-KNOWN preprocessor reads, surfaced for a LOUD precondition.
+  #
+  # scripts/sam-preprocessor.js emits {content, error}: on any failure (file not
+  # found, malformed YAML, an unresolved intrinsic in strict mode, …) it returns
+  # content="" plus a non-empty `error`. The parse locals above coalesce empty
+  # content to null (sam_structure) and the condition-params read swallows its error
+  # via try() — so a failure in EITHER of these reads silently produced a module with
+  # ZERO resources (the structure read drives every for_each KEY), the failure only
+  # surfacing far downstream (e.g. an aws_lambda_permission "Function not found" in a
+  # consuming module, hours later).
+  #
+  # We deliberately check the STRUCTURE and CONDITION-PARAMS reads here, NOT the
+  # resolved (sam_yaml) read: sam-validation.tf already reports sam_yaml's error, and
+  # on a greenfield/ephemeral plan sam_yaml embeds in-plan parameter values, DEFERS to
+  # apply, and its error is unknown — so checking it can't fail at plan. The structure
+  # read (condition-relevant params only) and condition-params read (no params) stay
+  # plan-known, so a failure in them is catchable at plan. compact() drops the empty
+  # (success) strings.
+  sam_preprocessor_errors = var.config_format == "sam" ? compact([
+    try(data.external.sam_yaml_structure[0].result.error, ""),
+    try(data.external.sam_condition_params[0].result.error, ""),
+  ]) : []
+
   # Resolve template Parameters: prefer values from var.sam_template_parameters,
   # fall back to the Default defined in the template.
   sam_parameters = var.config_format == "sam" && local.sam_raw != null ? {
