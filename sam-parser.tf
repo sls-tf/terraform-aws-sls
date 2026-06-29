@@ -134,10 +134,18 @@ locals {
   # dynamic-block conditions. Constraint this implies for templates: Parameters
   # must not change template STRUCTURE (e.g. an !If on a parameter that adds or
   # removes resources/events) — the standard Terraform for_each constraint.
-  sam_structure = var.config_format == "sam" ? (
+  # On a structure-read FAILURE (content empty / unparseable) decode an empty
+  # document instead of null. null propagates into every for_each KEY derived from
+  # the structure and aborts the plan with a cryptic "Invalid for_each argument",
+  # masking the real cause; an empty document yields zero keys (a clean empty
+  # module) so the loud, specific config_validation precondition
+  # (local.sam_preprocessor_errors) is what surfaces. The fallback is a JSON
+  # STRING fed to jsondecode — NOT an object literal — so it never type-unifies
+  # with (and coerces) the real parsed structure on the success path.
+  sam_structure = var.config_format == "sam" ? jsondecode(
     try(data.external.sam_yaml_structure[0].result.content, "") != "" ?
-    try(jsondecode(data.external.sam_yaml_structure[0].result.content), null) :
-    null
+    data.external.sam_yaml_structure[0].result.content :
+    "{\"Resources\":{}}"
   ) : null
 
   # Errors from the PLAN-KNOWN preprocessor reads, surfaced for a LOUD precondition.
@@ -145,8 +153,8 @@ locals {
   # scripts/sam-preprocessor.js emits {content, error}: on any failure (file not
   # found, malformed YAML, an unresolved intrinsic in strict mode, …) it returns
   # content="" plus a non-empty `error`. The parse locals above coalesce empty
-  # content to null (sam_structure) and the condition-params read swallows its error
-  # via try() — so a failure in EITHER of these reads silently produced a module with
+  # content to an empty document (sam_structure) and the condition-params read
+  # swallows its error via try() — so a failure in EITHER of these reads silently produced a module with
   # ZERO resources (the structure read drives every for_each KEY), the failure only
   # surfacing far downstream (e.g. an aws_lambda_permission "Function not found" in a
   # consuming module, hours later).

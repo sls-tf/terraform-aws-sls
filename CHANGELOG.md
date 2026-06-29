@@ -3,6 +3,28 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.5.5
+
+### Fixed
+
+- **Null-safety for the structure read.** On a preprocessor failure
+  `sam_structure` now decodes an empty document (`{"Resources":{}}`) rather than
+  resolving to `null`. The fallback is a JSON **string** fed to `jsondecode`, not
+  an object literal — an object-literal fallback type-unifies with (and coerces)
+  the real parsed structure on the success path, silently dropping every non-empty
+  template to zero `Resources`. With the string fallback a failed read yields a
+  clean empty module so the `config_validation` precondition (added in v0.5.4) is
+  the single, specific thing that surfaces — and a valid template is untouched.
+
+### Tests
+
+- `valid_sam_has_no_preprocessor_errors` directly exercises
+  `local.sam_preprocessor_errors`, guarding the new guard against false-firing on
+  a healthy template; the loud-failure runs are retained as regression coverage.
+  (The greenfield-defer path — where `sam_yaml` defers and only the structure read
+  catches the error — fails on `module.sls`'s nested precondition, which
+  `terraform test` cannot assert via `expect_failures`; it is verified manually.)
+
 ## v0.5.4
 
 ### Fixed
