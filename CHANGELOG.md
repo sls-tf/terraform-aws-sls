@@ -3,6 +3,23 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.5.4
+
+### Fixed
+
+- Fail loudly on a SAM preprocessor error instead of silently producing a
+  zero-resource module. `scripts/sam-preprocessor.js` returns `{content:"", error}`
+  on a missing file, malformed YAML, an unresolved intrinsic in strict mode, or no
+  `node` on PATH; that error was coalesced to `null` (`sam_structure`) or swallowed
+  by `try()` (`sam_condition_params`). The existing validation only inspected the
+  **resolved** read (`sam_yaml`), which **defers** on a greenfield/ephemeral plan
+  that passes in-plan parameter values — so an error in the plan-known **structure**
+  or **condition-params** reads (the ones that drive every `for_each` key) was
+  missed, and the module produced zero Lambda functions with the failure only
+  surfacing far downstream (e.g. an `aws_lambda_permission` "Function not found" in
+  a consumer). A `config_validation` precondition now surfaces these reads' errors
+  with the real preprocessor message at plan time.
+
 ## v0.5.3
 
 ### Added
