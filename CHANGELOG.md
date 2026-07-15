@@ -3,6 +3,17 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.5.6
+
+### Changed
+
+- **Published to the Terraform Registry** as `sls-tf/sls/aws`. The repository was
+  renamed to `terraform-aws-sls` to meet the registry's naming requirements.
+- Added an Apache-2.0 `LICENSE` (required by the registry — earlier tags cannot
+  be ingested as they predate it).
+- Removed internal planning artifacts (`agent-os/`, working docs, conversion
+  demo fixtures) from the tree and from git history.
+
 ## v0.5.5
 
 ### Fixed
