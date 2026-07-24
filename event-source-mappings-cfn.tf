@@ -21,7 +21,7 @@ locals {
     for logical_id, resource in local._custom_resources_structure :
     logical_id => resource
     if try(resource.Type, "") == "AWS::Lambda::EventSourceMapping"
-    && (var.resource_types == null || contains(var.resource_types, "AWS::Lambda::EventSourceMapping"))
+    && (contains(coalesce(var.resource_types, ["AWS::Lambda::EventSourceMapping"]), "AWS::Lambda::EventSourceMapping"))
   }
 
   # Created DynamoDB table name -> logical ID (to recover real stream ARNs).

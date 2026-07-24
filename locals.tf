@@ -1043,42 +1043,42 @@ locals {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource
     if local._custom_resource_types[logical_id] == "AWS::S3::Bucket"
-    && (var.resource_types == null || contains(var.resource_types, "AWS::S3::Bucket"))
+    && (contains(coalesce(var.resource_types, ["AWS::S3::Bucket"]), "AWS::S3::Bucket"))
   }
 
   dynamodb_tables = {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource
     if local._custom_resource_types[logical_id] == "AWS::DynamoDB::Table"
-    && (var.resource_types == null || contains(var.resource_types, "AWS::DynamoDB::Table"))
+    && (contains(coalesce(var.resource_types, ["AWS::DynamoDB::Table"]), "AWS::DynamoDB::Table"))
   }
 
   sns_topics = {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource
     if local._custom_resource_types[logical_id] == "AWS::SNS::Topic"
-    && (var.resource_types == null || contains(var.resource_types, "AWS::SNS::Topic"))
+    && (contains(coalesce(var.resource_types, ["AWS::SNS::Topic"]), "AWS::SNS::Topic"))
   }
 
   sqs_queues = {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource
     if local._custom_resource_types[logical_id] == "AWS::SQS::Queue"
-    && (var.resource_types == null || contains(var.resource_types, "AWS::SQS::Queue"))
+    && (contains(coalesce(var.resource_types, ["AWS::SQS::Queue"]), "AWS::SQS::Queue"))
   }
 
   cloudfront_distributions = {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource
     if local._custom_resource_types[logical_id] == "AWS::CloudFront::Distribution"
-    && (var.resource_types == null || contains(var.resource_types, "AWS::CloudFront::Distribution"))
+    && (contains(coalesce(var.resource_types, ["AWS::CloudFront::Distribution"]), "AWS::CloudFront::Distribution"))
   }
 
   log_groups = {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource
     if local._custom_resource_types[logical_id] == "AWS::Logs::LogGroup"
-    && (var.resource_types == null || contains(var.resource_types, "AWS::Logs::LogGroup"))
+    && (contains(coalesce(var.resource_types, ["AWS::Logs::LogGroup"]), "AWS::Logs::LogGroup"))
   }
 
   # Supported resource types
@@ -1116,7 +1116,7 @@ locals {
     logical_id => type
     if type != ""
     && !contains(local.supported_resource_types, type)
-    && (var.resource_types == null || contains(var.resource_types, type))
+    && (contains(coalesce(var.resource_types, [type]), type))
   }
 
   # Validation errors for unsupported resources

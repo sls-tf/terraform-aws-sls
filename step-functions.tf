@@ -24,7 +24,7 @@ locals {
     for logical_id, resource in local._custom_resources_structure :
     logical_id => resource
     if contains(["AWS::Serverless::StateMachine", "AWS::StepFunctions::StateMachine"], try(resource.Type, ""))
-    && (var.resource_types == null || contains(var.resource_types, try(resource.Type, "")))
+    && (contains(coalesce(var.resource_types, [try(resource.Type, "")]), try(resource.Type, "")))
   }
 
   # Per-state-machine derived config.

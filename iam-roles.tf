@@ -16,7 +16,7 @@ locals {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource
     if local._custom_resource_types[logical_id] == "AWS::IAM::Role"
-    && (var.resource_types == null || contains(var.resource_types, "AWS::IAM::Role"))
+    && (contains(coalesce(var.resource_types, ["AWS::IAM::Role"]), "AWS::IAM::Role"))
   }
 
   # Role logical ID -> role name (RoleName if set, else the logical ID — which is

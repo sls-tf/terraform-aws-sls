@@ -78,7 +78,7 @@ locals {
   sam_self_http_apis = toset([
     for event in local.http_self_v2_events :
     event.self_api_logical_id
-    if var.resource_types == null || contains(var.resource_types, "AWS::Serverless::HttpApi")
+    if contains(coalesce(var.resource_types, ["AWS::Serverless::HttpApi"]), "AWS::Serverless::HttpApi")
   ])
 
   # Per self-API properties (CORS etc.) from the structural parse (literals, so

@@ -46,7 +46,7 @@ variable "resource_types" {
   default     = null
 
   validation {
-    condition     = var.resource_types == null || length(var.resource_types) > 0
+    condition     = var.resource_types == null ? true : length(var.resource_types) > 0
     error_message = "resource_types must be null (all types) or a non-empty list."
   }
 }

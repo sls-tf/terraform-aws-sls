@@ -33,7 +33,7 @@ locals {
     logical_id => resource
     if try(resource.Type, "") == "AWS::ApiGatewayV2::Api"
     && upper(tostring(try(resource.Properties.ProtocolType, ""))) == "WEBSOCKET"
-    && (var.resource_types == null || contains(var.resource_types, "AWS::ApiGatewayV2::Api"))
+    && (contains(coalesce(var.resource_types, ["AWS::ApiGatewayV2::Api"]), "AWS::ApiGatewayV2::Api"))
   }
 
   _websocket_api_ids = toset(keys(local.websocket_apis))

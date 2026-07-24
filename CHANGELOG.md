@@ -3,6 +3,19 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.5.7
+
+### Fixed
+
+- **`resource_types = null` (the default) no longer errors on Terraform < 1.12.**
+  Older Terraform does not short-circuit `||` inside validations and
+  expressions, so every `var.resource_types == null || contains/length(...)`
+  guard evaluated the right-hand side against `null` and failed with
+  `Invalid function argument`. All guards are now null-safe:
+  `contains(coalesce(var.resource_types, [X]), X)` at expression sites and a
+  lazy ternary in the variable validation. Behaviour is unchanged on
+  Terraform >= 1.12; on older versions the module now works as documented.
+
 ## v0.5.6
 
 ### Changed
