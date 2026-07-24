@@ -1,0 +1,60 @@
+service: athena-analytics
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+functions:
+  ingest:
+    handler: handler.ingest
+
+resources:
+  Resources:
+    EventsDatabase:
+      Type: AWS::Glue::Database
+      Properties:
+        CatalogId: "123456789012"
+        DatabaseInput:
+          Name: events_db_dev
+          Description: Raw event data
+
+    RawWorkGroup:
+      Type: AWS::Athena::WorkGroup
+      Properties:
+        Name: raw-events-dev
+        Description: Ad-hoc queries over raw events
+        State: ENABLED
+        WorkGroupConfiguration:
+          EnforceWorkGroupConfiguration: true
+          PublishCloudWatchMetricsEnabled: true
+          ResultConfiguration:
+            OutputLocation: s3://query-results-bucket/raw/
+
+    CuratedWorkGroup:
+      Type: AWS::Athena::WorkGroup
+      Properties:
+        Name: curated-events-dev
+        Description: CTAS curated outputs
+        RecursiveDeleteOption: true
+        WorkGroupConfiguration:
+          EnforceWorkGroupConfiguration: false
+          BytesScannedCutoffPerQuery: 10737418240
+          ResultConfiguration:
+            OutputLocation: s3://query-results-bucket/curated/
+            EncryptionConfiguration:
+              EncryptionOption: SSE_S3
+
+    RawEventsFlattenedView:
+      Type: AWS::Athena::NamedQuery
+      Properties:
+        Name: raw_events_flattened
+        Description: Flattened view over raw events
+        Database:
+          Ref: EventsDatabase
+        WorkGroup:
+          Ref: RawWorkGroup
+        QueryString: >-
+          CREATE OR REPLACE VIEW raw_events_flattened AS
+          SELECT id, sourcedetails.panel AS panel FROM raw_events

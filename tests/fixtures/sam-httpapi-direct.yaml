@@ -1,0 +1,33 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: HttpApi route integrating DIRECTLY to EventBridge (no Lambda in the path)
+
+Metadata:
+  ServiceName: direct-svc
+
+Resources:
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+
+  EventsIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationSubtype: EventBridge-PutEvents
+      PayloadFormatVersion: "1.0"
+      RequestParameters:
+        EventBusName: default
+        Source: api.events
+        DetailType: IncomingEvent
+        Detail: $request.body
+
+  EventsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: POST /events
+      Target: !Join
+        - /
+        - - integrations
+          - !Ref EventsIntegration

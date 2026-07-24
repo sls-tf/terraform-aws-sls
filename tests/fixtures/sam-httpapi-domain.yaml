@@ -1,0 +1,33 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Self-created HttpApi with a custom Domain (cert + Route53 + base path)
+
+Metadata:
+  ServiceName: domain-svc
+
+Resources:
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Domain:
+        DomainName: api.example.com
+        CertificateArn: arn:aws:acm:eu-west-1:123456789012:certificate/abc-123
+        SecurityPolicy: TLS_1_2
+        BasePath:
+          - v1
+          - v2
+        Route53:
+          HostedZoneId: Z0123456789ABCDEFGHIJ
+
+  ListFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: api.list
+      Runtime: nodejs20.x
+      Events:
+        List:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /items
+            Method: get

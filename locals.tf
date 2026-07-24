@@ -1081,6 +1081,48 @@ locals {
     && (contains(coalesce(var.resource_types, ["AWS::Logs::LogGroup"]), "AWS::Logs::LogGroup"))
   }
 
+  athena_workgroups = {
+    for logical_id, resource in local.custom_resources_raw :
+    logical_id => resource
+    if local._custom_resource_types[logical_id] == "AWS::Athena::WorkGroup"
+    && (contains(coalesce(var.resource_types, ["AWS::Athena::WorkGroup"]), "AWS::Athena::WorkGroup"))
+  }
+
+  athena_named_queries = {
+    for logical_id, resource in local.custom_resources_raw :
+    logical_id => resource
+    if local._custom_resource_types[logical_id] == "AWS::Athena::NamedQuery"
+    && (contains(coalesce(var.resource_types, ["AWS::Athena::NamedQuery"]), "AWS::Athena::NamedQuery"))
+  }
+
+  glue_databases = {
+    for logical_id, resource in local.custom_resources_raw :
+    logical_id => resource
+    if local._custom_resource_types[logical_id] == "AWS::Glue::Database"
+    && (contains(coalesce(var.resource_types, ["AWS::Glue::Database"]), "AWS::Glue::Database"))
+  }
+
+  cloudwatch_dashboards = {
+    for logical_id, resource in local.custom_resources_raw :
+    logical_id => resource
+    if local._custom_resource_types[logical_id] == "AWS::CloudWatch::Dashboard"
+    && (contains(coalesce(var.resource_types, ["AWS::CloudWatch::Dashboard"]), "AWS::CloudWatch::Dashboard"))
+  }
+
+  cloudwatch_alarms = {
+    for logical_id, resource in local.custom_resources_raw :
+    logical_id => resource
+    if local._custom_resource_types[logical_id] == "AWS::CloudWatch::Alarm"
+    && (contains(coalesce(var.resource_types, ["AWS::CloudWatch::Alarm"]), "AWS::CloudWatch::Alarm"))
+  }
+
+  sns_subscriptions = {
+    for logical_id, resource in local.custom_resources_raw :
+    logical_id => resource
+    if local._custom_resource_types[logical_id] == "AWS::SNS::Subscription"
+    && (contains(coalesce(var.resource_types, ["AWS::SNS::Subscription"]), "AWS::SNS::Subscription"))
+  }
+
   # Supported resource types
   supported_resource_types = toset([
     "AWS::S3::Bucket",
@@ -1089,6 +1131,16 @@ locals {
     "AWS::SQS::Queue",
     "AWS::CloudFront::Distribution",
     "AWS::Logs::LogGroup",
+    # Athena / Glue analytics resources (athena.tf)
+    "AWS::Athena::WorkGroup",
+    "AWS::Athena::NamedQuery",
+    "AWS::Glue::Database",
+    # CloudWatch observability + alerting (cloudwatch-observability.tf)
+    "AWS::CloudWatch::Dashboard",
+    "AWS::CloudWatch::Alarm",
+    "AWS::SNS::Subscription",
+    # Centrally-declared multi-target EventBridge rules (events-rules-cfn.tf)
+    "AWS::Events::Rule",
     # IAM roles (iam-roles.tf)
     "AWS::IAM::Role",
     # WebSocket API (websocket-api.tf): the Api drives creation; Route/Integration/
@@ -1122,7 +1174,7 @@ locals {
   # Validation errors for unsupported resources
   custom_resource_validation_errors = [
     for logical_id, type in local.unsupported_resources :
-    "Unsupported CloudFormation resource type '${type}' for resource '${logical_id}'. Supported types: S3::Bucket, DynamoDB::Table, SNS::Topic, SQS::Queue, CloudFront::Distribution, Logs::LogGroup."
+    "Unsupported CloudFormation resource type '${type}' for resource '${logical_id}'. Supported types: S3::Bucket, DynamoDB::Table, SNS::Topic, SNS::Subscription, SQS::Queue, CloudFront::Distribution, Logs::LogGroup, Athena::WorkGroup, Athena::NamedQuery, Glue::Database, CloudWatch::Dashboard, CloudWatch::Alarm, Events::Rule."
   ]
 
   # ============================================================================

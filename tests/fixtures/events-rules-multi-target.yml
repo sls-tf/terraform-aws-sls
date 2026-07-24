@@ -1,0 +1,60 @@
+service: events-rules
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+functions:
+  enricher:
+    handler: handler.enrich
+  auditor:
+    handler: handler.audit
+
+resources:
+  Resources:
+    EnricherDlq:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: enricher-dlq-dev
+
+    AuditorDlq:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: auditor-dlq-dev
+
+    PanelEventsRule:
+      Type: AWS::Events::Rule
+      Properties:
+        Name: panel-events-dev
+        Description: Fan out panel events to enricher and auditor
+        EventBusName: default
+        EventPattern:
+          source:
+            - custom.panels
+          detail-type:
+            - PanelEvent
+        Targets:
+          - Id: enricher
+            Arn:
+              Fn::GetAtt: [enricher, Arn]
+            DeadLetterConfig:
+              Arn:
+                Fn::GetAtt: [EnricherDlq, Arn]
+            RetryPolicy:
+              MaximumEventAgeInSeconds: 3600
+              MaximumRetryAttempts: 4
+          - Id: auditor
+            Arn:
+              Fn::GetAtt: [auditor, Arn]
+            DeadLetterConfig:
+              Arn:
+                Fn::GetAtt: [AuditorDlq, Arn]
+            RetryPolicy:
+              MaximumEventAgeInSeconds: 7200
+              MaximumRetryAttempts: 2
+          - Id: external-bus
+            Arn: arn:aws:events:us-east-1:123456789012:event-bus/central
+            RetryPolicy:
+              MaximumRetryAttempts: 1

@@ -75,11 +75,21 @@ locals {
   # events that reference them, then gated by the resource_types allowlist. An
   # HttpApi resource referenced by no !Ref event (e.g. an authorizer-only shared
   # API) is not self-created here.
-  sam_self_http_apis = toset([
-    for event in local.http_self_v2_events :
-    event.self_api_logical_id
-    if contains(coalesce(var.resource_types, ["AWS::Serverless::HttpApi"]), "AWS::Serverless::HttpApi")
-  ])
+  sam_self_http_apis = toset(concat(
+    [
+      for event in local.http_self_v2_events :
+      event.self_api_logical_id
+      if contains(coalesce(var.resource_types, ["AWS::Serverless::HttpApi"]), "AWS::Serverless::HttpApi")
+    ],
+    # APIs referenced only by DIRECT (non-Lambda) integrations — e.g. an API
+    # Gateway -> EventBridge route with no function in the path — must also be
+    # created (see http-api-v2-direct.tf).
+    [
+      for integration in values(local.http_direct_integrations) :
+      integration.api_logical_id
+      if contains(coalesce(var.resource_types, ["AWS::Serverless::HttpApi"]), "AWS::Serverless::HttpApi")
+    ]
+  ))
 
   # Per self-API properties (CORS etc.) from the structural parse (literals, so
   # always plan-known).
