@@ -3,6 +3,17 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.7.1
+
+### Added
+
+- **`TableInput.ViewSql` extension on `AWS::Glue::Table`** — declare an Athena
+  view with raw SQL and the module computes the presto-view envelope
+  (`/* Presto View: <base64 json> */` with originalSql/catalog/schema and
+  Presto-typed columns: string→varchar, int→integer, struct<>→row()),
+  defaulting `TableType: VIRTUAL_VIEW` and injecting the `presto_view`
+  parameter. A hand-encoded `ViewOriginalText` still passes through verbatim.
+
 ## v0.7.0
 
 ### Added

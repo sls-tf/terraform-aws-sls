@@ -90,6 +90,23 @@ resources:
               - Name: panel
                 Type: string
 
+    SqlViewTable:
+      Type: AWS::Glue::Table
+      Properties:
+        DatabaseName:
+          Ref: EventsDatabase
+        TableInput:
+          Name: raw_events_by_panel
+          ViewSql: SELECT sourcedetails.panel AS panel, count(*) AS event_count FROM raw_events GROUP BY 1
+          StorageDescriptor:
+            Columns:
+              - Name: panel
+                Type: string
+              - Name: event_count
+                Type: bigint
+              - Name: details
+                Type: struct<panel:string,zone:int>
+
     RawEventsFlattenedView:
       Type: AWS::Athena::NamedQuery
       Properties:

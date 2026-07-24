@@ -25,11 +25,72 @@ resource "aws_glue_catalog_database" "custom" {
   depends_on = [null_resource.config_validation]
 }
 
+locals {
+  # sls.tf extension: a Glue table may declare `TableInput.ViewSql` (raw SQL)
+  # instead of a hand-encoded ViewOriginalText. The module then produces
+  # Athena's presto-view envelope itself: "/* Presto View: <base64 json> */"
+  # with {originalSql, catalog, schema, columns}, defaults TableType to
+  # VIRTUAL_VIEW and injects the presto_view table parameter — so template
+  # authors write plain SQL, as they did in pre-migration athena.views blocks.
+  _glue_view_sql_tables = {
+    for lid, resource in local.glue_tables :
+    lid => resource
+    if try(resource.Properties.TableInput.ViewSql, null) != null
+  }
+
+  # Glue -> Presto column types for the view metadata. Multi-char type names
+  # that CONTAIN shorter type names (integer/bigint/smallint/tinyint vs "int")
+  # are tokenized first so the bare "int" rewrite can't corrupt them; container
+  # syntax maps struct<a:string> -> row(a varchar).
+  _glue_view_presto_columns = {
+    for lid, resource in local._glue_view_sql_tables :
+    lid => [
+      for col in try(resource.Properties.TableInput.StorageDescriptor.Columns, []) : {
+        name = col.Name
+        type = replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(
+          lower(tostring(try(col.Type, "string"))),
+          "integer", "@i@"),
+          "bigint", "@b@"),
+          "smallint", "@s@"),
+          "tinyint", "@t@"),
+          "int", "integer"),
+          "@i@", "integer"),
+          "@b@", "bigint"),
+          "@s@", "smallint"),
+          "@t@", "tinyint"),
+          "string", "varchar"),
+          "float", "real"),
+          "binary", "varbinary"),
+          "struct<", "row("),
+          "array<", "array("),
+          "map<", "map("),
+          ">", ")"),
+        ":", " ")
+      }
+    ]
+  }
+
+  _glue_view_original_text = {
+    for lid, resource in local._glue_view_sql_tables :
+    lid => "/* Presto View: ${base64encode(jsonencode({
+      originalSql = tostring(resource.Properties.TableInput.ViewSql)
+      catalog     = "awsdatacatalog"
+      schema = try(
+        aws_glue_catalog_database.custom[resource.Properties.DatabaseName.Ref].name,
+        aws_glue_catalog_database.custom[replace(tostring(resource.Properties.DatabaseName), local._unresolved_ref_prefix, "")].name,
+        tostring(resource.Properties.DatabaseName)
+      )
+      columns = local._glue_view_presto_columns[lid]
+    }))} */"
+  }
+}
+
 # Glue catalog table. Covers both real tables (columns incl. nested struct
 # types, storage/serde config, partitions) and Athena VIEWS: an Athena view is
 # a Glue table with TableType VIRTUAL_VIEW and the presto-view definition in
 # ViewOriginalText ("/* Presto View: <base64 json> */") — the CFN-portable way
-# to make e.g. raw_events_flattened directly queryable.
+# to make e.g. raw_events_flattened directly queryable. Authors can supply
+# ViewOriginalText verbatim OR raw SQL via the ViewSql extension (see above).
 resource "aws_glue_catalog_table" "custom" {
   for_each = local.glue_tables
 
@@ -46,11 +107,27 @@ resource "aws_glue_catalog_table" "custom" {
   )
 
   description = try(each.value.Properties.TableInput.Description, null)
-  table_type  = try(each.value.Properties.TableInput.TableType, null)
-  parameters  = try({ for k, v in each.value.Properties.TableInput.Parameters : k => tostring(v) }, null)
+  table_type = try(
+    each.value.Properties.TableInput.TableType,
+    contains(keys(local._glue_view_sql_tables), each.key) ? "VIRTUAL_VIEW" : null
+  )
 
-  view_original_text = try(each.value.Properties.TableInput.ViewOriginalText, null)
-  view_expanded_text = try(each.value.Properties.TableInput.ViewExpandedText, null)
+  # ViewSql tables get the presto_view marker parameter Athena requires;
+  # explicit Parameters win on conflict.
+  parameters = merge(
+    contains(keys(local._glue_view_sql_tables), each.key) ? { presto_view = "true", comment = "Presto View" } : {},
+    try({ for k, v in each.value.Properties.TableInput.Parameters : k => tostring(v) }, {})
+  )
+
+  view_original_text = try(
+    each.value.Properties.TableInput.ViewOriginalText,
+    local._glue_view_original_text[each.key],
+    null
+  )
+  view_expanded_text = try(
+    each.value.Properties.TableInput.ViewExpandedText,
+    contains(keys(local._glue_view_sql_tables), each.key) ? "/* Presto View */" : null
+  )
 
   dynamic "storage_descriptor" {
     for_each = try(each.value.Properties.TableInput.StorageDescriptor, null) != null ? [each.value.Properties.TableInput.StorageDescriptor] : []

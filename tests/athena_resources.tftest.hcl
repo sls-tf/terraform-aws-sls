@@ -127,8 +127,8 @@ run "glue_table_properties" {
   }
 
   assert {
-    condition     = length(aws_glue_catalog_table.custom) == 2
-    error_message = "Expected 2 Glue tables, got ${length(aws_glue_catalog_table.custom)}"
+    condition     = length(aws_glue_catalog_table.custom) == 3
+    error_message = "Expected 3 Glue tables, got ${length(aws_glue_catalog_table.custom)}"
   }
 
   # Real table: nested struct column schema survives
@@ -166,6 +166,54 @@ run "glue_table_properties" {
   assert {
     condition     = aws_glue_catalog_table.custom["FlattenedViewTable"].parameters["presto_view"] == "true"
     error_message = "presto_view parameter not translated"
+  }
+}
+
+run "view_sql_encoding" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/athena-analytics.yml"
+  }
+
+  # ViewSql alone implies a view: table_type + presto_view marker defaulted
+  assert {
+    condition     = aws_glue_catalog_table.custom["SqlViewTable"].table_type == "VIRTUAL_VIEW"
+    error_message = "ViewSql table did not default to VIRTUAL_VIEW"
+  }
+
+  assert {
+    condition     = aws_glue_catalog_table.custom["SqlViewTable"].parameters["presto_view"] == "true"
+    error_message = "presto_view parameter not injected for ViewSql table"
+  }
+
+  # The generated envelope decodes back to the raw SQL
+  assert {
+    condition     = jsondecode(base64decode(regex("/\\* Presto View: (\\S+) \\*/", aws_glue_catalog_table.custom["SqlViewTable"].view_original_text)[0])).originalSql == "SELECT sourcedetails.panel AS panel, count(*) AS event_count FROM raw_events GROUP BY 1"
+    error_message = "Encoded presto view does not round-trip the raw SQL"
+  }
+
+  # Schema points at the resolved database name
+  assert {
+    condition     = jsondecode(base64decode(regex("/\\* Presto View: (\\S+) \\*/", aws_glue_catalog_table.custom["SqlViewTable"].view_original_text)[0])).schema == "events_db_dev"
+    error_message = "Encoded presto view schema incorrect"
+  }
+
+  # Glue -> Presto column type mapping: string->varchar, bigint preserved,
+  # struct<a:string,b:int> -> row(a varchar,b integer)
+  assert {
+    condition = jsondecode(base64decode(regex("/\\* Presto View: (\\S+) \\*/", aws_glue_catalog_table.custom["SqlViewTable"].view_original_text)[0])).columns == [
+      { name = "panel", type = "varchar" },
+      { name = "event_count", type = "bigint" },
+      { name = "details", type = "row(panel varchar,zone integer)" },
+    ]
+    error_message = "Presto column type mapping incorrect: ${jsondecode(base64decode(regex("/\\* Presto View: (\\S+) \\*/", aws_glue_catalog_table.custom["SqlViewTable"].view_original_text)[0])).columns == null ? "null" : jsonencode(jsondecode(base64decode(regex("/\\* Presto View: (\\S+) \\*/", aws_glue_catalog_table.custom["SqlViewTable"].view_original_text)[0])).columns)}"
+  }
+
+  # Hand-encoded ViewOriginalText still passes through untouched
+  assert {
+    condition     = aws_glue_catalog_table.custom["FlattenedViewTable"].view_original_text == "/* Presto View: eyJvcmlnaW5hbFNxbCI6IlNFTEVDVCAxIn0= */"
+    error_message = "Explicit ViewOriginalText must pass through verbatim"
   }
 }
 
