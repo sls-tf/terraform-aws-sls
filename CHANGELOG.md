@@ -3,6 +3,34 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.6.0
+
+### Added
+
+- **Athena / Glue analytics resources** — `AWS::Glue::Database`,
+  `AWS::Athena::WorkGroup` (incl. per-workgroup result configuration and
+  `RecursiveDeleteOption`) and `AWS::Athena::NamedQuery`; `Ref`s to template
+  databases/workgroups resolve to the created resources (`athena.tf`).
+- **CloudWatch dashboards + alarms** — `AWS::CloudWatch::Dashboard` (string or
+  object `DashboardBody`) and `AWS::CloudWatch::Alarm` with full metric
+  configuration; alarm/OK/insufficient-data actions resolve `Ref`s to template
+  SNS topics (`cloudwatch-observability.tf`).
+- **SNS subscriptions** — `AWS::SNS::Subscription`, covering PagerDuty-style
+  https endpoints and filter policies.
+- **HTTP API custom domain** — the SAM `Domain` property on a self-created
+  `AWS::Serverless::HttpApi`: apigatewayv2 domain name, one API mapping per
+  `BasePath` entry, optional Route53 alias record (`http-api-domain.tf`).
+- **Direct (non-Lambda) HTTP API integrations** — raw
+  `AWS::ApiGatewayV2::Integration` with an `IntegrationSubtype`
+  (e.g. `EventBridge-PutEvents`) plus its `Route`s on a self HttpApi;
+  `RequestParameters` carries the transform; a minimal `events:PutEvents`
+  credentials role is auto-created when none is declared; an API referenced only
+  by direct routes is still created (`http-api-v2-direct.tf`).
+- **Centrally-declared multi-target EventBridge rules** — `AWS::Events::Rule`
+  with a `Targets` list: lambda targets, per-target dead-letter queues
+  (`Fn::GetAtt` to template SQS queues) and per-target retry policies, with
+  invoke permissions for lambda targets (`events-rules-cfn.tf`).
+
 ## v0.5.7
 
 ### Fixed
