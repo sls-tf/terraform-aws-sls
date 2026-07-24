@@ -218,3 +218,15 @@ variable "stage_override" {
   type        = string
   default     = null
 }
+
+variable "naming_convention_warning" {
+  description = <<-DESC
+    Emit a plan-time warning (check "lambda_naming_convention") when a
+    resource_types allowlist is in use and any function omits an explicit
+    name, since the module-generated "<service>-<stage>-<key>" name must match
+    what is already deployed or the plan replaces the function. Set false to
+    silence on greenfield deployments where generated names are fine.
+  DESC
+  type        = bool
+  default     = true
+}

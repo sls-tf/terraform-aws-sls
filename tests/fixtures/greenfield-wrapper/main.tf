@@ -23,6 +23,9 @@ module "sls" {
 
   resource_types = var.resource_types
 
+  # Greenfield: generated function names are the intent, not a migration risk.
+  naming_convention_warning = false
+
   sam_template_parameters = {
     RelaySecretArn        = terraform_data.secret_arn.output
     LambdaSecurityGroupId = terraform_data.sg_id.output

@@ -11,6 +11,20 @@
 #                                 cover PagerDuty-style integrations)
 
 locals {
+  # Template SNS topic logical ID -> ARN, for EVERY declared topic regardless
+  # of the resource_types allowlist: the created topic's real ARN when the
+  # module materializes it, else the deterministic ARN it has when owned
+  # externally (the allowlist use case — the infra team created it with the
+  # same name).
+  _sns_topic_ref_arns = {
+    for lid, type in local._custom_resource_types :
+    lid => try(
+      aws_sns_topic.custom[lid].arn,
+      "arn:aws:sns:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:${tostring(try(local._custom_resources_structure[lid].Properties.TopicName, "${local.to_snake_case[lid]}-${local.provider_with_defaults.stage}"))}"
+    )
+    if type == "AWS::SNS::Topic"
+  }
+
   # Resolve a CFN alarm action to an ARN. Handled forms, in order:
   #   {Ref = "TopicLogicalId"}          (yaml parse keeps the object)
   #   "__UNRESOLVED__!Ref Topic..."     (SAM preprocessor marker)
@@ -23,24 +37,24 @@ locals {
       alarm_actions = [
         for action in try(resource.Properties.AlarmActions, []) :
         try(
-          aws_sns_topic.custom[action.Ref].arn,
-          aws_sns_topic.custom[replace(tostring(action), local._unresolved_ref_prefix, "")].arn,
+          local._sns_topic_ref_arns[action.Ref],
+          local._sns_topic_ref_arns[replace(tostring(action), local._unresolved_ref_prefix, "")],
           tostring(action)
         )
       ]
       ok_actions = [
         for action in try(resource.Properties.OKActions, []) :
         try(
-          aws_sns_topic.custom[action.Ref].arn,
-          aws_sns_topic.custom[replace(tostring(action), local._unresolved_ref_prefix, "")].arn,
+          local._sns_topic_ref_arns[action.Ref],
+          local._sns_topic_ref_arns[replace(tostring(action), local._unresolved_ref_prefix, "")],
           tostring(action)
         )
       ]
       insufficient_data_actions = [
         for action in try(resource.Properties.InsufficientDataActions, []) :
         try(
-          aws_sns_topic.custom[action.Ref].arn,
-          aws_sns_topic.custom[replace(tostring(action), local._unresolved_ref_prefix, "")].arn,
+          local._sns_topic_ref_arns[action.Ref],
+          local._sns_topic_ref_arns[replace(tostring(action), local._unresolved_ref_prefix, "")],
           tostring(action)
         )
       ]
@@ -127,8 +141,8 @@ resource "aws_sns_topic_subscription" "custom" {
   # TopicArn may reference a template AWS::SNS::Topic via Ref, arrive as a SAM
   # marker, or be a literal ARN of an external topic.
   topic_arn = try(
-    aws_sns_topic.custom[each.value.Properties.TopicArn.Ref].arn,
-    aws_sns_topic.custom[replace(tostring(each.value.Properties.TopicArn), local._unresolved_ref_prefix, "")].arn,
+    local._sns_topic_ref_arns[each.value.Properties.TopicArn.Ref],
+    local._sns_topic_ref_arns[replace(tostring(each.value.Properties.TopicArn), local._unresolved_ref_prefix, "")],
     tostring(each.value.Properties.TopicArn)
   )
 

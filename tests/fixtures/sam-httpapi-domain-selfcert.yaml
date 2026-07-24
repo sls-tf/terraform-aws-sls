@@ -1,0 +1,28 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: HttpApi custom Domain with NO CertificateArn — module self-provisions an ACM cert
+
+Metadata:
+  ServiceName: selfcert-svc
+
+Resources:
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Domain:
+        DomainName: api.selfcert.example.com
+        Route53:
+          HostedZoneId: Z0123456789ABCDEFGHIJ
+
+  ListFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: api.list
+      Runtime: nodejs20.x
+      Events:
+        List:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /items
+            Method: get

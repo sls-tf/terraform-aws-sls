@@ -3,6 +3,43 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.7.0
+
+### Added
+
+- **Function-level async invoke + DLQ config** — SAM `DeadLetterQueue` maps to
+  the function's own `dead_letter_config` (with `sqs:SendMessage`/`sns:Publish`
+  granted to module-created roles) and `EventInvokeConfig` to
+  `aws_lambda_function_event_invoke_config` (max event age, retries,
+  on-success/on-failure destinations). Serverless yaml equivalents supported:
+  `onError`, `maximumEventAge`, `maximumRetryAttempts`, `destinations`
+  (`lambda-async.tf`).
+- **`AWS::Glue::Table`** — full table support incl. nested-struct column
+  schemas, storage/serde config, partition keys, and `TableType: VIRTUAL_VIEW`
+  with `ViewOriginalText` (presto-view encoding), making Athena views
+  first-class and queryable (`athena.tf`).
+- **Dynamic alarm sets** — top-level `alarms:` (yaml) / `Metadata.SlsTf.Alarms`
+  (SAM): alarm groups per resource class where `resource_names: []` expands to
+  every created resource of that class; one alarm per (group, metric,
+  resource) with class-default namespaces/dimensions and Ref-resolving actions
+  (`alarm-sets.tf`).
+- **Self-provisioned ACM certificates** — an HttpApi `Domain` with no
+  `CertificateArn` but a `Route53.HostedZoneId` gets a DNS-validated ACM cert
+  (certificate + validation record + validation waiter) wired into the domain
+  (`http-api-domain.tf`).
+- **Lambda naming-convention lint** — plan-time warning
+  (`check "lambda_naming_convention"`) when a `resource_types` allowlist is in
+  use and functions rely on generated `"<service>-<stage>-<key>"` names (a
+  brownfield mismatch replaces the function); new
+  `functions_with_generated_names` output for pre-migration diffing and
+  `naming_convention_warning` variable to opt out (`naming-lint.tf`).
+
+### Changed
+
+- Alarm-action / SNS-subscription topic `Ref`s now resolve for topics excluded
+  by the `resource_types` allowlist too, falling back to the deterministic ARN
+  of the externally-owned topic.
+
 ## v0.6.0
 
 ### Added

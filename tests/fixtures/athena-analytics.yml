@@ -46,6 +46,50 @@ resources:
             EncryptionConfiguration:
               EncryptionOption: SSE_S3
 
+    RawEventsTable:
+      Type: AWS::Glue::Table
+      Properties:
+        DatabaseName:
+          Ref: EventsDatabase
+        TableInput:
+          Name: raw_events
+          TableType: EXTERNAL_TABLE
+          Parameters:
+            classification: json
+          StorageDescriptor:
+            Location: s3://raw-events-bucket/events/
+            InputFormat: org.apache.hadoop.mapred.TextInputFormat
+            OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+            SerdeInfo:
+              SerializationLibrary: org.openx.data.jsonserde.JsonSerDe
+            Columns:
+              - Name: id
+                Type: string
+              - Name: sourcedetails
+                Type: struct<panel:string,zone:int>
+          PartitionKeys:
+            - Name: dt
+              Type: string
+
+    FlattenedViewTable:
+      Type: AWS::Glue::Table
+      Properties:
+        DatabaseName:
+          Ref: EventsDatabase
+        TableInput:
+          Name: raw_events_flattened
+          TableType: VIRTUAL_VIEW
+          Parameters:
+            presto_view: "true"
+          ViewOriginalText: "/* Presto View: eyJvcmlnaW5hbFNxbCI6IlNFTEVDVCAxIn0= */"
+          ViewExpandedText: /* Presto View */
+          StorageDescriptor:
+            Columns:
+              - Name: id
+                Type: string
+              - Name: panel
+                Type: string
+
     RawEventsFlattenedView:
       Type: AWS::Athena::NamedQuery
       Properties:

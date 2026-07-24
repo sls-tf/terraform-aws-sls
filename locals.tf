@@ -1095,6 +1095,13 @@ locals {
     && (contains(coalesce(var.resource_types, ["AWS::Athena::NamedQuery"]), "AWS::Athena::NamedQuery"))
   }
 
+  glue_tables = {
+    for logical_id, resource in local.custom_resources_raw :
+    logical_id => resource
+    if local._custom_resource_types[logical_id] == "AWS::Glue::Table"
+    && (contains(coalesce(var.resource_types, ["AWS::Glue::Table"]), "AWS::Glue::Table"))
+  }
+
   glue_databases = {
     for logical_id, resource in local.custom_resources_raw :
     logical_id => resource
@@ -1135,6 +1142,7 @@ locals {
     "AWS::Athena::WorkGroup",
     "AWS::Athena::NamedQuery",
     "AWS::Glue::Database",
+    "AWS::Glue::Table",
     # CloudWatch observability + alerting (cloudwatch-observability.tf)
     "AWS::CloudWatch::Dashboard",
     "AWS::CloudWatch::Alarm",
@@ -1174,7 +1182,7 @@ locals {
   # Validation errors for unsupported resources
   custom_resource_validation_errors = [
     for logical_id, type in local.unsupported_resources :
-    "Unsupported CloudFormation resource type '${type}' for resource '${logical_id}'. Supported types: S3::Bucket, DynamoDB::Table, SNS::Topic, SNS::Subscription, SQS::Queue, CloudFront::Distribution, Logs::LogGroup, Athena::WorkGroup, Athena::NamedQuery, Glue::Database, CloudWatch::Dashboard, CloudWatch::Alarm, Events::Rule."
+    "Unsupported CloudFormation resource type '${type}' for resource '${logical_id}'. Supported types: S3::Bucket, DynamoDB::Table, SNS::Topic, SNS::Subscription, SQS::Queue, CloudFront::Distribution, Logs::LogGroup, Athena::WorkGroup, Athena::NamedQuery, Glue::Database, Glue::Table, CloudWatch::Dashboard, CloudWatch::Alarm, Events::Rule."
   ]
 
   # ============================================================================

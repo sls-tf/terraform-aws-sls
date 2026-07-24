@@ -61,6 +61,56 @@ run "domain_properties" {
   }
 }
 
+run "no_self_cert_when_arn_given" {
+  command = plan
+
+  variables {
+    config_path   = "tests/fixtures/sam-httpapi-domain.yaml"
+    config_format = "sam"
+  }
+
+  assert {
+    condition     = length(aws_acm_certificate.self) == 0
+    error_message = "No ACM cert should be provisioned when CertificateArn is declared"
+  }
+}
+
+run "self_provisioned_cert" {
+  command = plan
+
+  variables {
+    config_path   = "tests/fixtures/sam-httpapi-domain-selfcert.yaml"
+    config_format = "sam"
+  }
+
+  # No CertificateArn + a hosted zone -> DNS-validated cert chain
+  assert {
+    condition     = aws_acm_certificate.self["HttpApi"].domain_name == "api.selfcert.example.com"
+    error_message = "Self-provisioned cert not created for the domain"
+  }
+
+  assert {
+    condition     = aws_acm_certificate.self["HttpApi"].validation_method == "DNS"
+    error_message = "Cert should be DNS-validated"
+  }
+
+  assert {
+    condition     = aws_route53_record.self_cert_validation["HttpApi"].zone_id == "Z0123456789ABCDEFGHIJ"
+    error_message = "Validation record not placed in the declared hosted zone"
+  }
+
+  assert {
+    condition     = length(aws_acm_certificate_validation.self) == 1
+    error_message = "Certificate validation waiter not created"
+  }
+
+  # Domain + root mapping + alias record still materialize
+  assert {
+    condition     = length(aws_apigatewayv2_domain_name.self) == 1 && length(aws_apigatewayv2_api_mapping.self) == 1 && length(aws_route53_record.self_httpapi) == 1
+    error_message = "Domain/mapping/alias not created alongside the self cert"
+  }
+}
+
 run "route53_record_properties" {
   command = plan
 

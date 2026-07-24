@@ -1,0 +1,41 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Function-level DeadLetterQueue + EventInvokeConfig
+
+Metadata:
+  ServiceName: async-svc
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 30
+
+Resources:
+  HeldoffDlq:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: heldoff-dlq-dev
+
+  FailureQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: failure-dest-dev
+
+  HeldoffCheck:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: heldoff.check
+      DeadLetterQueue:
+        Type: SQS
+        TargetArn: !GetAtt HeldoffDlq.Arn
+      EventInvokeConfig:
+        MaximumEventAgeInSeconds: 3600
+        MaximumRetryAttempts: 1
+        DestinationConfig:
+          OnFailure:
+            Destination: !GetAtt FailureQueue.Arn
+
+  PlainFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: plain.handler

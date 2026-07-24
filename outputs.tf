@@ -336,3 +336,8 @@ output "iam_role_arns" {
   description = "Map of created AWS::IAM::Role ARNs keyed by logical ID"
   value       = { for k, v in aws_iam_role.custom : k => v.arn }
 }
+
+output "functions_with_generated_names" {
+  description = "Functions with no explicit name and the module-generated name each will use. Diff against already-deployed function names before a brownfield migration — a mismatch means a function REPLACE, not a diff."
+  value       = local.functions_with_generated_names
+}

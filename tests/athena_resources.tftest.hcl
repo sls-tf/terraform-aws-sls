@@ -119,6 +119,56 @@ run "athena_named_query_properties" {
   }
 }
 
+run "glue_table_properties" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/athena-analytics.yml"
+  }
+
+  assert {
+    condition     = length(aws_glue_catalog_table.custom) == 2
+    error_message = "Expected 2 Glue tables, got ${length(aws_glue_catalog_table.custom)}"
+  }
+
+  # Real table: nested struct column schema survives
+  assert {
+    condition     = aws_glue_catalog_table.custom["RawEventsTable"].storage_descriptor[0].columns[1].type == "struct<panel:string,zone:int>"
+    error_message = "Nested struct column type not translated"
+  }
+
+  assert {
+    condition     = aws_glue_catalog_table.custom["RawEventsTable"].database_name == "events_db_dev"
+    error_message = "Table DatabaseName Ref not resolved to created Glue database"
+  }
+
+  assert {
+    condition     = aws_glue_catalog_table.custom["RawEventsTable"].storage_descriptor[0].ser_de_info[0].serialization_library == "org.openx.data.jsonserde.JsonSerDe"
+    error_message = "SerdeInfo not translated"
+  }
+
+  assert {
+    condition     = aws_glue_catalog_table.custom["RawEventsTable"].partition_keys[0].name == "dt"
+    error_message = "Partition keys not translated"
+  }
+
+  # Athena view: VIRTUAL_VIEW + presto-view definition makes it queryable
+  assert {
+    condition     = aws_glue_catalog_table.custom["FlattenedViewTable"].table_type == "VIRTUAL_VIEW"
+    error_message = "View TableType not translated"
+  }
+
+  assert {
+    condition     = can(regex("Presto View", aws_glue_catalog_table.custom["FlattenedViewTable"].view_original_text))
+    error_message = "ViewOriginalText not translated"
+  }
+
+  assert {
+    condition     = aws_glue_catalog_table.custom["FlattenedViewTable"].parameters["presto_view"] == "true"
+    error_message = "presto_view parameter not translated"
+  }
+}
+
 run "athena_gated_by_resource_types" {
   command = plan
 
@@ -126,6 +176,10 @@ run "athena_gated_by_resource_types" {
     config_path    = "tests/fixtures/athena-analytics.yml"
     resource_types = ["AWS::Glue::Database"]
   }
+
+  # The scoped allowlist + unnamed `ingest` function trips the (intended)
+  # naming-convention lint; terraform test surfaces check warnings as failures.
+  expect_failures = [check.lambda_naming_convention]
 
   assert {
     condition     = length(aws_glue_catalog_database.custom) == 1

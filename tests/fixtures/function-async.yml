@@ -1,0 +1,26 @@
+service: async-yaml
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+functions:
+  worker:
+    handler: handler.work
+    onError:
+      Ref: ErrorTopic
+    maximumEventAge: 7200
+    maximumRetryAttempts: 0
+    destinations:
+      onFailure: arn:aws:sqs:us-east-1:123456789012:external-failures
+  plain:
+    handler: handler.plain
+
+resources:
+  Resources:
+    ErrorTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: worker-errors-dev

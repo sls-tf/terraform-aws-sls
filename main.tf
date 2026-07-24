@@ -231,6 +231,15 @@ resource "aws_lambda_function" "functions" {
     }
   }
 
+  # Function-level async-invoke DLQ (SAM DeadLetterQueue / yaml onError) —
+  # see lambda-async.tf for the resolution rules.
+  dynamic "dead_letter_config" {
+    for_each = local._function_has_dlq[each.key] ? [1] : []
+    content {
+      target_arn = local.function_dlq_arns[each.key]
+    }
+  }
+
   dynamic "vpc_config" {
     for_each = try(length(each.value.vpc_config.subnet_ids), 0) > 0 ? [each.value.vpc_config] : []
     content {

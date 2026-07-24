@@ -533,6 +533,21 @@ locals {
           }
         ] : null
 
+        # Function-level async-invoke DLQ (SAM DeadLetterQueue) — the function's
+        # own dead_letter_config, distinct from any EventBridge-target DLQ.
+        dead_letter_queue = try(resource.Properties.DeadLetterQueue, null) != null ? {
+          type       = tostring(try(resource.Properties.DeadLetterQueue.Type, "SQS"))
+          target_arn = tostring(try(resource.Properties.DeadLetterQueue.TargetArn, ""))
+        } : null
+
+        # SAM EventInvokeConfig -> aws_lambda_function_event_invoke_config.
+        event_invoke_config = try(resource.Properties.EventInvokeConfig, null) != null ? {
+          maximum_event_age_in_seconds = try(resource.Properties.EventInvokeConfig.MaximumEventAgeInSeconds, null)
+          maximum_retry_attempts       = try(resource.Properties.EventInvokeConfig.MaximumRetryAttempts, null)
+          on_success                   = try(tostring(resource.Properties.EventInvokeConfig.DestinationConfig.OnSuccess.Destination), null)
+          on_failure                   = try(tostring(resource.Properties.EventInvokeConfig.DestinationConfig.OnFailure.Destination), null)
+        } : null
+
         # Global env vars merged with function-level; function wins on conflict.
         # All values are already resolved by the preprocessor. A value that is
         # NOT scalar at this point means an unsupported/unresolved intrinsic (or a

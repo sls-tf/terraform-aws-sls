@@ -25,6 +25,73 @@ resource "aws_glue_catalog_database" "custom" {
   depends_on = [null_resource.config_validation]
 }
 
+# Glue catalog table. Covers both real tables (columns incl. nested struct
+# types, storage/serde config, partitions) and Athena VIEWS: an Athena view is
+# a Glue table with TableType VIRTUAL_VIEW and the presto-view definition in
+# ViewOriginalText ("/* Presto View: <base64 json> */") — the CFN-portable way
+# to make e.g. raw_events_flattened directly queryable.
+resource "aws_glue_catalog_table" "custom" {
+  for_each = local.glue_tables
+
+  name = try(
+    each.value.Properties.TableInput.Name,
+    "${local.to_snake_case[each.key]}_${local.provider_with_defaults.stage}"
+  )
+
+  # DatabaseName may reference a template AWS::Glue::Database via Ref.
+  database_name = try(
+    aws_glue_catalog_database.custom[each.value.Properties.DatabaseName.Ref].name,
+    aws_glue_catalog_database.custom[replace(tostring(each.value.Properties.DatabaseName), local._unresolved_ref_prefix, "")].name,
+    tostring(each.value.Properties.DatabaseName)
+  )
+
+  description = try(each.value.Properties.TableInput.Description, null)
+  table_type  = try(each.value.Properties.TableInput.TableType, null)
+  parameters  = try({ for k, v in each.value.Properties.TableInput.Parameters : k => tostring(v) }, null)
+
+  view_original_text = try(each.value.Properties.TableInput.ViewOriginalText, null)
+  view_expanded_text = try(each.value.Properties.TableInput.ViewExpandedText, null)
+
+  dynamic "storage_descriptor" {
+    for_each = try(each.value.Properties.TableInput.StorageDescriptor, null) != null ? [each.value.Properties.TableInput.StorageDescriptor] : []
+    content {
+      location      = try(storage_descriptor.value.Location, null)
+      input_format  = try(storage_descriptor.value.InputFormat, null)
+      output_format = try(storage_descriptor.value.OutputFormat, null)
+      compressed    = try(storage_descriptor.value.Compressed, false)
+
+      dynamic "columns" {
+        for_each = try(storage_descriptor.value.Columns, [])
+        content {
+          name    = columns.value.Name
+          type    = try(columns.value.Type, null)
+          comment = try(columns.value.Comment, null)
+        }
+      }
+
+      dynamic "ser_de_info" {
+        for_each = try(storage_descriptor.value.SerdeInfo, null) != null ? [storage_descriptor.value.SerdeInfo] : []
+        content {
+          name                  = try(ser_de_info.value.Name, null)
+          serialization_library = try(ser_de_info.value.SerializationLibrary, null)
+          parameters            = try({ for k, v in ser_de_info.value.Parameters : k => tostring(v) }, null)
+        }
+      }
+    }
+  }
+
+  dynamic "partition_keys" {
+    for_each = try(each.value.Properties.TableInput.PartitionKeys, [])
+    content {
+      name    = partition_keys.value.Name
+      type    = try(partition_keys.value.Type, null)
+      comment = try(partition_keys.value.Comment, null)
+    }
+  }
+
+  depends_on = [null_resource.config_validation]
+}
+
 resource "aws_athena_workgroup" "custom" {
   for_each = local.athena_workgroups
 

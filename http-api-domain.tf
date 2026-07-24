@@ -34,6 +34,15 @@ locals {
     ]) : pair.key => pair
   }
 
+  # Domains with no pre-issued certificate: when Route53.HostedZoneId is given
+  # the module self-provisions a DNS-validated ACM certificate (mirroring
+  # consumers whose cert_arn is null and whose platform module issues the cert).
+  sam_self_http_api_domains_needing_cert = {
+    for lid, domain in local.sam_self_http_api_domains :
+    lid => domain
+    if try(domain.CertificateArn, null) == null && try(domain.Route53.HostedZoneId, null) != null
+  }
+
   # Domains that also want a Route53 alias record.
   sam_self_http_api_domain_route53 = {
     for lid, domain in local.sam_self_http_api_domains :
@@ -48,7 +57,12 @@ resource "aws_apigatewayv2_domain_name" "self" {
   domain_name = tostring(each.value.DomainName)
 
   domain_name_configuration {
-    certificate_arn = tostring(each.value.CertificateArn)
+    # Pre-issued cert when declared; otherwise the self-provisioned, validated
+    # one (waiting on validation prevents a create-time race).
+    certificate_arn = try(
+      tostring(each.value.CertificateArn),
+      aws_acm_certificate_validation.self[each.key].certificate_arn
+    )
     # HTTP APIs only support REGIONAL endpoints.
     endpoint_type   = "REGIONAL"
     security_policy = tostring(try(each.value.SecurityPolicy, "TLS_1_2"))
@@ -71,6 +85,47 @@ resource "aws_apigatewayv2_api_mapping" "self" {
   domain_name     = aws_apigatewayv2_domain_name.self[each.value.lid].id
   stage           = aws_apigatewayv2_stage.self[each.value.lid].id
   api_mapping_key = each.value.base_path != "" ? each.value.base_path : null
+}
+
+# Self-provisioned DNS-validated certificate for domains that declare none.
+resource "aws_acm_certificate" "self" {
+  for_each = local.sam_self_http_api_domains_needing_cert
+
+  domain_name       = tostring(each.value.DomainName)
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name      = each.key
+    ManagedBy = "sls.tf"
+    LogicalId = each.key
+  }
+
+  depends_on = [null_resource.config_validation]
+}
+
+# DNS validation record. Single-domain cert -> exactly one validation option;
+# indexing it directly keeps for_each keys plan-known (the option VALUES are
+# known only after apply, which is fine here).
+resource "aws_route53_record" "self_cert_validation" {
+  for_each = local.sam_self_http_api_domains_needing_cert
+
+  zone_id         = tostring(each.value.Route53.HostedZoneId)
+  name            = tolist(aws_acm_certificate.self[each.key].domain_validation_options)[0].resource_record_name
+  type            = tolist(aws_acm_certificate.self[each.key].domain_validation_options)[0].resource_record_type
+  records         = [tolist(aws_acm_certificate.self[each.key].domain_validation_options)[0].resource_record_value]
+  ttl             = 60
+  allow_overwrite = true
+}
+
+resource "aws_acm_certificate_validation" "self" {
+  for_each = local.sam_self_http_api_domains_needing_cert
+
+  certificate_arn         = aws_acm_certificate.self[each.key].arn
+  validation_record_fqdns = [aws_route53_record.self_cert_validation[each.key].fqdn]
 }
 
 resource "aws_route53_record" "self_httpapi" {
