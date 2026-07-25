@@ -58,7 +58,7 @@ output "function_names" {
   # aws_lambda_function.function_name (which trickles through environment.variables).
   value = nonsensitive({
     for k, func in local.functions_with_defaults :
-    k => try(func.name, "${try(local.parsed_config_resolved.service, "unknown")}-${local.provider_with_defaults.stage}-${k}")
+    k => try(func.name, "${local._generated_name_prefix}-${k}")
   })
 }
 
@@ -340,4 +340,29 @@ output "iam_role_arns" {
 output "functions_with_generated_names" {
   description = "Functions with no explicit name and the module-generated name each will use. Diff against already-deployed function names before a brownfield migration — a mismatch means a function REPLACE, not a diff."
   value       = local.functions_with_generated_names
+}
+
+output "lambda_functions" {
+  description = "Per-function nested map (elemental-module shape): function_name, function_arn, role_name — eases migration of consumer glue that reads module.x.lambda_functions[\"fn\"].role_name."
+  value = {
+    for fn in local._function_names :
+    fn => {
+      function_name = aws_lambda_function.functions[fn].function_name
+      function_arn  = aws_lambda_function.functions[fn].arn
+      role_name     = try(aws_iam_role.lambda_execution[fn].name, null)
+    }
+  }
+}
+
+output "dynamodb_tables" {
+  description = "Per-table nested map (elemental-module shape): table_name, table_arn, table_id, stream_arn."
+  value = {
+    for lid in keys(local.dynamodb_tables) :
+    lid => {
+      table_name = aws_dynamodb_table.custom[lid].name
+      table_arn  = aws_dynamodb_table.custom[lid].arn
+      table_id   = aws_dynamodb_table.custom[lid].id
+      stream_arn = aws_dynamodb_table.custom[lid].stream_arn
+    }
+  }
 }

@@ -135,6 +135,17 @@ resource "aws_cloudwatch_metric_alarm" "custom" {
   depends_on = [null_resource.config_validation]
 }
 
+# Secret-backed subscription endpoints (EndpointSecretName extension).
+data "aws_secretsmanager_secret_version" "subscription_endpoint" {
+  for_each = {
+    for logical_id, resource in local.sns_subscriptions :
+    logical_id => tostring(local._custom_resources_structure[logical_id].Properties.EndpointSecretName)
+    if try(local._custom_resources_structure[logical_id].Properties.EndpointSecretName, null) != null
+  }
+
+  secret_id = each.value
+}
+
 resource "aws_sns_topic_subscription" "custom" {
   for_each = local.sns_subscriptions
 
@@ -147,7 +158,14 @@ resource "aws_sns_topic_subscription" "custom" {
   )
 
   protocol = each.value.Properties.Protocol
-  endpoint = tostring(each.value.Properties.Endpoint)
+
+  # Endpoint: literal, or (sls.tf extension) fetched from Secrets Manager via
+  # EndpointSecretName — e.g. a PagerDuty integration URL kept out of the
+  # template.
+  endpoint = try(
+    tostring(each.value.Properties.Endpoint),
+    data.aws_secretsmanager_secret_version.subscription_endpoint[each.key].secret_string
+  )
 
   raw_message_delivery = try(each.value.Properties.RawMessageDelivery, false)
 

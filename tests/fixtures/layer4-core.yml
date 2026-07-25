@@ -1,0 +1,72 @@
+service: layer4-core
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+  tracing:
+    lambda: true
+
+functions:
+  worker:
+    handler: handler.work
+    layers:
+      - arn:aws:lambda:us-east-1:123456789012:layer:shared:4
+    kmsKeyArn: arn:aws:kms:us-east-1:123456789012:key/abc-123
+  untraced:
+    handler: handler.other
+    tracing: false
+
+resources:
+  Resources:
+    HoldoffStore:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: dev-events-atp-holdoff-store
+        BillingMode: PAY_PER_REQUEST
+        KeySchema:
+          - AttributeName: pk
+            KeyType: HASH
+          - AttributeName: sk
+            KeyType: RANGE
+        AttributeDefinitions:
+          - AttributeName: pk
+            AttributeType: S
+          - AttributeName: sk
+            AttributeType: S
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        TimeToLiveSpecification:
+          AttributeName: expiresAt
+          Enabled: true
+
+    CuratedBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: uem-events-analytics-dev
+        LifecycleConfiguration:
+          Rules:
+            - Id: expire-curated
+              Status: Enabled
+              Prefix: powerbi/raw_events_flattened/
+              ExpirationInDays: 1095
+
+    EventsBus:
+      Type: AWS::Events::EventBus
+      Properties:
+        Name: dev-events-events-bus
+
+    IngressRule:
+      Type: AWS::Events::Rule
+      Properties:
+        Name: all-events-ingress-dev
+        EventBusName:
+          Ref: EventsBus
+        EventPattern:
+          source:
+            - prefix: ""
+        Targets:
+          - Id: worker
+            Arn:
+              Fn::GetAtt: [worker, Arn]

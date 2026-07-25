@@ -511,6 +511,13 @@ locals {
         # Architectures: ["arm64"] or ["x86_64"]; null defers to Lambda default (x86_64)
         architectures = try(tolist(resource.Properties.Architectures), null)
 
+        # X-Ray tracing: function-level Tracing, else Globals.Function.Tracing.
+        tracing = try(tostring(resource.Properties.Tracing), try(tostring(local.sam_function_globals.Tracing), null))
+
+        # Lambda layers (resolved ARNs) and env-var encryption key.
+        layers      = try([for layer in tolist(resource.Properties.Layers) : tostring(layer)], null)
+        kms_key_arn = try(tostring(resource.Properties.KmsKeyArn), null)
+
         # VPC configuration.
         # SubnetIds may be a list (already resolved by the preprocessor) or a
         # comma-delimited string (CommaDelimitedList param already resolved).

@@ -127,7 +127,7 @@ resource "aws_iam_role" "lambda_execution" {
     fn => cfg if !try(local._function_has_explicit_role[fn], false)
   }
 
-  name = "${try(local.parsed_config_resolved.service, "unknown")}-${local.provider_with_defaults.stage}-${each.key}-role"
+  name = "${local._generated_name_prefix}-${each.key}-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -143,11 +143,13 @@ resource "aws_iam_role" "lambda_execution" {
     }]
   })
 
-  tags = {
+  # Optional for brownfield parity — platform modules often leave roles
+  # untagged, and role tags diff on every plan after a swap.
+  tags = var.role_tags_enabled ? {
     Service  = try(local.parsed_config_resolved.service, "unknown")
     Stage    = local.provider_with_defaults.stage
     Function = each.key
-  }
+  } : {}
 
   depends_on = [null_resource.config_validation]
 }
@@ -178,7 +180,7 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc" {
 resource "aws_iam_role_policy" "lambda_custom_policy" {
   for_each = local.functions_with_policies
 
-  name = "${try(local.parsed_config_resolved.service, "unknown")}-${local.provider_with_defaults.stage}-${each.key}-policy"
+  name = "${local._generated_name_prefix}-${each.key}-policy"
   role = aws_iam_role.lambda_execution[each.key].name
 
   policy = jsonencode({
@@ -201,7 +203,7 @@ resource "aws_lambda_function" "functions" {
   for_each = local.functions_with_defaults
 
   # Explicit FunctionName from SAM template overrides the auto-generated name.
-  function_name = try(each.value.name, null) != null ? each.value.name : "${try(local.parsed_config_resolved.service, "unknown")}-${local.provider_with_defaults.stage}-${each.key}"
+  function_name = try(each.value.name, null) != null ? each.value.name : "${local._generated_name_prefix}-${each.key}"
   # Honor an explicit Role; otherwise use the per-function role created above.
   role = try(local._function_has_explicit_role[each.key], false) ? local._function_role_arn[each.key] : aws_iam_role.lambda_execution[each.key].arn
 
@@ -223,6 +225,19 @@ resource "aws_lambda_function" "functions" {
 
   description   = try(each.value.description, null)
   architectures = try(each.value.architectures, null)
+
+  # Lambda layers + env-var encryption key (SAM Layers/KmsKeyArn, yaml
+  # layers/kmsKeyArn).
+  layers      = try(each.value.layers, null)
+  kms_key_arn = try(each.value.kms_key_arn, try(each.value.kmsKeyArn, null))
+
+  # X-Ray tracing (see lambda-tracing.tf for surfaces + role policy).
+  dynamic "tracing_config" {
+    for_each = local._function_tracing_mode[each.key] != null ? [local._function_tracing_mode[each.key]] : []
+    content {
+      mode = tracing_config.value
+    }
+  }
 
   dynamic "environment" {
     for_each = try(each.value.environment, null) != null ? [1] : []

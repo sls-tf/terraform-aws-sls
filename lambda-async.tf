@@ -33,13 +33,35 @@ locals {
     tostring(try(local._custom_resources_structure[lid].Properties.TopicName, "${local.to_snake_case[lid]}-${local.provider_with_defaults.stage}")) => lid
   }
 
-  # Plan-known presence of a function-level DLQ.
-  _function_has_dlq = {
+  # AUTO-CREATED function DLQs: yaml `dlq: {enabled: true, name?: x}` or SAM
+  # `DeadLetterQueue.QueueName` (extension — QueueName instead of TargetArn)
+  # provision the queue themselves. Name defaults to "<function>-dlq".
+  _function_auto_dlq_names = {
     for fn in local._function_names :
     fn => var.config_format == "sam" ? (
-      local.sam_structure != null && try(local.sam_structure.Resources[fn].Properties.DeadLetterQueue, null) != null
+      tostring(try(local.sam_structure.Resources[fn].Properties.DeadLetterQueue.QueueName, ""))
       ) : (
-      try(local.parsed_config.functions[fn].onError, null) != null
+      try(local.parsed_config.functions[fn].dlq.enabled, false) == true
+      ? tostring(try(local.parsed_config.functions[fn].dlq.name, "${fn}-dlq"))
+      : ""
+    )
+  }
+
+  _function_auto_dlq = {
+    for fn, name in local._function_auto_dlq_names :
+    fn => name
+    if name != ""
+  }
+
+  # Plan-known presence of a function-level DLQ (referenced or auto-created).
+  _function_has_dlq = {
+    for fn in local._function_names :
+    fn => local._function_auto_dlq_names[fn] != "" || (
+      var.config_format == "sam" ? (
+        local.sam_structure != null && try(local.sam_structure.Resources[fn].Properties.DeadLetterQueue.TargetArn, null) != null
+        ) : (
+        try(local.parsed_config.functions[fn].onError, null) != null
+      )
     )
   }
 
@@ -79,10 +101,10 @@ locals {
   }
 
   # Resolved DLQ ARN per function-with-DLQ (used by both the function's
-  # dead_letter_config and the IAM policy).
+  # dead_letter_config and the IAM policy). Auto-created queues win.
   function_dlq_arns = {
     for fn in local._function_names :
-    fn => try(
+    fn => contains(keys(local._function_auto_dlq), fn) ? aws_sqs_queue.function_dlq[fn].arn : try(
       aws_sqs_queue.custom[local.function_async_config[fn].dlq_raw.Ref].arn,
       aws_sqs_queue.custom[local.function_async_config[fn].dlq_raw["Fn::GetAtt"][0]].arn,
       aws_sns_topic.custom[local.function_async_config[fn].dlq_raw.Ref].arn,
@@ -94,6 +116,22 @@ locals {
     )
     if local._function_has_dlq[fn]
   }
+}
+
+# Auto-created per-function DLQ (yaml dlq: {enabled, name} / SAM
+# DeadLetterQueue.QueueName).
+resource "aws_sqs_queue" "function_dlq" {
+  for_each = local._function_auto_dlq
+
+  name = each.value
+
+  tags = {
+    ManagedBy   = "sls.tf"
+    Function    = each.key
+    Environment = local.provider_with_defaults.stage
+  }
+
+  depends_on = [null_resource.config_validation]
 }
 
 # Async invoke settings (max age / retries / success+failure destinations).

@@ -1147,8 +1147,10 @@ locals {
     "AWS::CloudWatch::Dashboard",
     "AWS::CloudWatch::Alarm",
     "AWS::SNS::Subscription",
-    # Centrally-declared multi-target EventBridge rules (events-rules-cfn.tf)
+    # Centrally-declared multi-target EventBridge rules + custom buses
+    # (events-rules-cfn.tf)
     "AWS::Events::Rule",
+    "AWS::Events::EventBus",
     # IAM roles (iam-roles.tf)
     "AWS::IAM::Role",
     # WebSocket API (websocket-api.tf): the Api drives creation; Route/Integration/

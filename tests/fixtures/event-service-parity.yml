@@ -1,0 +1,129 @@
+# Condensed sls.tf translation of the event-service infrastructure.yaml —
+# exercises the layer-4 parity features together, with the consumer's real
+# names/shapes (develop stage, stage-first naming, auto DLQs, monitoring
+# groups in their native snake_case scalar-metric form).
+service: events
+
+provider:
+  name: aws
+  runtime: nodejs24.x
+  region: eu-west-1
+  stage: develop
+  timeout: 30
+  memorySize: 256
+  tracing:
+    lambda: true
+
+functions:
+  atp_holdoff_disabled:
+    handler: main.handler
+    dlq:
+      enabled: true
+      name: atp_holdoff_disabled-dlq
+    maximumEventAge: 60
+    maximumRetryAttempts: 2
+
+  all_events:
+    handler: main.handler
+    dlq:
+      enabled: true
+      name: all_events-dlq
+
+  atp_record_count_metric:
+    handler: main.handler
+    db_access: read
+    dlq:
+      enabled: false
+
+  panel_event_read:
+    handler: main.handler
+    dlq:
+      enabled: false
+
+dashboard:
+  name: event_monitoring
+  services: ["lambda", "dynamodb"]
+
+alarms:
+  defaults:
+    actions:
+      - Ref: MonitoringTopic
+  groups:
+    lambda:
+      namespace: AWS/Lambda
+      dimension_key: FunctionName
+      resource_names: []
+      metrics: ["Invocations", "Errors"]
+      period: 60
+      statistic: Sum
+      threshold: 1
+      comparison_operator: GreaterThanOrEqualToThreshold
+    metric_anomaly:
+      namespace: Texecom/Events
+      dimension_key: ServiceName
+      resource_names:
+        - events
+      anomaly_detection: true
+      metrics: ["ATPEventRecordCount"]
+      period: 300
+      statistic: Average
+
+resources:
+  Resources:
+    AtpHoldoffStore:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: develop-events-atp-holdoff-store
+        BillingMode: PAY_PER_REQUEST
+        KeySchema:
+          - AttributeName: pk
+            KeyType: HASH
+          - AttributeName: sk
+            KeyType: RANGE
+        AttributeDefinitions:
+          - AttributeName: pk
+            AttributeType: S
+          - AttributeName: sk
+            AttributeType: S
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        TimeToLiveSpecification:
+          AttributeName: expiresAt
+          Enabled: true
+
+    EventsBus:
+      Type: AWS::Events::EventBus
+      Properties:
+        Name: develop-events-events-bus
+
+    all_events_ingress:
+      Type: AWS::Events::Rule
+      Properties:
+        Name: develop-all-events-ingress
+        EventBusName:
+          Ref: EventsBus
+        EventPattern:
+          source:
+            - prefix: ""
+        Targets:
+          - Id: all_events_ingress-target-0
+            Arn:
+              Fn::GetAtt: [all_events, Arn]
+            DeadLetterConfig:
+              Enabled: true
+            RetryPolicy:
+              MaximumEventAgeInSeconds: 60
+              MaximumRetryAttempts: 10
+
+    MonitoringTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: event-service-monitoring-develop
+
+    PagerDutySubscription:
+      Type: AWS::SNS::Subscription
+      Properties:
+        TopicArn:
+          Ref: MonitoringTopic
+        Protocol: https
+        EndpointSecretName: pagerduty_integration

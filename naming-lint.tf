@@ -16,6 +16,18 @@
 # `aws lambda list-functions` before the first plan.
 
 locals {
+  # Shared "<service>-<stage>" (or "<stage>-<service>") prefix for every
+  # generated resource name — functions, execution roles/policies, alarm-set
+  # lambda names. var.generated_name_order flips the segment order for parity
+  # with platform modules that put the environment first.
+  # try() on stage: on invalid-config paths provider_with_defaults is null and
+  # this local must stay evaluable so config_validation reports the REAL error.
+  _generated_name_prefix = var.generated_name_order == "stage-service" ? (
+    "${try(local.provider_with_defaults.stage, "dev")}-${try(local.parsed_config_resolved.service, "unknown")}"
+    ) : (
+    "${try(local.parsed_config_resolved.service, "unknown")}-${try(local.provider_with_defaults.stage, "dev")}"
+  )
+
   # Presence from the STRUCTURAL parse so the check condition stays plan-known
   # even when resolved values (e.g. a FunctionName built from an unknown
   # parameter) are not.
@@ -30,7 +42,7 @@ locals {
 
   functions_with_generated_names = {
     for fn in local._function_names :
-    fn => "${try(local.parsed_config_resolved.service, "unknown")}-${local.provider_with_defaults.stage}-${fn}"
+    fn => "${local._generated_name_prefix}-${fn}"
     if !local._function_has_explicit_name[fn]
   }
 }

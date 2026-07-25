@@ -34,21 +34,53 @@ locals {
     ]) : pair.key => pair
   }
 
-  # Domains with no pre-issued certificate: when Route53.HostedZoneId is given
-  # the module self-provisions a DNS-validated ACM certificate (mirroring
-  # consumers whose cert_arn is null and whose platform module issues the cert).
+  # Domains with a Route53 block but NO HostedZoneId: the zone is looked up by
+  # name — Route53.HostedZoneName when given, else inferred from DomainName by
+  # stripping the first label (api.example.com -> example.com), matching
+  # platform modules that only take a domain name.
+  sam_self_http_api_domain_zone_lookups = {
+    for lid, domain in local.sam_self_http_api_domains :
+    lid => tostring(try(
+      domain.Route53.HostedZoneName,
+      regex("^[^.]+\\.(.+)$", tostring(domain.DomainName))[0]
+    ))
+    if try(domain.Route53, null) != null && try(domain.Route53.HostedZoneId, null) == null
+  }
+
+  # Effective zone ID per Route53-enabled domain: explicit ID or looked-up.
+  sam_self_http_api_domain_zone_ids = {
+    for lid, domain in local.sam_self_http_api_domains :
+    lid => try(
+      tostring(domain.Route53.HostedZoneId),
+      data.aws_route53_zone.self_domain[lid].zone_id
+    )
+    if try(domain.Route53, null) != null
+  }
+
+  # Domains with no pre-issued certificate: with any Route53 zone (explicit ID
+  # or by-name lookup) the module self-provisions a DNS-validated ACM
+  # certificate (mirroring consumers whose cert_arn is null and whose platform
+  # module issues the cert).
   sam_self_http_api_domains_needing_cert = {
     for lid, domain in local.sam_self_http_api_domains :
     lid => domain
-    if try(domain.CertificateArn, null) == null && try(domain.Route53.HostedZoneId, null) != null
+    if try(domain.CertificateArn, null) == null && try(domain.Route53, null) != null
   }
 
   # Domains that also want a Route53 alias record.
   sam_self_http_api_domain_route53 = {
     for lid, domain in local.sam_self_http_api_domains :
     lid => domain
-    if try(domain.Route53.HostedZoneId, null) != null
+    if try(domain.Route53, null) != null
   }
+}
+
+# Hosted zone lookup by name (Route53 block without a HostedZoneId).
+data "aws_route53_zone" "self_domain" {
+  for_each = local.sam_self_http_api_domain_zone_lookups
+
+  name         = each.value
+  private_zone = false
 }
 
 resource "aws_apigatewayv2_domain_name" "self" {
@@ -113,7 +145,7 @@ resource "aws_acm_certificate" "self" {
 resource "aws_route53_record" "self_cert_validation" {
   for_each = local.sam_self_http_api_domains_needing_cert
 
-  zone_id         = tostring(each.value.Route53.HostedZoneId)
+  zone_id         = local.sam_self_http_api_domain_zone_ids[each.key]
   name            = tolist(aws_acm_certificate.self[each.key].domain_validation_options)[0].resource_record_name
   type            = tolist(aws_acm_certificate.self[each.key].domain_validation_options)[0].resource_record_type
   records         = [tolist(aws_acm_certificate.self[each.key].domain_validation_options)[0].resource_record_value]
@@ -131,7 +163,7 @@ resource "aws_acm_certificate_validation" "self" {
 resource "aws_route53_record" "self_httpapi" {
   for_each = local.sam_self_http_api_domain_route53
 
-  zone_id = tostring(each.value.Route53.HostedZoneId)
+  zone_id = local.sam_self_http_api_domain_zone_ids[each.key]
   name    = tostring(each.value.DomainName)
   type    = "A"
 

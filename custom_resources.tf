@@ -69,6 +69,52 @@ resource "aws_s3_bucket_acl" "custom" {
   depends_on = [aws_s3_bucket.custom]
 }
 
+# S3 bucket lifecycle rules (CFN LifecycleConfiguration.Rules), e.g. a curated
+# analytics bucket expiring objects after N days.
+resource "aws_s3_bucket_lifecycle_configuration" "custom" {
+  for_each = {
+    for logical_id, resource in local.s3_buckets :
+    logical_id => resource
+    if try(local._custom_resources_structure[logical_id].Properties.LifecycleConfiguration, null) != null
+  }
+
+  bucket = aws_s3_bucket.custom[each.key].id
+
+  dynamic "rule" {
+    for_each = try(each.value.Properties.LifecycleConfiguration.Rules, [])
+    content {
+      id     = tostring(try(rule.value.Id, "rule-${rule.key}"))
+      status = try(rule.value.Status, "Enabled")
+
+      filter {
+        prefix = tostring(try(rule.value.Prefix, try(rule.value.Filter.Prefix, "")))
+      }
+
+      dynamic "expiration" {
+        for_each = try(rule.value.ExpirationInDays, null) != null ? [rule.value.ExpirationInDays] : []
+        content {
+          days = expiration.value
+        }
+      }
+
+      dynamic "noncurrent_version_expiration" {
+        for_each = try(rule.value.NoncurrentVersionExpiration.NoncurrentDays, try(rule.value.NoncurrentVersionExpirationInDays, null)) != null ? [try(rule.value.NoncurrentVersionExpiration.NoncurrentDays, rule.value.NoncurrentVersionExpirationInDays)] : []
+        content {
+          noncurrent_days = noncurrent_version_expiration.value
+        }
+      }
+
+      dynamic "transition" {
+        for_each = try(rule.value.Transitions, [])
+        content {
+          days          = try(transition.value.TransitionInDays, null)
+          storage_class = transition.value.StorageClass
+        }
+      }
+    }
+  }
+}
+
 # ============================================================================
 # DynamoDB Tables
 # ============================================================================
@@ -122,6 +168,21 @@ resource "aws_dynamodb_table" "custom" {
       projection_type = global_secondary_index.value.Projection.ProjectionType
       read_capacity   = try(each.value.Properties.BillingMode, "PROVISIONED") == "PROVISIONED" ? try(global_secondary_index.value.ProvisionedThroughput.ReadCapacityUnits, 5) : null
       write_capacity  = try(each.value.Properties.BillingMode, "PROVISIONED") == "PROVISIONED" ? try(global_secondary_index.value.ProvisionedThroughput.WriteCapacityUnits, 5) : null
+    }
+  }
+
+  # Point-in-time recovery (CFN PointInTimeRecoverySpecification).
+  point_in_time_recovery {
+    enabled = try(each.value.Properties.PointInTimeRecoverySpecification.PointInTimeRecoveryEnabled, false)
+  }
+
+  # TTL (CFN TimeToLiveSpecification). Structural presence test keeps the
+  # dynamic-block shape plan-known.
+  dynamic "ttl" {
+    for_each = try(local._custom_resources_structure[each.key].Properties.TimeToLiveSpecification, null) != null ? [each.value.Properties.TimeToLiveSpecification] : []
+    content {
+      attribute_name = try(ttl.value.AttributeName, null)
+      enabled        = try(ttl.value.Enabled, true)
     }
   }
 

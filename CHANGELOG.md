@@ -3,6 +3,58 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.8.0
+
+### Added
+
+- **DynamoDB PITR + TTL** — `PointInTimeRecoverySpecification` and
+  `TimeToLiveSpecification` map to `point_in_time_recovery`/`ttl`.
+- **S3 lifecycle rules** — `LifecycleConfiguration.Rules` (expiration,
+  prefix filters, noncurrent-version expiration, transitions).
+- **`AWS::Events::EventBus`** — custom bus creation; rule `EventBusName`
+  accepts a Ref/name of a template bus.
+- **Lambda X-Ray tracing** — SAM `Tracing` (function + Globals) and yaml
+  `tracing` / `provider.tracing.lambda` → `tracing_config`, plus the
+  AWSXRayDaemonWriteAccess policy on module-created roles
+  (`lambda-tracing.tf`).
+- **Auto-created DLQs** — yaml `dlq: {enabled, name}` / SAM
+  `DeadLetterQueue.QueueName` provision the function DLQ (default
+  `<function>-dlq`); an `AWS::Events::Rule` target `DeadLetterConfig` without
+  an Arn provisions a per-target queue named `<rule>-<idx>` with the
+  EventBridge delivery policy.
+- **Consumer-shaped alarm groups** — `metrics:` as plain name lists,
+  group-level `period`/`statistic`/`threshold`/`comparison_operator`
+  (camelCase or snake_case) and `dimension_key` aliases.
+- **Anomaly-detection alarms** — `anomaly_detection: true` on a group/metric
+  emits the ANOMALY_DETECTION_BAND metric-query pair with
+  `threshold_metric_id`.
+- **Auto-generated dashboard** — `dashboard: {name, services}` (yaml) /
+  `Metadata.SlsTf.Dashboard` (SAM) builds per-class timeSeries widgets from
+  the created resource set (`dashboard.tf`).
+- **Named HTTP API stage + AWS_IAM auth** — SAM HttpApi `StageName`; an event
+  `Auth.Authorizer` of `AWS_IAM` selects IAM route auth.
+- **Hosted zone lookup by name** — `Domain.Route53.HostedZoneName`, or a zone
+  inferred from `DomainName`, replaces the mandatory `HostedZoneId`.
+- **Secret-backed subscription endpoints** — `AWS::SNS::Subscription`
+  `EndpointSecretName` fetches the endpoint (e.g. a PagerDuty URL) from
+  Secrets Manager.
+- **Lambda layers + KMS** — SAM `Layers`/`KmsKeyArn`, yaml
+  `layers`/`kmsKeyArn`.
+- **`db_access` grants** — function-level `dbAccess`/`db_access: read|write`
+  grants the corresponding DynamoDB action set over all template tables and
+  their indexes (`lambda-db-access.tf`).
+- **Brownfield naming/tag parity** — `generated_name_order = "stage-service"`
+  flips generated function/role/policy names to `<stage>-<service>-<key>`;
+  `role_tags_enabled = false` leaves execution roles untagged.
+- **Elemental-shaped outputs** — nested `lambda_functions`
+  (`function_name`/`function_arn`/`role_name`) and `dynamodb_tables`
+  (`table_name`/`table_arn`/`table_id`/`stream_arn`) maps.
+
+### Fixed
+
+- `{proxy+}` HTTP API routes produced an invalid character in the Lambda
+  permission `statement_id`.
+
 ## v0.7.1
 
 ### Added

@@ -230,3 +230,27 @@ variable "naming_convention_warning" {
   type        = bool
   default     = true
 }
+
+variable "generated_name_order" {
+  description = <<-DESC
+    Order of the "<service>" and "<stage>" segments in every module-GENERATED
+    resource name (functions, execution roles/policies, alarm-set lambda
+    names). "service-stage" (default) yields "events-develop-fn";
+    "stage-service" yields "develop-events-fn" — matching platform modules
+    that prefix the environment first, so a brownfield swap keeps physical
+    names. Explicit names are never affected.
+  DESC
+  type        = string
+  default     = "service-stage"
+
+  validation {
+    condition     = contains(["service-stage", "stage-service"], var.generated_name_order)
+    error_message = "generated_name_order must be \"service-stage\" or \"stage-service\"."
+  }
+}
+
+variable "role_tags_enabled" {
+  description = "Tag module-created Lambda execution roles (Service/Stage/Function). Set false for parity with platform modules that leave roles untagged — role tags otherwise diff on every plan after a brownfield swap."
+  type        = bool
+  default     = true
+}

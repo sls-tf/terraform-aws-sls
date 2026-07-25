@@ -1,0 +1,38 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: HttpApi with named stage, AWS_IAM route auth, and zone-by-name custom domain
+
+Metadata:
+  ServiceName: events-api
+
+Resources:
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: v1
+      Domain:
+        DomainName: events.texecom-develop.com
+        Route53:
+          HostedZoneName: texecom-develop.com
+
+  ReceiveEvents:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: main.handler
+      Runtime: nodejs20.x
+      Events:
+        Ingress:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /{proxy+}
+            Method: any
+            Auth:
+              Authorizer: AWS_IAM
+
+        Status:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /arc-response-status
+            Method: post

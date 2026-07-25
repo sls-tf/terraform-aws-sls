@@ -176,8 +176,10 @@ resource "aws_apigatewayv2_route" "self" {
   route_key = "${upper(each.value.http_method)} ${each.value.http_path}"
   target    = "integrations/${aws_apigatewayv2_integration.self[each.key].id}"
 
-  authorization_type = each.value.authorizer != null ? "CUSTOM" : "NONE"
-  authorizer_id      = each.value.authorizer != null ? aws_apigatewayv2_authorizer.self[each.value.authorizer].id : null
+  # "AWS_IAM" as the authorizer name selects IAM auth (no Lambda authorizer in
+  # the path); any other name is a REQUEST (CUSTOM) authorizer.
+  authorization_type = each.value.authorizer == null ? "NONE" : (upper(tostring(each.value.authorizer)) == "AWS_IAM" ? "AWS_IAM" : "CUSTOM")
+  authorizer_id      = each.value.authorizer != null && upper(tostring(each.value.authorizer)) != "AWS_IAM" ? aws_apigatewayv2_authorizer.self[each.value.authorizer].id : null
 }
 
 # Default auto-deploy stage. SAM's AWS::Serverless::HttpApi provisions an
@@ -185,8 +187,9 @@ resource "aws_apigatewayv2_route" "self" {
 resource "aws_apigatewayv2_stage" "self" {
   for_each = local.sam_self_http_apis
 
-  api_id      = aws_apigatewayv2_api.self[each.key].id
-  name        = "$default"
+  api_id = aws_apigatewayv2_api.self[each.key].id
+  # SAM HttpApi StageName; the SAM default is the implicit "$default" stage.
+  name        = tostring(try(local.sam_self_http_api_props[each.key].StageName, "$default"))
   auto_deploy = true
 
   tags = {
@@ -218,7 +221,8 @@ resource "aws_apigatewayv2_authorizer" "self" {
 resource "aws_lambda_permission" "self_apigw" {
   for_each = local.http_self_v2_event_map
 
-  statement_id  = "AllowSelfHttpApiInvoke-${each.key}"
+  # "+" from greedy proxy paths ({proxy+}) is not a valid statement_id char.
+  statement_id  = "AllowSelfHttpApiInvoke-${replace(each.key, "+", "")}"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.functions[each.value.function_name].function_name
   principal     = "apigateway.amazonaws.com"

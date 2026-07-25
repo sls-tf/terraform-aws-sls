@@ -19,6 +19,24 @@
 # so they stay plan-known on greenfield.
 
 locals {
+  # Custom event buses (AWS::Events::EventBus).
+  events_buses = {
+    for logical_id, resource in local._custom_resources_structure :
+    logical_id => resource
+    if try(resource.Type, "") == "AWS::Events::EventBus"
+    && (contains(coalesce(var.resource_types, ["AWS::Events::EventBus"]), "AWS::Events::EventBus"))
+  }
+
+  # Bus NAME (or logical ID) -> logical ID, so a rule's EventBusName given as a
+  # plain name string still binds to the created bus.
+  _event_bus_name_to_logical = merge(
+    { for lid in keys(local.events_buses) : lid => lid },
+    {
+      for lid in keys(local.events_buses) :
+      tostring(try(local._custom_resources_structure[lid].Properties.Name, lid)) => lid
+    }
+  )
+
   events_rules = {
     for logical_id, resource in local._custom_resources_structure :
     logical_id => resource
@@ -36,6 +54,15 @@ locals {
           rule_id   = rule_id
           target    = try(local.custom_resources_raw[rule_id].Properties.Targets[idx], {})
           target_id = tostring(try(structural_target.Id, "target-${idx}"))
+          # AUTO-CREATED target DLQ: DeadLetterConfig with no Arn (optionally a
+          # QueueName, or just Enabled: true) provisions the queue, named
+          # "<ruleLogicalId>-<index>" by default — matching the elemental
+          # module's live naming (e.g. all_events_ingress-0).
+          auto_dlq = try(structural_target.DeadLetterConfig, null) != null && try(structural_target.DeadLetterConfig.Arn, null) == null
+          auto_dlq_name = tostring(try(
+            structural_target.DeadLetterConfig.QueueName,
+            "${rule_id}-${idx}"
+          ))
           # Function logical ID when the target ARN references a template
           # function; "" for non-function targets.
           function_id = try(
@@ -49,12 +76,38 @@ locals {
     ]) : pair.key => pair
   }
 
+  # Targets whose DLQ the module creates itself.
+  events_rule_auto_dlq_targets = {
+    for key, target in local.events_rule_targets :
+    key => target
+    if target.auto_dlq
+  }
+
   # Targets that resolve to a template Lambda function need an invoke permission.
   events_rule_lambda_targets = {
     for key, target in local.events_rule_targets :
     key => target
     if target.function_id != ""
   }
+}
+
+# Custom event bus (AWS::Events::EventBus).
+resource "aws_cloudwatch_event_bus" "cfn" {
+  for_each = local.events_buses
+
+  name = tostring(try(
+    local.custom_resources_raw[each.key].Properties.Name,
+    "${local.to_snake_case[each.key]}-${local.provider_with_defaults.stage}"
+  ))
+
+  tags = {
+    Name        = each.key
+    ManagedBy   = "sls.tf"
+    LogicalId   = each.key
+    Environment = local.provider_with_defaults.stage
+  }
+
+  depends_on = [null_resource.config_validation]
 }
 
 resource "aws_cloudwatch_event_rule" "cfn" {
@@ -73,8 +126,15 @@ resource "aws_cloudwatch_event_rule" "cfn" {
   ) : null
   schedule_expression = try(local.custom_resources_raw[each.key].Properties.ScheduleExpression, null)
 
-  event_bus_name = try(local.custom_resources_raw[each.key].Properties.EventBusName, "default")
-  state          = try(local.custom_resources_raw[each.key].Properties.State, "ENABLED")
+  # EventBusName may be a Ref/name of a template AWS::Events::EventBus, a SAM
+  # marker, or a literal external bus name.
+  event_bus_name = try(
+    aws_cloudwatch_event_bus.cfn[local.custom_resources_raw[each.key].Properties.EventBusName.Ref].name,
+    aws_cloudwatch_event_bus.cfn[local._event_bus_name_to_logical[replace(tostring(local.custom_resources_raw[each.key].Properties.EventBusName), local._unresolved_ref_prefix, "")]].name,
+    tostring(local.custom_resources_raw[each.key].Properties.EventBusName),
+    "default"
+  )
+  state = try(local.custom_resources_raw[each.key].Properties.State, "ENABLED")
 
   tags = {
     Name        = each.key
@@ -111,14 +171,15 @@ resource "aws_cloudwatch_event_target" "cfn" {
     }
   }
 
-  # Per-target DLQ: {Fn::GetAtt: [Queue, Arn]} to a template queue, or literal.
+  # Per-target DLQ: an auto-created queue (DeadLetterConfig without Arn), a
+  # {Fn::GetAtt: [Queue, Arn]} to a template queue, or a literal ARN.
   dynamic "dead_letter_config" {
-    for_each = try(each.value.target.DeadLetterConfig.Arn, null) != null ? [each.value.target.DeadLetterConfig.Arn] : []
+    for_each = each.value.auto_dlq || try(each.value.target.DeadLetterConfig.Arn, null) != null ? [1] : []
     content {
-      arn = try(
-        aws_sqs_queue.custom[dead_letter_config.value["Fn::GetAtt"][0]].arn,
-        aws_sqs_queue.custom[dead_letter_config.value.Ref].arn,
-        tostring(dead_letter_config.value)
+      arn = each.value.auto_dlq ? aws_sqs_queue.events_target_dlq[each.key].arn : try(
+        aws_sqs_queue.custom[each.value.target.DeadLetterConfig.Arn["Fn::GetAtt"][0]].arn,
+        aws_sqs_queue.custom[each.value.target.DeadLetterConfig.Arn.Ref].arn,
+        tostring(each.value.target.DeadLetterConfig.Arn)
       )
     }
   }
@@ -133,6 +194,41 @@ resource "aws_cloudwatch_event_target" "cfn" {
   }
 
   depends_on = [null_resource.config_validation]
+}
+
+# Auto-created per-target DLQ, plus the queue policy EventBridge needs to
+# deliver to it.
+resource "aws_sqs_queue" "events_target_dlq" {
+  for_each = local.events_rule_auto_dlq_targets
+
+  name = each.value.auto_dlq_name
+
+  tags = {
+    ManagedBy   = "sls.tf"
+    Rule        = each.value.rule_id
+    Environment = local.provider_with_defaults.stage
+  }
+
+  depends_on = [null_resource.config_validation]
+}
+
+resource "aws_sqs_queue_policy" "events_target_dlq" {
+  for_each = local.events_rule_auto_dlq_targets
+
+  queue_url = aws_sqs_queue.events_target_dlq[each.key].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "events.amazonaws.com" }
+      Action    = "sqs:SendMessage"
+      Resource  = aws_sqs_queue.events_target_dlq[each.key].arn
+      Condition = {
+        ArnEquals = { "aws:SourceArn" = aws_cloudwatch_event_rule.cfn[each.value.rule_id].arn }
+      }
+    }]
+  })
 }
 
 # Allow EventBridge to invoke each Lambda target.

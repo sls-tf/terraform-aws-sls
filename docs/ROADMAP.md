@@ -284,3 +284,124 @@ work; naming/tags are addressable by discipline (the new lint helps with one
 half of that). But "close" undersells it: every layer closed has opened a
 narrower one underneath it (6 → 5 new + 1 landmine → 3 new), and that pattern
 hasn't broken yet.
+
+## Layer 4: full infrastructure.yaml parity audit (2026-07-25)
+
+> **Status 2026-07-25: gaps 14–28 all implemented** (suite at 334 passing):
+> 14 PITR/TTL + 18 S3 lifecycle (custom_resources.tf); 15 `AWS::Events::EventBus`
+> incl. rule EventBusName Refs (events-rules-cfn.tf); 16 tracing_config + X-Ray
+> role policy, yaml `tracing`/`provider.tracing.lambda` + SAM `Tracing`/Globals
+> (lambda-tracing.tf); 17 auto-created DLQs — function `dlq: {enabled, name}` /
+> SAM `DeadLetterQueue.QueueName` and rule-target `DeadLetterConfig` without Arn
+> auto-named `<rule>-<idx>` with EventBridge queue policy (lambda-async.tf,
+> events-rules-cfn.tf); 19 scalar metric names + group-level snake_case
+> settings + `dimension_key` aliases (alarm-sets.tf); 20 `StageName` + AWS_IAM
+> route auth (http-api-v2-self.tf); 21 zone-by-name lookup, HostedZoneName or
+> inferred from DomainName (http-api-domain.tf); 22 `EndpointSecretName`
+> Secrets Manager endpoint (cloudwatch-observability.tf); 23 anomaly-detection
+> alarms via `anomaly_detection: true` → ANOMALY_DETECTION_BAND metric-query
+> pair (alarm-sets.tf); 24 generated dashboard from `dashboard: {name,
+> services}` (dashboard.tf); 25 `Layers`/`KmsKeyArn`/yaml `layers`+`kmsKeyArn`
+> (main.tf, sam-parser.tf); 26 `dbAccess`/`db_access: read|write` grants over
+> template tables (lambda-db-access.tf); 27 `generated_name_order =
+> "stage-service"` + `role_tags_enabled = false` (variables.tf, naming-lint.tf);
+> 28 nested `lambda_functions` / `dynamodb_tables` outputs (outputs.tf).
+> Consumer-shape integration test: tests/event_service_parity.tftest.hcl,
+> driven by a condensed translation of the real infrastructure.yaml
+> (tests/fixtures/event-service-parity.yml + sam-httpapi-parity.yaml). Also
+> fixed en route: `{proxy+}` routes produced an invalid lambda-permission
+> statement_id.
+>
+> Still required for the actual zero-diff verdict: run the swap against the
+> consumer's develop workspace (Layer 3 "real plan" item — needs live state).
+
+Mapped every block of the consumer's `infrastructure.yaml` against v0.7.1,
+folding in the still-open layer-3 findings (#12 access model, #13 X-Ray, IAM
+naming/tags, output shape). Target: a zero-change `terraform plan` against
+`develop` when swapping the elemental module for sls.tf.
+
+### 14. DynamoDB PITR + TTL
+Every table sets `pitr_enabled: true` and `ttl: {enabled, attribute_name}`;
+`aws_dynamodb_table.custom` maps neither `PointInTimeRecoverySpecification`
+nor `TimeToLiveSpecification` — silent loss on all three tables (and PITR
+disable would show as a diff on the swap).
+
+### 15. Custom EventBridge bus creation
+`eventbridge.bus_name: events-events-bus` (legacy `<env>-events-events-bus`
+naming) creates a named bus. Rules can *target* a named bus but there is no
+`AWS::Events::EventBus` support, so nothing creates it.
+
+### 16. Lambda X-Ray tracing (= layer-3 #13)
+`defaults.lambda.xray_enabled: true` applies to every function; no
+`tracing_config` exists anywhere in the module (SAM `Tracing: Active` is
+silently dropped), and module-created roles lack X-Ray write permissions.
+Silent observability regression, not a plan diff.
+
+### 17. Auto-created DLQs
+`dlq: {enabled: true, name: x-dlq}` on functions and `dlq: {enabled: true}`
+on rule targets auto-provision the queues (live queues `all_events_ingress-0..4`
+confirm per-target auto-naming `<rule>-<idx>`). sls.tf only wires DLQs by
+reference — ~10 queues would need hand-declaring.
+
+### 18. S3 lifecycle configuration
+`athena.curated.lifecycle_days: 1095` needs `LifecycleConfiguration` on
+`AWS::S3::Bucket`; unmapped.
+
+### 19. Alarm-set shape mismatch
+Consumer groups put `period`/`statistic`/`threshold`/`comparison_operator`
+(snake_case) and `dimension_key` at GROUP level with `metrics:` as a plain
+name list; the v0.7.0 construct requires per-metric objects and camelCase.
+
+### 20. Named API stage + AWS_IAM route auth
+`stage_name: v1` (module only creates `$default`) and `authorization: AWS_IAM`
+on a Lambda route (self-API routes only support CUSTOM/NONE).
+
+### 21. Custom domain without a hosted zone ID
+`custom_domain` gives `cert_arn: null` AND `hosted_zone_name: null` — the old
+module infers the zone from the domain name. sls.tf requires an explicit
+`Route53.HostedZoneId`; no zone lookup by name.
+
+### 22. PagerDuty secret-backed endpoint
+`pagerduty.integration.secret_name` sources the subscription endpoint from
+Secrets Manager; sls.tf only accepts literal endpoints. (Disabled today —
+would bite on enable.)
+
+### 23. Anomaly detection
+`anomaly_detection.enabled: true` needs anomaly-detection alarms
+(threshold_metric_id + ANOMALY_DETECTION_BAND metric query); the alarm
+mappings only model static thresholds.
+
+### 24. Auto-generated dashboard
+`monitoring.dashboard` with `extended_widgets` builds widget JSON from the
+services list; sls.tf only passes through a hand-written DashboardBody.
+
+### 25. Lambda layers + KMS encryption
+`lambda_layers` / `encryption.kms_id` are null today, but neither `Layers`
+nor function-level `KmsKeyArn` maps at all.
+
+### 26. db_access-style DynamoDB grants (= layer-3 #12)
+Elemental defaults every lambda to blanket `db_access: read` over ALL service
+tables; sls.tf makes authors hand-write statements per function. Needs a
+function-level `dbAccess: read|write` shorthand granting scoped statements
+over the template's created tables (+ indexes), so migrating doesn't mean
+re-deriving elemental's implicit grants by hand.
+
+### 27. Generated-name order + role tag parity (= layer-3 IAM findings)
+Elemental names are `{env}-{service}-{key}` (functions) and
+`{env}-{service}-{key}-role` (roles, untagged); sls.tf generates
+`{service}-{stage}-{key}` and tags roles. Needs a naming-order switch applied
+consistently to generated function AND role names, plus a way to disable role
+tags — otherwise every function and role replaces/diffs on the swap.
+
+### 28. Elemental-shaped outputs
+Consumer glue references `lambda_functions[x].{function_name, function_arn,
+role_name}` and `dynamodb_tables[x].{table_name, table_arn, table_id,
+stream_arn}` (~9 call sites). sls.tf outputs are flat parallel maps; add
+nested per-resource output maps in the elemental shape to make the rewiring
+near-mechanical.
+
+### Out of module scope (recorded, not gaps to close here)
+`npm_build_zip`/`zip_filename` (build pipeline → `lambda_code_source = "s3"`),
+`api.docs` swagger hosting, vestigial RDS keys (`skip_final_snapshot`,
+`engine_version`), and service-wide `tags:` injection (partially covered by
+per-resource tags today).

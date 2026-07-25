@@ -59,7 +59,7 @@ locals {
   _alarm_class_all_names = {
     lambda = [
       for fn in local._function_names :
-      try(local.functions_with_defaults[fn].name, null) != null ? tostring(local.functions_with_defaults[fn].name) : "${try(local.parsed_config_resolved.service, "unknown")}-${local.provider_with_defaults.stage}-${fn}"
+      try(local.functions_with_defaults[fn].name, null) != null ? tostring(local.functions_with_defaults[fn].name) : "${local._generated_name_prefix}-${fn}"
     ]
     dynamodb = [
       for lid in keys(local.dynamodb_tables) :
@@ -84,22 +84,44 @@ locals {
     api_gateway = []
   }
 
-  # (group, metric, resource) -> alarm spec.
+  # (group, metric, resource) -> alarm spec. Metrics may be OBJECTS or plain
+  # NAME STRINGS ("Errors"); per-metric settings fall back to group-level
+  # settings then hard defaults. Both camelCase and snake_case keys are
+  # accepted (comparisonOperator / comparison_operator, dimension /
+  # dimension_key, ...), matching real-world monitoring configs.
   alarm_set_alarms = {
     for spec in flatten([
       for group_name, group in try(local.alarm_sets_config.groups, {}) : [
-        for metric in try(group.metrics, []) : [
+        for metric in [
+          for m in try(group.metrics, []) :
+          # JSON-laundered: the string and object branches otherwise clash.
+          jsondecode(can(tostring(m)) ? jsonencode({ name = tostring(m) }) : jsonencode(m))
+          ] : [
           for resource_name in(
             length(try(group.resource_names, [])) > 0
             ? [for r in group.resource_names : tostring(r)]
             : try(local._alarm_class_all_names[group_name], [])
             ) : {
             key           = "${group_name}-${metric.name}-${resource_name}"
+            metric_name   = metric.name
             namespace     = tostring(try(group.namespace, try(local._alarm_class_defaults[group_name].namespace, "")))
-            dimension     = tostring(try(group.dimension, try(local._alarm_class_defaults[group_name].dimension, "")))
+            dimension     = tostring(try(group.dimension, group.dimension_key, try(local._alarm_class_defaults[group_name].dimension, "")))
             resource_name = resource_name
-            metric        = metric
-            actions       = try(group.actions, try(local.alarm_sets_config.defaults.actions, []))
+
+            period              = try(metric.period, group.period, 300)
+            statistic           = try(metric.statistic, group.statistic, "Sum")
+            threshold           = try(metric.threshold, group.threshold, null)
+            comparison_operator = try(metric.comparisonOperator, metric.comparison_operator, group.comparisonOperator, group.comparison_operator, "GreaterThanOrEqualToThreshold")
+            evaluation_periods  = try(metric.evaluationPeriods, metric.evaluation_periods, group.evaluationPeriods, group.evaluation_periods, 1)
+            datapoints_to_alarm = try(metric.datapointsToAlarm, metric.datapoints_to_alarm, group.datapointsToAlarm, group.datapoints_to_alarm, null)
+            treat_missing_data  = try(metric.treatMissingData, metric.treat_missing_data, group.treatMissingData, group.treat_missing_data, "missing")
+            description         = try(metric.description, "Managed by sls.tf alarm set")
+
+            # Anomaly-detection alarms: band instead of static threshold.
+            anomaly_detection = try(metric.anomalyDetection, metric.anomaly_detection, group.anomalyDetection, group.anomaly_detection, false)
+            anomaly_band      = try(metric.anomalyBandWidth, metric.anomaly_band_width, group.anomalyBandWidth, group.anomaly_band_width, 2)
+
+            actions = try(group.actions, try(local.alarm_sets_config.defaults.actions, []))
           }
         ]
       ]
@@ -111,19 +133,51 @@ resource "aws_cloudwatch_metric_alarm" "set" {
   for_each = local.alarm_set_alarms
 
   alarm_name        = each.key
-  alarm_description = try(each.value.metric.description, "Managed by sls.tf alarm set")
+  alarm_description = each.value.description
 
-  namespace   = each.value.namespace
-  metric_name = each.value.metric.name
-  dimensions  = { (each.value.dimension) = each.value.resource_name }
+  # Static-threshold form: plain namespace/metric/statistic. Anomaly form uses
+  # metric_query blocks instead (the two are mutually exclusive on the
+  # provider).
+  namespace   = each.value.anomaly_detection ? null : each.value.namespace
+  metric_name = each.value.anomaly_detection ? null : each.value.metric_name
+  dimensions  = each.value.anomaly_detection ? null : { (each.value.dimension) = each.value.resource_name }
+  period      = each.value.anomaly_detection ? null : each.value.period
+  statistic   = each.value.anomaly_detection ? null : each.value.statistic
+  threshold   = each.value.anomaly_detection ? null : each.value.threshold
 
-  comparison_operator = each.value.metric.comparisonOperator
-  threshold           = each.value.metric.threshold
-  period              = try(each.value.metric.period, 300)
-  statistic           = try(each.value.metric.statistic, "Sum")
-  evaluation_periods  = try(each.value.metric.evaluationPeriods, 1)
-  datapoints_to_alarm = try(each.value.metric.datapointsToAlarm, null)
-  treat_missing_data  = try(each.value.metric.treatMissingData, "missing")
+  comparison_operator = each.value.anomaly_detection ? "LessThanLowerOrGreaterThanUpperThreshold" : each.value.comparison_operator
+  evaluation_periods  = each.value.evaluation_periods
+  datapoints_to_alarm = each.value.datapoints_to_alarm
+  treat_missing_data  = each.value.treat_missing_data
+
+  # Anomaly-detection band: the raw metric plus an ANOMALY_DETECTION_BAND
+  # expression it is compared against.
+  threshold_metric_id = each.value.anomaly_detection ? "ad1" : null
+
+  dynamic "metric_query" {
+    for_each = each.value.anomaly_detection ? ["m1"] : []
+    content {
+      id          = "m1"
+      return_data = true
+      metric {
+        namespace   = each.value.namespace
+        metric_name = each.value.metric_name
+        dimensions  = { (each.value.dimension) = each.value.resource_name }
+        period      = each.value.period
+        stat        = each.value.statistic
+      }
+    }
+  }
+
+  dynamic "metric_query" {
+    for_each = each.value.anomaly_detection ? ["ad1"] : []
+    content {
+      id          = "ad1"
+      expression  = "ANOMALY_DETECTION_BAND(m1, ${each.value.anomaly_band})"
+      label       = "${each.value.metric_name} (expected band)"
+      return_data = true
+    }
+  }
 
   alarm_actions = [
     for action in each.value.actions :
