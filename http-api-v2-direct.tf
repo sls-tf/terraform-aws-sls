@@ -117,11 +117,11 @@ resource "aws_iam_role" "http_direct_integration" {
     }]
   })
 
-  tags = {
+  tags = merge(var.injected_tags_enabled ? {
     Name      = each.key
     ManagedBy = "sls.tf"
     LogicalId = each.key
-  }
+  } : {}, var.global_tags)
 
   depends_on = [null_resource.config_validation]
 }

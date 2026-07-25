@@ -94,12 +94,12 @@ resource "aws_apigatewayv2_api" "websocket" {
   protocol_type              = "WEBSOCKET"
   route_selection_expression = tostring(try(each.value.Properties.RouteSelectionExpression, "$request.body.action"))
 
-  tags = {
+  tags = merge(var.injected_tags_enabled ? {
     Name      = each.key
     ManagedBy = "sls.tf"
     LogicalId = each.key
     Stage     = local.provider_with_defaults.stage
-  }
+  } : {}, var.global_tags)
 
   depends_on = [null_resource.config_validation]
 }
@@ -130,11 +130,11 @@ resource "aws_apigatewayv2_stage" "websocket" {
   name        = each.value.stage_name
   auto_deploy = true
 
-  tags = {
+  tags = merge(var.injected_tags_enabled ? {
     Name      = each.key
     ManagedBy = "sls.tf"
     LogicalId = each.key
-  }
+  } : {}, var.global_tags)
 
   depends_on = [aws_apigatewayv2_route.websocket]
 }

@@ -47,9 +47,16 @@ locals {
     )
   }
 
+  # Final auto-DLQ queue name per function, after the name template
+  # (var.function_dlq_name_template) is applied.
   _function_auto_dlq = {
     for fn, name in local._function_auto_dlq_names :
-    fn => name
+    fn => replace(replace(replace(
+      var.function_dlq_name_template,
+      "{prefix}", local._generated_name_prefix),
+      "{name}", name),
+      "{function}", fn
+    )
     if name != ""
   }
 
@@ -125,11 +132,15 @@ resource "aws_sqs_queue" "function_dlq" {
 
   name = each.value
 
-  tags = {
+  # Explicit retention so two modules can't disagree on an unset default
+  # (AWS's own default is 14 days; platform modules commonly use 4).
+  message_retention_seconds = var.auto_dlq_message_retention_seconds
+
+  tags = merge(var.injected_tags_enabled ? {
     ManagedBy   = "sls.tf"
     Function    = each.key
     Environment = local.provider_with_defaults.stage
-  }
+  } : {}, var.global_tags)
 
   depends_on = [null_resource.config_validation]
 }
@@ -186,7 +197,7 @@ resource "aws_iam_role_policy" "lambda_dlq" {
   for_each = {
     for fn, arn in local.function_dlq_arns :
     fn => arn
-    if !try(local._function_has_explicit_role[fn], false)
+    if var.function_dlq_policy_enabled && !try(local._function_has_explicit_role[fn], false)
   }
 
   name = "dlq-access"

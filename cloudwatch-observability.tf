@@ -120,12 +120,13 @@ resource "aws_cloudwatch_metric_alarm" "custom" {
   insufficient_data_actions = local.cloudwatch_alarm_actions[each.key].insufficient_data_actions
 
   tags = merge(
-    {
+    var.injected_tags_enabled ? {
       Name        = each.key
       ManagedBy   = "sls.tf"
       LogicalId   = each.key
       Environment = local.provider_with_defaults.stage
-    },
+    } : {},
+    var.global_tags,
     try({
       for tag in each.value.Properties.Tags :
       tag.Key => tag.Value

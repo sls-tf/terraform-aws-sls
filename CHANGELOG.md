@@ -3,6 +3,42 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.9.0
+
+Brownfield-parity release, driven by a real `terraform import` + `plan` of the
+event-service develop environment (111 resources imported in one plan; zero
+field diffs on every non-lambda resource).
+
+### Added
+
+- **`injected_tags_enabled`** — set false to suppress the module's tag
+  signature (Name/LogicalId/ManagedBy=sls.tf, and Service/Stage/Function on
+  lambdas) on EVERY resource type; **`global_tags`** applies a custom
+  signature. `AWS::Events::EventBus` now also honors CFN `Tags`.
+- **`auto_dlq_message_retention_seconds`** — explicit retention on
+  auto-created DLQs so two modules can't disagree on an unset default.
+- **`function_dlq_name_template` / `target_dlq_name_template`** — placeholder
+  templates ({prefix}/{name}/{function}/{rule}/{index}/{target_id}) so
+  auto-created DLQ names can match incumbent naming (e.g.
+  "{prefix}-eb-{target_id}-dlq").
+- **`function_dlq_policy_enabled`** — set false when the execution role
+  already carries DLQ permissions from an incumbent module.
+- **`events_rule_permission_sid_template`** — statement_id parity for rule
+  target permissions (e.g. "AllowExecutionFromEventBridge-{target_id}").
+- **`schedule.name`** — explicit schedule-rule names.
+- Target-DLQ queue policies carry an `AllowEventBridgeSendMessage` Sid,
+  matching common incumbent policies.
+
+### Changed
+
+- `publish` on functions is now null (provider default) instead of an
+  explicit false, so imported functions don't diff on it.
+- Nested `lambda_functions`/`dynamodb_tables` outputs are try()-null-safe and
+  evaluate against partial state (mid-import).
+- Documented migration path: import blocks in a single plan (all resources at
+  once) rather than incremental CLI `terraform import`, which fails on
+  partial for_each state.
+
 ## v0.8.0
 
 ### Added

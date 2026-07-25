@@ -59,9 +59,17 @@ locals {
           # "<ruleLogicalId>-<index>" by default — matching the elemental
           # module's live naming (e.g. all_events_ingress-0).
           auto_dlq = try(structural_target.DeadLetterConfig, null) != null && try(structural_target.DeadLetterConfig.Arn, null) == null
+          # Explicit QueueName wins; otherwise the name template
+          # (var.target_dlq_name_template) is applied.
           auto_dlq_name = tostring(try(
             structural_target.DeadLetterConfig.QueueName,
-            "${rule_id}-${idx}"
+            replace(replace(replace(replace(
+              var.target_dlq_name_template,
+              "{prefix}", local._generated_name_prefix),
+              "{rule}", rule_id),
+              "{index}", tostring(idx)),
+              "{target_id}", tostring(try(structural_target.Id, "target-${idx}"))
+            )
           ))
           # Function logical ID when the target ARN references a template
           # function; "" for non-function targets.
@@ -100,12 +108,20 @@ resource "aws_cloudwatch_event_bus" "cfn" {
     "${local.to_snake_case[each.key]}-${local.provider_with_defaults.stage}"
   ))
 
-  tags = {
-    Name        = each.key
-    ManagedBy   = "sls.tf"
-    LogicalId   = each.key
-    Environment = local.provider_with_defaults.stage
-  }
+  tags = merge(
+    var.injected_tags_enabled ? {
+      Name        = each.key
+      ManagedBy   = "sls.tf"
+      LogicalId   = each.key
+      Environment = local.provider_with_defaults.stage
+    } : {},
+    var.global_tags,
+    # CFN-style Tags on the EventBus resource.
+    try({
+      for tag in local.custom_resources_raw[each.key].Properties.Tags :
+      tag.Key => tag.Value
+    }, {})
+  )
 
   depends_on = [null_resource.config_validation]
 }
@@ -136,12 +152,12 @@ resource "aws_cloudwatch_event_rule" "cfn" {
   )
   state = try(local.custom_resources_raw[each.key].Properties.State, "ENABLED")
 
-  tags = {
+  tags = merge(var.injected_tags_enabled ? {
     Name        = each.key
     ManagedBy   = "sls.tf"
     LogicalId   = each.key
     Environment = local.provider_with_defaults.stage
-  }
+  } : {}, var.global_tags)
 
   depends_on = [null_resource.config_validation]
 }
@@ -203,11 +219,13 @@ resource "aws_sqs_queue" "events_target_dlq" {
 
   name = each.value.auto_dlq_name
 
-  tags = {
+  message_retention_seconds = var.auto_dlq_message_retention_seconds
+
+  tags = merge(var.injected_tags_enabled ? {
     ManagedBy   = "sls.tf"
     Rule        = each.value.rule_id
     Environment = local.provider_with_defaults.stage
-  }
+  } : {}, var.global_tags)
 
   depends_on = [null_resource.config_validation]
 }
@@ -220,6 +238,7 @@ resource "aws_sqs_queue_policy" "events_target_dlq" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
+      Sid       = "AllowEventBridgeSendMessage"
       Effect    = "Allow"
       Principal = { Service = "events.amazonaws.com" }
       Action    = "sqs:SendMessage"
@@ -235,7 +254,13 @@ resource "aws_sqs_queue_policy" "events_target_dlq" {
 resource "aws_lambda_permission" "cfn_events_rule" {
   for_each = local.events_rule_lambda_targets
 
-  statement_id  = "AllowEventsRuleInvoke-${each.key}"
+  statement_id = replace(replace(replace(replace(
+    var.events_rule_permission_sid_template,
+    "{key}", each.key),
+    "{rule}", each.value.rule_id),
+    "{index}", element(split("-", each.key), length(split("-", each.key)) - 1)),
+    "{target_id}", each.value.target_id
+  )
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.functions[each.value.function_id].function_name
   principal     = "events.amazonaws.com"

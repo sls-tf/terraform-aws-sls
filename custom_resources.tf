@@ -19,12 +19,13 @@ resource "aws_s3_bucket" "custom" {
   force_destroy = true
 
   tags = merge(
-    {
+    var.injected_tags_enabled ? {
       Name        = each.key
       ManagedBy   = "sls.tf"
       LogicalId   = each.key
       Environment = local.provider_with_defaults.stage
-    },
+    } : {},
+    var.global_tags,
     # Convert CloudFormation tag format to Terraform map
     try({
       for tag in each.value.Properties.Tags :
@@ -198,12 +199,13 @@ resource "aws_dynamodb_table" "custom" {
 
   # Tags
   tags = merge(
-    {
+    var.injected_tags_enabled ? {
       Name        = each.key
       ManagedBy   = "sls.tf"
       LogicalId   = each.key
       Environment = local.provider_with_defaults.stage
-    },
+    } : {},
+    var.global_tags,
     # Convert CloudFormation tag format to Terraform map
     try({
       for tag in each.value.Properties.Tags :
@@ -241,12 +243,13 @@ resource "aws_sns_topic" "custom" {
 
   # Tags
   tags = merge(
-    {
+    var.injected_tags_enabled ? {
       Name        = each.key
       ManagedBy   = "sls.tf"
       LogicalId   = each.key
       Environment = local.provider_with_defaults.stage
-    },
+    } : {},
+    var.global_tags,
     # Convert CloudFormation tag format to Terraform map
     try({
       for tag in each.value.Properties.Tags :
@@ -297,12 +300,13 @@ resource "aws_sqs_queue" "custom" {
 
   # Tags
   tags = merge(
-    {
+    var.injected_tags_enabled ? {
       Name        = each.key
       ManagedBy   = "sls.tf"
       LogicalId   = each.key
       Environment = local.provider_with_defaults.stage
-    },
+    } : {},
+    var.global_tags,
     # Convert CloudFormation tag format to Terraform map
     try({
       for tag in each.value.Properties.Tags :
@@ -333,12 +337,13 @@ resource "aws_cloudwatch_log_group" "custom" {
   kms_key_id = try(each.value.Properties.KmsKeyId, null)
 
   tags = merge(
-    {
+    var.injected_tags_enabled ? {
       Name        = each.key
       ManagedBy   = "sls.tf"
       LogicalId   = each.key
       Environment = local.provider_with_defaults.stage
-    },
+    } : {},
+    var.global_tags,
     try({
       for tag in each.value.Properties.Tags :
       tag.Key => tag.Value
@@ -515,12 +520,13 @@ resource "aws_cloudfront_distribution" "custom" {
 
   # Tags
   tags = merge(
-    {
+    var.injected_tags_enabled ? {
       Name        = each.key
       ManagedBy   = "sls.tf"
       LogicalId   = each.key
       Environment = local.provider_with_defaults.stage
-    },
+    } : {},
+    var.global_tags,
     # Convert CloudFormation tag format to Terraform map
     try({
       for tag in each.value.Properties.Tags :

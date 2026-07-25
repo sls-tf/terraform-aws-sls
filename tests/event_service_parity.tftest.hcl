@@ -220,6 +220,58 @@ run "nested_outputs" {
   }
 }
 
+run "layer5_tag_and_dlq_parity" {
+  command = plan
+
+  variables {
+    config_path                = "tests/fixtures/event-service-parity.yml"
+    generated_name_order       = "stage-service"
+    role_tags_enabled          = false
+    injected_tags_enabled      = false
+    global_tags                = { ManagedBy = "terraform" }
+    function_dlq_name_template = "{prefix}-{name}-dlq"
+    target_dlq_name_template   = "{prefix}-eb-{target_id}-dlq"
+  }
+
+  # No sls.tf tag signature; only the global override
+  assert {
+    condition     = aws_dynamodb_table.custom["AtpHoldoffStore"].tags == tomap({ ManagedBy = "terraform" })
+    error_message = "injected_tags_enabled=false should leave only global_tags: ${jsonencode(aws_dynamodb_table.custom["AtpHoldoffStore"].tags)}"
+  }
+
+  assert {
+    condition     = aws_cloudwatch_event_bus.cfn["EventsBus"].tags == tomap({ ManagedBy = "terraform" })
+    error_message = "Event bus should carry only global_tags"
+  }
+
+  assert {
+    condition     = length(aws_lambda_function.functions["all_events"].tags) == 1
+    error_message = "Lambda should carry only global_tags"
+  }
+
+  # Elemental DLQ naming via templates
+  assert {
+    condition     = aws_sqs_queue.function_dlq["atp_holdoff_disabled"].name == "develop-events-atp_holdoff_disabled-dlq-dlq"
+    error_message = "Function DLQ template name incorrect: ${aws_sqs_queue.function_dlq["atp_holdoff_disabled"].name}"
+  }
+
+  assert {
+    condition     = aws_sqs_queue.events_target_dlq["all_events_ingress-0"].name == "develop-events-eb-all_events_ingress-target-0-dlq"
+    error_message = "Target DLQ template name incorrect: ${aws_sqs_queue.events_target_dlq["all_events_ingress-0"].name}"
+  }
+
+  # Elemental's 4-day retention default on auto DLQs
+  assert {
+    condition     = aws_sqs_queue.function_dlq["atp_holdoff_disabled"].message_retention_seconds == 345600
+    error_message = "Auto DLQ retention default incorrect"
+  }
+
+  assert {
+    condition     = aws_sqs_queue.events_target_dlq["all_events_ingress-0"].message_retention_seconds == 345600
+    error_message = "Target DLQ retention default incorrect"
+  }
+}
+
 run "sam_stage_auth_and_zone_lookup" {
   command = plan
 

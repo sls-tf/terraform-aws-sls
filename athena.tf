@@ -215,12 +215,13 @@ resource "aws_athena_workgroup" "custom" {
   }
 
   tags = merge(
-    {
+    var.injected_tags_enabled ? {
       Name        = each.key
       ManagedBy   = "sls.tf"
       LogicalId   = each.key
       Environment = local.provider_with_defaults.stage
-    },
+    } : {},
+    var.global_tags,
     try({
       for tag in each.value.Properties.Tags :
       tag.Key => tag.Value

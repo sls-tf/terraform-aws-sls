@@ -145,11 +145,11 @@ resource "aws_iam_role" "lambda_execution" {
 
   # Optional for brownfield parity — platform modules often leave roles
   # untagged, and role tags diff on every plan after a swap.
-  tags = var.role_tags_enabled ? {
+  tags = merge(var.role_tags_enabled && var.injected_tags_enabled ? {
     Service  = try(local.parsed_config_resolved.service, "unknown")
     Stage    = local.provider_with_defaults.stage
     Function = each.key
-  } : {}
+  } : {}, var.role_tags_enabled ? var.global_tags : {})
 
   depends_on = [null_resource.config_validation]
 }
@@ -220,8 +220,10 @@ resource "aws_lambda_function" "functions" {
   handler     = var.config_format == "sam" ? try(local._function_handler[each.key], each.value.handler) : each.value.handler
   memory_size = each.value.memorySize
   timeout     = each.value.timeout
-  # Lambda@Edge requires published versions for qualified_arn references
-  publish = contains(local.functions_with_cloudfront_events, each.key)
+  # Lambda@Edge requires published versions for qualified_arn references.
+  # null (not false) otherwise: it's the provider default, and an explicit
+  # false diffs against imported state.
+  publish = contains(local.functions_with_cloudfront_events, each.key) ? true : null
 
   description   = try(each.value.description, null)
   architectures = try(each.value.architectures, null)
@@ -271,11 +273,11 @@ resource "aws_lambda_function" "functions" {
     }
   }
 
-  tags = {
+  tags = merge(var.injected_tags_enabled ? {
     Service  = try(local.parsed_config_resolved.service, "unknown")
     Stage    = local.provider_with_defaults.stage
     Function = each.key
-  }
+  } : {}, var.global_tags)
 
   depends_on = [
     aws_iam_role_policy_attachment.lambda_logs,

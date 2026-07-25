@@ -100,12 +100,12 @@ resource "aws_apigatewayv2_domain_name" "self" {
     security_policy = tostring(try(each.value.SecurityPolicy, "TLS_1_2"))
   }
 
-  tags = {
+  tags = merge(var.injected_tags_enabled ? {
     Name      = each.key
     ManagedBy = "sls.tf"
     LogicalId = each.key
     Stage     = local.provider_with_defaults.stage
-  }
+  } : {}, var.global_tags)
 
   depends_on = [null_resource.config_validation]
 }
@@ -130,11 +130,11 @@ resource "aws_acm_certificate" "self" {
     create_before_destroy = true
   }
 
-  tags = {
+  tags = merge(var.injected_tags_enabled ? {
     Name      = each.key
     ManagedBy = "sls.tf"
     LogicalId = each.key
-  }
+  } : {}, var.global_tags)
 
   depends_on = [null_resource.config_validation]
 }

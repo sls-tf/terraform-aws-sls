@@ -405,3 +405,118 @@ near-mechanical.
 `api.docs` swagger hosting, vestigial RDS keys (`skip_final_snapshot`,
 `engine_version`), and service-wide `tags:` injection (partially covered by
 per-resource tags today).
+
+## Layer 5: real `terraform import` + `plan` against live resources (2026-07-25, v0.8.0)
+
+The layer-3 "real plan" item finally run — not against the real S3 backend
+(swapping module source there just shows "destroy everything / create
+everything" because Terraform addresses resources by path, which is a
+Terraform artifact, not a real diff), but the correct version: a scratch root
+with a **local** backend, sls.tf v0.8.0 (`da9e1ed`) sourced locally,
+`generated_name_order = "stage-service"` + `role_tags_enabled = false` set,
+explicit real resource names in the template to isolate remaining diffs from
+the already-known naming issue — then `terraform import` of real live
+resources by ARN/name, then `terraform plan` against that local state. This
+is what actually answers "would swapping the module produce a clean plan,"
+because import establishes the address mapping a real migration would need
+anyway.
+
+### 29. SQS default `message_retention_seconds` disagrees with elemental's default
+Imported the real `develop-events-atp_holdoff_disabled-dlq-dlq` queue: live
+`message_retention_seconds = 345600` (4 days, elemental's default). sls.tf's
+`aws_sqs_queue` resource defaults to AWS's own default, `1209600` (14 days).
+`infrastructure.yaml` never sets retention explicitly for any queue, so this
+is two modules disagreeing on an unset default — a genuine non-zero `plan`
+diff on the exact resource type gap 7/17 claimed to close.
+
+### 30. sls.tf injects its own tag scheme unconditionally
+Imported `aws_cloudwatch_event_bus.cfn["EventsBus"]` and
+`aws_dynamodb_table.custom["AtpHoldoffStore"]`: both diff on tags. sls.tf adds
+`LogicalId`/`Name`/`ManagedBy=sls.tf` to every resource it manages; elemental
+tags with `ManagedBy=terraform`/`Terraform=true` instead, plus whatever
+per-resource tags the consumer's config specifies (`Purpose`, `Feature`,
+etc. — omitted from the scratch template this pass, so part of the observed
+diff is a test-fixture gap, not attributable to sls.tf; the auto-injected
+`ManagedBy=sls.tf`/`LogicalId`/`Name` triplet is the real, attributable
+finding). `role_tags_enabled = false` (gap 27) only silences tags on IAM
+roles — every other resource type still gets the sls.tf tag signature
+unconditionally, so "zero-diff" fails on tags alone across the whole
+resource set unless a broader tag-suppression knob exists.
+
+### 31. Auto-generated DLQ names don't match live naming, even under gap 17's own convention
+Live EventBridge target DLQ: `develop-events-eb-all_events_ingress-target-0-dlq`.
+sls.tf v0.8.0's auto-DLQ-naming feature (gap 17, `<rule>-<idx>`) generates
+`all_events_ingress-0` — no environment/service prefix, no `eb-` infix, no
+`-dlq` suffix. Confirmed directly against live state, not inferred. The
+function-level DLQ's live double-`-dlq` suffix (`...-dlq-dlq`) only matched
+in this test because the scratch template hardcoded the literal string —
+nothing in v0.8.0 derives that shape automatically either.
+
+### 32. Structural: incremental `terraform import` is broken by the module's own for_each cross-references
+The most consequential finding this pass. Importing one function's resources
+without also importing every other function declared in the same template
+fails outright — not with a diff, with a hard error. Reproduced twice:
+`outputs.tf`'s `lambda_functions` output (`aws_lambda_function.functions[fn]`)
+and `main.tf`'s `aws_iam_role_policy_attachment.lambda_logs`
+(`aws_iam_role.lambda_execution[each.key].name`) both throw `Invalid index` /
+"is object with 1 attribute" the moment state holds a strict subset of a
+`for_each` resource set the template declares. Every function, every role,
+every per-function attachment for a given resource type has to be imported
+in one atomic batch before a single `plan` succeeds — there's no
+resource-by-resource or function-by-function incremental path. That makes a
+real brownfield cutover a single big-bang operation per resource type
+(import all ~15 lambdas' roles/attachments together, or none), not the
+"reconcile a few diffs at a time" migration the nested-output fix (gap 28)
+was aiming to enable — and it's a direct side effect of that same for_each
+pattern, not an unrelated bug.
+
+### Bottom line
+Not zero-diff. Confirmed real, attributable diffs (SQS retention default, tag
+scheme) on resource types layers 1/2/4 each already claimed closed, confirmed
+the auto-DLQ-naming gap directly against live state on the feature built
+specifically to fix it, and surfaced a new structural problem — incremental
+import doesn't work — that's more operationally important than any single
+field diff, because it changes the shape of a real migration from
+"reconcile as you go" to "all-or-nothing per resource type." Six layers in,
+the pattern (closing gaps surfaces a sharper problem underneath) still hasn't
+broken.
+
+> **Status 2026-07-25 (later): layer 5 closed — the swap was actually run
+> against develop.** Module fixes (suite at 335 passing):
+>
+> - #29 retention: auto-created DLQs now set `message_retention_seconds`
+>   explicitly (var `auto_dlq_message_retention_seconds`, default 345600).
+>   NOTE: re-checked every one of the 17 live queues — all are at 1209600, so
+>   the original 345600-vs-1209600 finding did not reproduce; the knob exists
+>   either way and the swap root pins 1209600.
+> - #30 tags: `injected_tags_enabled = false` suppresses the sls.tf tag
+>   signature on EVERY resource type (not just roles); `global_tags` applies a
+>   custom signature; `AWS::Events::EventBus` now honors CFN `Tags`.
+> - #31 naming: `function_dlq_name_template` / `target_dlq_name_template`
+>   ("{prefix}-{name}-dlq" / "{prefix}-eb-{target_id}-dlq" reproduce the live
+>   names exactly, verified against all 17 queues); plus
+>   `function_dlq_policy_enabled = false` (incumbent inline policies stay),
+>   `events_rule_permission_sid_template`
+>   ("AllowExecutionFromEventBridge-{target_id}" matches live Sids), queue
+>   policies now carry the live `AllowEventBridgeSendMessage` Sid, and
+>   `schedule.name` pins schedule-rule names.
+> - #32 import: nested outputs are try()-null-safe on partial state, and the
+>   migration path is **import blocks in a single plan**, not incremental CLI
+>   import — all 111 resources imported in ONE `terraform plan` with zero
+>   errors, which dissolves the all-or-nothing problem (the plan computes
+>   config against the full declared set, so partial-state indexing never
+>   happens).
+>
+> **The actual run** (sls-swap/ scratch root in the event-service repo, local
+> state, live develop account): 111 resources imported — 14 lambdas, 14 roles,
+> 28 policy attachments, 14 event-invoke configs, 7 function DLQs, 6 target
+> DLQs + queue policies, 6 rules + targets + lambda permissions, 3 DynamoDB
+> tables (5-GSI schema, PITR, TTL), 1 event bus. Result:
+> **0 to destroy, 0 real creates, 0 field diffs on any non-lambda resource.**
+> Residual: the code-delivery triple (`filename`/`publish`/`source_code_hash`)
+> on each lambda — Terraform-side deployment plumbing (scratch used stub
+> code; `publish` is provider default normalization), not live-infrastructure
+> drift — plus 15 local-only null_resource validators. Not yet modeled in the
+> swap root: schedule rules (module now supports `schedule.name` but target
+> id/retry parity is unverified), API Gateway, Athena/S3, monitoring
+> alarms/dashboard — next iteration widens scope to those.

@@ -347,8 +347,10 @@ output "lambda_functions" {
   value = {
     for fn in local._function_names :
     fn => {
-      function_name = aws_lambda_function.functions[fn].function_name
-      function_arn  = aws_lambda_function.functions[fn].arn
+      # try(): stays evaluable against PARTIAL state (mid-import), where only
+      # a subset of instances exists yet.
+      function_name = try(aws_lambda_function.functions[fn].function_name, null)
+      function_arn  = try(aws_lambda_function.functions[fn].arn, null)
       role_name     = try(aws_iam_role.lambda_execution[fn].name, null)
     }
   }
@@ -359,10 +361,10 @@ output "dynamodb_tables" {
   value = {
     for lid in keys(local.dynamodb_tables) :
     lid => {
-      table_name = aws_dynamodb_table.custom[lid].name
-      table_arn  = aws_dynamodb_table.custom[lid].arn
-      table_id   = aws_dynamodb_table.custom[lid].id
-      stream_arn = aws_dynamodb_table.custom[lid].stream_arn
+      table_name = try(aws_dynamodb_table.custom[lid].name, null)
+      table_arn  = try(aws_dynamodb_table.custom[lid].arn, null)
+      table_id   = try(aws_dynamodb_table.custom[lid].id, null)
+      stream_arn = try(aws_dynamodb_table.custom[lid].stream_arn, null)
     }
   }
 }

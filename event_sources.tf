@@ -6,7 +6,7 @@
 resource "aws_cloudwatch_event_rule" "schedule" {
   for_each = local.schedule_event_map
 
-  name                = "${try(local.parsed_config.service, "unknown")}-${local.provider_with_defaults.stage}-${each.value.function_name}-schedule-${each.value.event_index}"
+  name                = each.value.name != null ? each.value.name : "${try(local.parsed_config.service, "unknown")}-${local.provider_with_defaults.stage}-${each.value.function_name}-schedule-${each.value.event_index}"
   description         = each.value.description
   schedule_expression = each.value.schedule_expression
   state               = each.value.enabled ? "ENABLED" : "DISABLED"

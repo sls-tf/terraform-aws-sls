@@ -145,12 +145,12 @@ resource "aws_apigatewayv2_api" "self" {
     }
   }
 
-  tags = {
+  tags = merge(var.injected_tags_enabled ? {
     Name      = each.key
     ManagedBy = "sls.tf"
     LogicalId = each.key
     Stage     = local.provider_with_defaults.stage
-  }
+  } : {}, var.global_tags)
 
   depends_on = [null_resource.config_validation]
 }
@@ -192,11 +192,11 @@ resource "aws_apigatewayv2_stage" "self" {
   name        = tostring(try(local.sam_self_http_api_props[each.key].StageName, "$default"))
   auto_deploy = true
 
-  tags = {
+  tags = merge(var.injected_tags_enabled ? {
     Name      = each.key
     ManagedBy = "sls.tf"
     LogicalId = each.key
-  }
+  } : {}, var.global_tags)
 
   depends_on = [aws_apigatewayv2_route.self]
 }

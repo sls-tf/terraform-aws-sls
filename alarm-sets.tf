@@ -188,10 +188,10 @@ resource "aws_cloudwatch_metric_alarm" "set" {
     )
   ]
 
-  tags = {
+  tags = merge(var.injected_tags_enabled ? {
     ManagedBy   = "sls.tf"
     Environment = local.provider_with_defaults.stage
-  }
+  } : {}, var.global_tags)
 
   depends_on = [null_resource.config_validation]
 }

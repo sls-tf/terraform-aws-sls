@@ -972,6 +972,9 @@ locals {
           can(event.schedule.cron) ? event.schedule.cron :
           tostring(event.schedule)
         )
+        # Explicit rule name (serverless framework `schedule.name`); null =
+        # module-generated "<service>-<stage>-<fn>-schedule-<idx>".
+        name             = can(event.schedule.name) ? tostring(event.schedule.name) : null
         enabled          = can(event.schedule.enabled) ? event.schedule.enabled : try(event.enabled, true)
         description      = can(event.schedule.description) ? event.schedule.description : try(event.description, null)
         input            = can(event.schedule.input) ? event.schedule.input : try(event.input, null)

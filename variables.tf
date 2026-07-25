@@ -254,3 +254,56 @@ variable "role_tags_enabled" {
   type        = bool
   default     = true
 }
+
+variable "injected_tags_enabled" {
+  description = "Inject the module's tag scheme (Name/LogicalId/ManagedBy=sls.tf/Environment, and Service/Stage/Function on lambdas) on every managed resource. Set false for brownfield parity — only template-declared tags and var.global_tags are applied."
+  type        = bool
+  default     = true
+}
+
+variable "global_tags" {
+  description = "Tags applied to every module-managed resource (after the injected scheme, so these win on conflict). Use to replicate an incumbent module's signature, e.g. { ManagedBy = \"terraform\" }."
+  type        = map(string)
+  default     = {}
+}
+
+variable "auto_dlq_message_retention_seconds" {
+  description = "message_retention_seconds for AUTO-created DLQs (function dlq:{enabled} / rule-target DeadLetterConfig without Arn). Default 345600 (4 days) matches common platform-module defaults; AWS's own default is 1209600."
+  type        = number
+  default     = 345600
+}
+
+variable "function_dlq_name_template" {
+  description = <<-DESC
+    Name template for AUTO-created function DLQs. Placeholders: {prefix}
+    (generated <service>-<stage> prefix per generated_name_order), {name}
+    (the configured dlq name, or "<function>-dlq" when unset), {function}
+    (the function key). Default "{name}" preserves existing behaviour;
+    "{prefix}-{name}-dlq" replicates env-prefixed platform naming.
+  DESC
+  type        = string
+  default     = "{name}"
+}
+
+variable "target_dlq_name_template" {
+  description = <<-DESC
+    Name template for AUTO-created EventBridge rule-target DLQs. Placeholders:
+    {prefix}, {rule} (rule logical id), {index} (target index), {target_id}
+    (the target's Id). Default "{rule}-{index}" preserves existing behaviour;
+    "{prefix}-eb-{target_id}-dlq" replicates env-prefixed platform naming.
+  DESC
+  type        = string
+  default     = "{rule}-{index}"
+}
+
+variable "function_dlq_policy_enabled" {
+  description = "Create the module's dlq-access role policy for functions with a DLQ. Set false when the execution role already carries equivalent permissions (e.g. an incumbent module's inline policy that stays unmanaged through a migration)."
+  type        = bool
+  default     = true
+}
+
+variable "events_rule_permission_sid_template" {
+  description = "statement_id template for the lambda permissions on AWS::Events::Rule targets. Placeholders: {key} (\"<rule>-<index>\"), {rule}, {index}, {target_id}. Default \"AllowEventsRuleInvoke-{key}\"; e.g. \"AllowExecutionFromEventBridge-{target_id}\" for parity with an incumbent module's Sids."
+  type        = string
+  default     = "AllowEventsRuleInvoke-{key}"
+}

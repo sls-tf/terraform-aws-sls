@@ -94,12 +94,12 @@ resource "aws_iam_role" "custom" {
     { Version = "2012-10-17", Statement = [] }
   ))
 
-  tags = {
+  tags = merge(var.injected_tags_enabled ? {
     Name      = each.key
     ManagedBy = "sls.tf"
     LogicalId = each.key
     Stage     = local.provider_with_defaults.stage
-  }
+  } : {}, var.global_tags)
 
   depends_on = [null_resource.config_validation]
 }
