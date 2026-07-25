@@ -20,7 +20,7 @@ resource "aws_route53_record" "custom_domain" {
   alias {
     name                   = local.domain_name_target
     zone_id                = local.domain_name_zone_id
-    evaluate_target_health = true
+    evaluate_target_health = coalesce(try(var.domain_config.evaluateTargetHealth, null), true)
   }
 
   depends_on = [aws_api_gateway_domain_name.custom_domain]

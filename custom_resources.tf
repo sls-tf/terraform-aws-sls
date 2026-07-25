@@ -15,8 +15,7 @@ resource "aws_s3_bucket" "custom" {
   # Use BucketName property if specified, otherwise generate name
   bucket = try(each.value.Properties.BucketName, "${local.to_snake_case[each.key]}-${local.provider_with_defaults.stage}")
 
-  # Force destroy for easier cleanup (can be made configurable)
-  force_destroy = true
+  force_destroy = var.s3_force_destroy
 
   tags = merge(
     var.injected_tags_enabled ? {
@@ -110,6 +109,13 @@ resource "aws_s3_bucket_lifecycle_configuration" "custom" {
         content {
           days          = try(transition.value.TransitionInDays, null)
           storage_class = transition.value.StorageClass
+        }
+      }
+
+      dynamic "abort_incomplete_multipart_upload" {
+        for_each = try(rule.value.AbortIncompleteMultipartUpload.DaysAfterInitiation, null) != null ? [rule.value.AbortIncompleteMultipartUpload.DaysAfterInitiation] : []
+        content {
+          days_after_initiation = abort_incomplete_multipart_upload.value
         }
       }
     }

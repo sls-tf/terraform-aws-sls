@@ -974,12 +974,18 @@ locals {
         )
         # Explicit rule name (serverless framework `schedule.name`); null =
         # module-generated "<service>-<stage>-<fn>-schedule-<idx>".
-        name             = can(event.schedule.name) ? tostring(event.schedule.name) : null
-        enabled          = can(event.schedule.enabled) ? event.schedule.enabled : try(event.enabled, true)
-        description      = can(event.schedule.description) ? event.schedule.description : try(event.description, null)
-        input            = can(event.schedule.input) ? event.schedule.input : try(event.input, null)
-        inputPath        = can(event.schedule.inputPath) ? event.schedule.inputPath : try(event.inputPath, null)
-        inputTransformer = can(event.schedule.inputTransformer) ? event.schedule.inputTransformer : try(event.inputTransformer, null)
+        name = can(event.schedule.name) ? tostring(event.schedule.name) : null
+        # Explicit target id + retry policy (sls.tf extensions, for parity
+        # with incumbent scheduled rules).
+        target_id           = can(event.schedule.targetId) ? tostring(event.schedule.targetId) : null
+        permission_sid      = can(event.schedule.permissionSid) ? tostring(event.schedule.permissionSid) : null
+        retry_max_attempts  = try(event.schedule.retryPolicy.MaximumRetryAttempts, try(event.schedule.retryPolicy.maximumRetryAttempts, null))
+        retry_max_event_age = try(event.schedule.retryPolicy.MaximumEventAgeInSeconds, try(event.schedule.retryPolicy.maximumEventAgeInSeconds, null))
+        enabled             = can(event.schedule.enabled) ? event.schedule.enabled : try(event.enabled, true)
+        description         = can(event.schedule.description) ? event.schedule.description : try(event.description, null)
+        input               = can(event.schedule.input) ? event.schedule.input : try(event.input, null)
+        inputPath           = can(event.schedule.inputPath) ? event.schedule.inputPath : try(event.inputPath, null)
+        inputTransformer    = can(event.schedule.inputTransformer) ? event.schedule.inputTransformer : try(event.inputTransformer, null)
       } if can(event.schedule)
     ]
   ])

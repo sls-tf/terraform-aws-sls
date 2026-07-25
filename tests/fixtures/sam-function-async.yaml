@@ -39,3 +39,19 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: plain.handler
+  ScheduledFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: sched.run
+      Events:
+        Poll:
+          Type: Schedule
+          Properties:
+            Schedule: cron(*/5 * * * ? *)
+            Name: events-scheduled-fn-develop
+            Description: Periodic poll
+            TargetId: scheduled_fn
+            PermissionSid: AllowExecutionFromEventBridgeSchedule-develop
+            RetryPolicy:
+              MaximumRetryAttempts: 2
+              MaximumEventAgeInSeconds: 86400

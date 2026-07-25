@@ -1,13 +1,14 @@
 variable "domain_config" {
   description = "Custom domain configuration from provider.customDomain"
   type = object({
-    domainName          = string
-    basePath            = optional(string)
-    stage               = optional(string)
-    createRoute53Record = optional(bool)
-    certificateArn      = optional(string)
-    hostedZoneId        = optional(string)
-    endpointType        = optional(string)
+    domainName           = string
+    basePath             = optional(string)
+    stage                = optional(string)
+    createRoute53Record  = optional(bool)
+    certificateArn       = optional(string)
+    hostedZoneId         = optional(string)
+    evaluateTargetHealth = optional(bool)
+    endpointType         = optional(string)
   })
   default = null
 }

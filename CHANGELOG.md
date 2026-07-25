@@ -3,6 +3,37 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.10.0
+
+Full-estate brownfield parity on SAM templates — verified by importing 240
+live resources (lambdas, schedules, v1 REST API + custom domain, Glue/Athena,
+S3, 88 alarms, SNS topics, dashboard) in a single plan with zero field diffs
+outside the lambda code-delivery attributes.
+
+### Added
+
+- **Schedule event parity** — SAM Schedule `Name`/`Description` translate;
+  `TargetId`, `RetryPolicy` and `PermissionSid` extensions (also serverless
+  yaml `schedule.targetId`/`retryPolicy`/`permissionSid`);
+  `schedule_permission_sid_template` variable.
+- **v1 REST API parity knobs** — `rest_api_name`, `rest_api_description`,
+  `rest_api_endpoint_type` (EDGE/REGIONAL/PRIVATE), `rest_api_stage_name`,
+  `rest_api_redeployment_triggers_enabled`,
+  `apigw_lambda_permissions_enabled`.
+- **SAM custom domain** — `Metadata.SlsTf.CustomDomain` feeds the v1
+  custom-domain module; `evaluateTargetHealth` supported on the Route53 alias.
+- **`s3_force_destroy`** — disable the config-only force_destroy for import
+  parity.
+- **Glue database `Properties.Tags`** (map extension) and S3 lifecycle
+  `AbortIncompleteMultipartUpload`.
+
+### Fixed
+
+- v1 REST Lambda integration URIs used the parsed provider region (a baked-in
+  default for SAM templates) instead of the actual deploy region.
+- The custom-domain module's typed `domain_config` silently dropped unknown
+  keys.
+
 ## v0.9.0
 
 Brownfield-parity release, driven by a real `terraform import` + `plan` of the

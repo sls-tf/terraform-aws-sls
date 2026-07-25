@@ -108,3 +108,40 @@ run "yaml_function_async" {
     error_message = "DLQ role policy not keyed to worker"
   }
 }
+
+run "sam_schedule_parity_extensions" {
+  command = plan
+
+  variables {
+    config_path   = "tests/fixtures/sam-function-async.yaml"
+    config_format = "sam"
+  }
+
+  # Explicit rule name instead of the generated "<service>-<stage>-..." form
+  assert {
+    condition     = aws_cloudwatch_event_rule.schedule["ScheduledFn-schedule-0"].name == "events-scheduled-fn-develop"
+    error_message = "Schedule Name not honored"
+  }
+
+  assert {
+    condition     = aws_cloudwatch_event_rule.schedule["ScheduledFn-schedule-0"].description == "Periodic poll"
+    error_message = "Schedule Description not honored"
+  }
+
+  # Explicit target id + retry policy
+  assert {
+    condition     = aws_cloudwatch_event_target.schedule["ScheduledFn-schedule-0"].target_id == "scheduled_fn"
+    error_message = "Schedule TargetId not honored"
+  }
+
+  assert {
+    condition     = aws_cloudwatch_event_target.schedule["ScheduledFn-schedule-0"].retry_policy[0].maximum_retry_attempts == 2 && aws_cloudwatch_event_target.schedule["ScheduledFn-schedule-0"].retry_policy[0].maximum_event_age_in_seconds == 86400
+    error_message = "Schedule RetryPolicy not honored"
+  }
+
+  # Explicit permission Sid
+  assert {
+    condition     = aws_lambda_permission.schedule_events["ScheduledFn-schedule-0"].statement_id == "AllowExecutionFromEventBridgeSchedule-develop"
+    error_message = "Schedule PermissionSid not honored"
+  }
+}

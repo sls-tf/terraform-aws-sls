@@ -345,11 +345,11 @@ resource "null_resource" "config_validation" {
 resource "aws_api_gateway_rest_api" "this" {
   count = length(local.http_v1_events) > 0 ? 1 : 0
 
-  name        = "${local.parsed_config_resolved.service}-${local.provider_with_defaults.stage}"
-  description = "API Gateway for ${local.parsed_config_resolved.service}"
+  name        = var.rest_api_name != null ? var.rest_api_name : "${local.parsed_config_resolved.service}-${local.provider_with_defaults.stage}"
+  description = var.rest_api_description != null ? var.rest_api_description : "API Gateway for ${local.parsed_config_resolved.service}"
 
   endpoint_configuration {
-    types = ["EDGE"]
+    types = [var.rest_api_endpoint_type]
   }
 
   depends_on = [null_resource.config_validation]
@@ -438,7 +438,7 @@ resource "aws_api_gateway_integration" "lambda" {
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "arn:aws:apigateway:${local.provider_with_defaults.region}:lambda:path/2015-03-31/functions/${aws_lambda_function.functions[each.value.function_name].arn}/invocations"
+  uri                     = "arn:aws:apigateway:${data.aws_region.current.region}:lambda:path/2015-03-31/functions/${aws_lambda_function.functions[each.value.function_name].arn}/invocations"
 }
 
 # CORS OPTIONS Methods
@@ -506,7 +506,7 @@ resource "aws_api_gateway_integration_response" "cors_options_200" {
 
 # Lambda Permissions - Allow API Gateway to invoke Lambda functions
 resource "aws_lambda_permission" "api_gateway" {
-  for_each = length(local.http_v1_events) > 0 ? local.functions_with_http_events : toset([])
+  for_each = length(local.http_v1_events) > 0 && var.apigw_lambda_permissions_enabled ? local.functions_with_http_events : toset([])
 
   statement_id  = "AllowAPIGatewayInvoke-${each.key}"
   action        = "lambda:InvokeFunction"
@@ -523,15 +523,16 @@ resource "aws_api_gateway_deployment" "this" {
 
   rest_api_id = aws_api_gateway_rest_api.this[0].id
 
-  # Trigger redeployment when methods or integrations change
-  triggers = {
+  # Trigger redeployment when methods or integrations change. Disabled for
+  # brownfield import parity (imported deployments carry no trigger state).
+  triggers = var.rest_api_redeployment_triggers_enabled ? {
     redeployment = sha1(jsonencode({
       methods           = keys(aws_api_gateway_method.endpoints)
       integrations      = keys(aws_api_gateway_integration.lambda)
       cors_methods      = keys(aws_api_gateway_method.cors_options)
       cors_integrations = keys(aws_api_gateway_integration.cors_options)
     }))
-  }
+  } : null
 
   lifecycle {
     create_before_destroy = true
@@ -553,7 +554,7 @@ resource "aws_api_gateway_stage" "this" {
 
   deployment_id = aws_api_gateway_deployment.this[0].id
   rest_api_id   = aws_api_gateway_rest_api.this[0].id
-  stage_name    = local.provider_with_defaults.stage
+  stage_name    = var.rest_api_stage_name != null ? var.rest_api_stage_name : local.provider_with_defaults.stage
 }
 
 # ============================================================================

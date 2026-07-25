@@ -307,3 +307,56 @@ variable "events_rule_permission_sid_template" {
   type        = string
   default     = "AllowEventsRuleInvoke-{key}"
 }
+
+variable "schedule_permission_sid_template" {
+  description = "statement_id template for schedule-event lambda permissions. Placeholders: {service}, {stage}, {function}, {index}. Default preserves the legacy \"<service>-<stage>-<function>-schedule-<index>\" form; e.g. \"AllowExecutionFromEventBridgeSchedule-{stage}\" for incumbent parity."
+  type        = string
+  default     = "{service}-{stage}-{function}-schedule-{index}"
+}
+
+variable "rest_api_name" {
+  description = "Override for the v1 REST API name (default \"<service>-<stage>\"). For brownfield parity with an incumbent module's API name."
+  type        = string
+  default     = null
+}
+
+variable "rest_api_endpoint_type" {
+  description = "Endpoint type for the v1 REST API: EDGE (default, legacy behaviour) or REGIONAL."
+  type        = string
+  default     = "EDGE"
+
+  validation {
+    condition     = contains(["EDGE", "REGIONAL", "PRIVATE"], var.rest_api_endpoint_type)
+    error_message = "rest_api_endpoint_type must be EDGE, REGIONAL or PRIVATE."
+  }
+}
+
+variable "rest_api_stage_name" {
+  description = "Override for the v1 REST API stage name (default: the provider stage). e.g. \"v1\"."
+  type        = string
+  default     = null
+}
+
+variable "rest_api_redeployment_triggers_enabled" {
+  description = "Recreate the API deployment when methods/integrations change (default true). Set false for brownfield import parity — an imported deployment has no trigger state, so the config triggers would force an immediate replace."
+  type        = bool
+  default     = true
+}
+
+variable "apigw_lambda_permissions_enabled" {
+  description = "Emit the module's per-function API Gateway invoke permissions (default true). Set false when equivalent permissions already exist unmanaged (e.g. hand-written incumbent glue with bespoke statement ids)."
+  type        = bool
+  default     = true
+}
+
+variable "s3_force_destroy" {
+  description = "force_destroy on module-managed S3 buckets (default true, legacy behaviour). Set false for brownfield parity — force_destroy is config-only, so an imported bucket diffs against true."
+  type        = bool
+  default     = true
+}
+
+variable "rest_api_description" {
+  description = "Override for the v1 REST API description (default \"API Gateway for <service>\"). Set \"\" for parity with an incumbent API that has none."
+  type        = string
+  default     = null
+}

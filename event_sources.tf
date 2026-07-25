@@ -32,8 +32,17 @@ resource "aws_cloudwatch_event_target" "schedule" {
   for_each = local.schedule_event_map
 
   rule      = aws_cloudwatch_event_rule.schedule[each.key].name
-  target_id = "${each.value.function_name}-schedule-${each.value.event_index}"
+  target_id = each.value.target_id != null ? each.value.target_id : "${each.value.function_name}-schedule-${each.value.event_index}"
   arn       = aws_lambda_function.functions[each.value.function_name].arn
+
+  # Optional explicit retry policy (schedule.retryPolicy).
+  dynamic "retry_policy" {
+    for_each = each.value.retry_max_attempts != null || each.value.retry_max_event_age != null ? [1] : []
+    content {
+      maximum_retry_attempts       = each.value.retry_max_attempts
+      maximum_event_age_in_seconds = each.value.retry_max_event_age
+    }
+  }
 
   # Input configuration (static, path, or transformer)
   input      = each.value.input != null ? jsonencode(each.value.input) : null
@@ -74,7 +83,13 @@ resource "aws_cloudwatch_event_target" "eventbridge" {
 resource "aws_lambda_permission" "schedule_events" {
   for_each = local.schedule_event_map
 
-  statement_id  = "${try(local.parsed_config.service, "unknown")}-${local.provider_with_defaults.stage}-${each.value.function_name}-schedule-${each.value.event_index}"
+  statement_id = each.value.permission_sid != null ? each.value.permission_sid : replace(replace(replace(replace(
+    var.schedule_permission_sid_template,
+    "{service}", try(local.parsed_config.service, "unknown")),
+    "{stage}", local.provider_with_defaults.stage),
+    "{function}", each.value.function_name),
+    "{index}", tostring(each.value.event_index)
+  )
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.functions[each.value.function_name].function_name
   principal     = "events.amazonaws.com"

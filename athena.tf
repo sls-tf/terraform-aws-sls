@@ -22,6 +22,10 @@ resource "aws_glue_catalog_database" "custom" {
   location_uri = try(each.value.Properties.DatabaseInput.LocationUri, null)
   parameters   = try(each.value.Properties.DatabaseInput.Parameters, null)
 
+  # sls.tf extension (CFN has no tag surface on AWS::Glue::Database): a
+  # Properties.Tags MAP, merged over var.global_tags.
+  tags = merge(var.global_tags, try({ for k, v in each.value.Properties.Tags : k => tostring(v) }, {}))
+
   depends_on = [null_resource.config_validation]
 }
 

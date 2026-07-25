@@ -351,9 +351,20 @@ locals {
           }
         }) :
 
-        # Schedule → schedule
+        # Schedule → schedule. Name/Description are SAM-native; TargetId and
+        # RetryPolicy are sls.tf extensions for parity with incumbent rules.
+        # Keys are only emitted when set (a null would defeat the can() probes
+        # in the schedule parser).
         try(event.Type, "") == "Schedule" ? jsonencode({
-          schedule = try(event.Properties.Schedule, "rate(5 minutes)")
+          schedule = merge(
+            { rate = try(event.Properties.Schedule, "rate(5 minutes)") },
+            try(event.Properties.Name, null) != null ? { name = tostring(event.Properties.Name) } : {},
+            try(event.Properties.Description, null) != null ? { description = tostring(event.Properties.Description) } : {},
+            try(event.Properties.TargetId, null) != null ? { targetId = tostring(event.Properties.TargetId) } : {},
+            try(event.Properties.PermissionSid, null) != null ? { permissionSid = tostring(event.Properties.PermissionSid) } : {},
+            try(event.Properties.RetryPolicy, null) != null ? { retryPolicy = event.Properties.RetryPolicy } : {},
+            try(event.Properties.Enabled, null) != null ? { enabled = event.Properties.Enabled } : {}
+          )
         }) :
 
         # EventBridgeRule → eventBridge
@@ -486,6 +497,11 @@ locals {
       stage      = "dev"
       memorySize = try(local.sam_function_globals.MemorySize, 1024)
       timeout    = try(local.sam_function_globals.Timeout, 6)
+
+      # v1 REST custom domain for SAM templates (no SAM-native surface on the
+      # implicit v1 API): Metadata.SlsTf.CustomDomain, serverless-framework
+      # customDomain shape.
+      customDomain = try(local.sam_raw.Metadata.SlsTf.CustomDomain, null)
     }
 
     functions = {

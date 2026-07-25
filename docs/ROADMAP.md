@@ -520,3 +520,99 @@ broken.
 > swap root: schedule rules (module now supports `schedule.name` but target
 > id/retry parity is unverified), API Gateway, Athena/S3, monitoring
 > alarms/dashboard — next iteration widens scope to those.
+
+## Layer 6: config-format conversion (yaml → SAM), schedule rules, IAM grants (2026-07-25, v0.9.0)
+
+The `sls-swap/` root had defaulted to `config_format = "yaml"` (Serverless
+Framework native schema) by omission — inconsistent with this org's other
+real sls.tf consumer (`env-initializer-lambdas`, explicit
+`config_format = "sam"`). Converted it to a SAM `template.yaml` and widened
+scope to the 2 schedule-triggered lambdas and the 6 hand-written IAM grants
+that were previously entirely absent from the template. Final plan: **115 to
+import, 23 to add (15 local validators + 6 new IAM grants + 2 pre-existing Sid
+mismatches), 14 to change (pre-existing stub-zip artifact, unrelated), 0 to
+destroy.**
+
+### 33. SAM path silently computes wrong names without `Metadata.ServiceName` / `stage_override`
+Serverless-Framework format gets service/stage from `service:`/`provider.stage:`
+— SAM has neither field. Omit `Metadata: {ServiceName: ...}` and the module
+defaults service to `"sam-service"` and stage to `"dev"`
+(`sam-parser.tf:485`, `locals.tf:220`), silently computing every generated
+name wrong (e.g. `dev-sam-service-all_events-role` instead of
+`develop-events-all_events-role`). This doesn't error — `terraform plan`
+just shows 14 IAM roles (and everything downstream) as **replace**, which
+reads as "the config is wrong" when the real problem is a missing metadata
+block. Needs a `check`/validation the naming-lint (gap 11) pattern already
+established: warn when SAM format is used without `Metadata.ServiceName` set.
+
+### 34. yaml→SAM conversion needs a logical-ID collision check
+Serverless Framework keeps `functions:` and `resources:` in separate
+namespaces — `atp_restore`, `atp_holdoff_disabled`, and `store_arc_response`
+exist as both a function name and an EventBridge rule name today with no
+conflict. SAM's `Resources:` is one flat map; the same key twice is invalid.
+Any yaml→SAM translation (hand or tooled) needs to detect and rename these
+collisions — not an sls.tf bug, but a sharp edge in the conversion path this
+org is actually taking.
+
+### 35. SAM's native `Schedule` function-event drops `Name`/`Description`/`Enabled`
+`sam-parser.tf:355-357` only extracts `Properties.Schedule` (the cron/rate
+expression itself) for that event type — everything else on the property
+bag is silently ignored, so a live rule's actual name
+(`events-atp-heldoff-check-develop`) can't be pinned through that path.
+Worked around by modeling both schedules as raw `AWS::Events::Rule` +
+`Targets` (the same multi-target-rule construct from gap 6/`events-rules-cfn.tf`)
+instead of SAM's dedicated `Schedule` event — which, as a side effect, also
+carries full `RetryPolicy` support that the dedicated schedule-event path
+(`event_sources.tf`) doesn't have at all. Both rules + targets imported with
+**zero diff** once modeled this way. Worth documenting as the recommended
+pattern rather than fixing the native `Schedule` event type, since the
+workaround is strictly more capable.
+
+### IAM grants: clean adds, but real structural mismatches found along the way
+All 6 hand-transcribed grants added cleanly as new resources (no naming
+collision — checked live first via `aws iam list-role-policies`). Two things
+surfaced that aren't sls.tf's problem but are real migration risk: (1)
+`all_events`'s live S3 grant is a **separate managed policy + attachment**,
+not an inline policy like the other 5 — structurally different mechanism,
+not just a different name; (2) `check_arc_response`'s role carries a
+ClickOps-added policy (`CLICKOPS_check_arc_response_secrets`) that exists
+**outside Terraform entirely** — untracked drift a real cutover would
+silently inherit or silently miss depending on how the migration handles
+existing-but-unmanaged policies on a role it's about to take over.
+
+### Bottom line
+Config-format conversion is viable but not mechanical — two silent-failure
+modes (#33, #34) that a script or a careless hand-port would hit without
+warning. Schedule and IAM-grant gaps both closed cleanly once modeled
+correctly. Seven layers in, still no fundamental blocker found — but every
+layer still surfaces something the previous one's "done" claim didn't
+cover.
+
+## Layer 6: full-estate SAM swap (2026-07-25)
+
+Widened the develop swap to the ENTIRE estate and pivoted the config to SAM
+(`application.yaml`, the org-standard format). Module additions: Schedule
+event Name/Description (SAM-native) + TargetId/RetryPolicy/PermissionSid
+(extensions); v1 REST parity knobs (`rest_api_name` / `rest_api_description` /
+`rest_api_endpoint_type` / `rest_api_stage_name` /
+`rest_api_redeployment_triggers_enabled` / `apigw_lambda_permissions_enabled`);
+integration URIs use the real deploy region (SAM's translated provider region
+was baked in before); `Metadata.SlsTf.CustomDomain` feeds the v1 custom-domain
+module for SAM templates (+ typed-variable fix that silently dropped unknown
+keys, `evaluateTargetHealth`, `s3_force_destroy`); Glue database tag map
+extension; S3 lifecycle `AbortIncompleteMultipartUpload`; schedule permission
+Sid template/override.
+
+**Result (sls-swap/, `application.yaml`, local state): 240 resources imported
+in one plan — 0 destroys, 0 real creates, 0 field diffs on everything except
+the 14 lambdas' code-delivery triple.** Coverage now includes: 2 schedule
+rules/targets/permissions (live names, bare target ids, retry policies), the
+v1 REST API (resources, ANY methods, integrations, deployment, v1 stage, EDGE
+custom domain + base path + Route53 alias), Glue database/raw_events (partition
+projection)/raw_events_flattened view (verbatim presto text), both Athena
+workgroups, both S3 buckets + lifecycle + tags, 88 alarms (verbatim), 7 SNS
+monitoring topics, the event_monitoring dashboard (verbatim body), plus
+everything from layer 5. Intentionally unmanaged (unimported, untouched):
+the two direct APIGW→EventBridge v1 methods + their shared credentials role
+(v1 direct integration remains a module gap — the v2 path has it, v1 doesn't)
+and the consumer's bespoke per-route lambda-permission glue.
