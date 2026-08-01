@@ -1,0 +1,31 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Metadata.SlsTf.CustomDomain on the implicit v1 REST API. This is the only
+  extension read from the RESOLVED parse rather than the structural one.
+
+Metadata:
+  SlsTf:
+    CustomDomain:
+      domainName: sam.example.com
+      certificateArn: arn:aws:acm:us-east-1:123456789012:certificate/samcert
+      endpointType: EDGE
+      createRoute53Record: false
+      createHostedZone: true
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+
+Resources:
+  Api:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: samdomain-dev-api
+      Handler: handler.api
+      Events:
+        Get:
+          Type: Api
+          Properties:
+            Path: /thing
+            Method: get

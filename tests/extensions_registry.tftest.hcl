@@ -484,3 +484,139 @@ run "structural_parse_mismatch_cleared_by_declaring_the_parameter" {
     error_message = "Alarm should notify the passed topic once the parameter is declared structural, got: ${join(", ", aws_cloudwatch_metric_alarm.set["lambda-Errors-param-ref-dev-ingest"].alarm_actions)}"
   }
 }
+
+# --- SAM branches of the guards --------------------------------------------
+# The motivating incident was a SAM template, so these paths matter most.
+
+run "sam_unknown_key_errors" {
+  command = plan
+
+  variables {
+    config_path   = "tests/fixtures/sam-extensions-unknown-key.yaml"
+    config_format = "sam"
+  }
+
+  expect_failures = [
+    null_resource.config_validation,
+  ]
+}
+
+run "sam_unknown_key_message_and_foreign_metadata" {
+  command = plan
+
+  variables {
+    config_path                     = "tests/fixtures/sam-extensions-unknown-key.yaml"
+    config_format                   = "sam"
+    extension_unknown_key_behaviour = "warn"
+  }
+
+  expect_failures = [
+    check.extension_unknown_keys,
+  ]
+
+  # Exactly one: the typo. AWS::CloudFormation::Interface and ServiceName sit
+  # alongside SlsTf under Metadata and must never be inspected.
+  assert {
+    condition     = length(local.extension_unknown_key_errors) == 1
+    error_message = "Expected only the typo'd key to be reported, got: ${join(" | ", local.extension_unknown_key_errors)}"
+  }
+
+  assert {
+    condition     = can(regex("Unknown sls.tf extension 'Alarm' under Metadata.SlsTf", local.extension_unknown_key_errors[0]))
+    error_message = "Message should name the SAM namespace path, got: ${local.extension_unknown_key_errors[0]}"
+  }
+
+  assert {
+    condition     = can(regex("Did you mean 'Alarms'", local.extension_unknown_key_errors[0]))
+    error_message = "Message should suggest Alarms, got: ${local.extension_unknown_key_errors[0]}"
+  }
+
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.set) == 0
+    error_message = "A typo'd SAM extension key must not create alarms"
+  }
+}
+
+run "sam_misspelled_namespace_errors" {
+  command = plan
+
+  variables {
+    config_path   = "tests/fixtures/sam-extensions-bad-namespace.yaml"
+    config_format = "sam"
+  }
+
+  expect_failures = [
+    null_resource.config_validation,
+  ]
+}
+
+run "sam_misspelled_namespace_message" {
+  command = plan
+
+  variables {
+    config_path                     = "tests/fixtures/sam-extensions-bad-namespace.yaml"
+    config_format                   = "sam"
+    extension_unknown_key_behaviour = "warn"
+  }
+
+  expect_failures = [
+    check.extension_unknown_keys,
+  ]
+
+  assert {
+    condition     = can(regex("found 'Slstf', expected 'SlsTf'", local.extension_namespace_errors[0]))
+    error_message = "Message should name both SAM spellings, got: ${join(" | ", local.extension_namespace_errors)}"
+  }
+}
+
+run "scalar_namespace_does_not_abort_the_diagnostic" {
+  command = plan
+
+  variables {
+    config_path   = "tests/fixtures/sam-extensions-scalar-namespace.yaml"
+    config_format = "sam"
+  }
+
+  # `SlsTf: enabled` is not a map. An unguarded keys() would abort the plan
+  # from inside the check that exists to report problems clearly.
+  assert {
+    condition     = length(local._extension_namespace_keys) == 0
+    error_message = "A scalar namespace should yield no keys rather than erroring"
+  }
+
+  assert {
+    condition     = length(output.extensions_active) == 0
+    error_message = "A scalar namespace configures no extensions"
+  }
+}
+
+run "sam_custom_domain_resolves" {
+  command = plan
+
+  variables {
+    config_path   = "tests/fixtures/sam-extensions-custom-domain.yaml"
+    config_format = "sam"
+  }
+
+  # The only extension read from the RESOLVED parse, and the only one whose
+  # SAM path had no fixture before v0.11.0.
+  assert {
+    condition     = contains(keys(output.extensions_active), "CustomDomain")
+    error_message = "Metadata.SlsTf.CustomDomain should report active, got: ${join(", ", keys(output.extensions_active))}"
+  }
+
+  assert {
+    condition     = output.extensions_active["CustomDomain"].parse == "resolved"
+    error_message = "CustomDomain should declare the resolved parse, got: ${output.extensions_active["CustomDomain"].parse}"
+  }
+
+  assert {
+    condition     = length(module.custom_domain) == 1
+    error_message = "Presence of the SAM custom domain config should create the module"
+  }
+
+  assert {
+    condition     = module.custom_domain[0].custom_domain_name == "sam.example.com"
+    error_message = "Domain name should come from the SAM extension config"
+  }
+}

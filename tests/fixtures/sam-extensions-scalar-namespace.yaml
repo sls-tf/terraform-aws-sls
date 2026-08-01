@@ -1,0 +1,20 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  The namespace is present but is a scalar, not a map. keys() on it would abort
+  the plan from inside the diagnostic rather than reporting anything, so the
+  lookup is guarded.
+
+Metadata:
+  SlsTf: enabled
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+
+Resources:
+  Ingest:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: scalar-dev-ingest
+      Handler: handler.ingest

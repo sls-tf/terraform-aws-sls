@@ -1,0 +1,29 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Typo'd extension key under Metadata.SlsTf
+
+Metadata:
+  # Foreign Metadata keys must stay untouched — only Metadata.SlsTf.* is ours.
+  AWS::CloudFormation::Interface:
+    ParameterGroups: []
+  ServiceName: typo-svc
+
+  SlsTf:
+    Alarm:                      # typo: the extension is "Alarms"
+      groups:
+        lambda:
+          metrics:
+            - name: Errors
+              threshold: 1
+              comparisonOperator: GreaterThanThreshold
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+
+Resources:
+  Ingest:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: typo-dev-ingest
+      Handler: handler.ingest
