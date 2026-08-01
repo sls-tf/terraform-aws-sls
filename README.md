@@ -531,6 +531,21 @@ So is a misspelled namespace (`custom.slstf`). Set
 rolling a large estate forward. Only the sls.tf namespace is inspected: other
 tools' keys under `custom:` and `Metadata` are untouched.
 
+**Keep the template pristine** with a sidecar. Set `extension_sidecar_path` to
+a file (conventionally `slstf.yaml`) whose top-level keys are extension names,
+and the template carries no vendor config at all — so `sam deploy` on it is
+honest about what it deploys. `tools/extension-stack` then turns that sidecar
+into a companion CloudFormation stack, making a complete SAM deploy possible:
+
+```bash
+npm run extension-stack -- --template template.yaml --sidecar slstf.yaml
+sam deploy --template-file template.yaml   --stack-name svc
+aws cloudformation deploy --template-file extensions.json --stack-name svc-extensions
+```
+
+See [tools/extension-stack/README.md](tools/extension-stack/README.md) — note
+it requires explicit resource names, for reasons that matter.
+
 **Assert what you depend on** with `required_extensions = ["Alarms"]`. This is
 the only guard that works against an *older* module: Terraform rejects unknown
 module arguments, so a version predating the extension fails with "Unsupported
@@ -575,6 +590,7 @@ including which parse each extension is read from and why that matters for
 | `required_extensions` | list(string) | `[]` | no | Extensions this config depends on, asserted at plan time. See [Extensions](#extensions). |
 | `extension_unknown_key_behaviour` | string | `"error"` | no | `"error"` or `"warn"` for unrecognised keys under the sls.tf namespace and for a misspelled namespace. |
 | `extension_legacy_key_notice` | bool | `true` | no | Emit a notice when an extension uses its pre-v0.11.0 top-level serverless-yaml key. |
+| `extension_sidecar_path` | string | `null` | no | Path to a sidecar file holding extension config, instead of inline in the template. |
 | `acm_certificate_arn` | string | `null` | no | ACM certificate ARN for the custom domain, when the config does not set `customDomain.certificateArn`. |
 
 ## Outputs

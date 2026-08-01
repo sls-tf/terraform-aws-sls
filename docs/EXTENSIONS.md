@@ -1,8 +1,7 @@
 # Extensions: a first-class concept for non-SAM, non-Serverless behaviour
 
-**Status:** implemented in v0.11.0, except §7 (sidecar packaging), which is not
-started. See [Migration](#migration) for what shipped and how it differed from
-this proposal.
+**Status:** implemented in v0.11.0. See [Migration](#migration) for what shipped
+and how it differed from this proposal.
 **Motivating incident:** a consumer wrote a full alarm configuration against a
 module version that predated alarm sets, and got silence — no error, no warning,
 a clean `terraform validate`, and zero alarms. Detail in
@@ -292,10 +291,20 @@ entry in the resolution chain. Defining the same extension in both
 `Metadata.SlsTf` and `slstf.yaml` is an **error**, not a documented precedence
 order — silent precedence is the failure mode this whole document is about.
 
-**Still open:** whether the generator lives in `tools/` (Node, alongside
-`schema-generator`) or as a Terraform-side rendering; and whether the sidecar
-should name its template explicitly (`template: template.yaml`) or rely on
-convention.
+**Settled during implementation:**
+
+- *Where the generator lives* — `tools/extension-stack`, Node, alongside
+  `schema-generator`. Unlike that tool it is dependency-free: YAML comes from
+  the js-yaml already vendored under `scripts/vendor/`, and the output is JSON,
+  which CloudFormation accepts and which needs no serialiser. Nothing to
+  install, matching the module's own posture.
+- *How the sidecar finds its template* — neither. The **module** takes an
+  explicit `extension_sidecar_path`, and the **generator** takes both paths as
+  arguments. Discovery by filename was rejected: a sidecar found by convention
+  could be renamed or lost and simply stop applying, which is the silence this
+  whole document exists to remove. Naming it makes a missing file an error.
+- *Where the explicit-names precondition lives* — the generator only. See
+  Migration step 6.
 
 ### 8. Presence is enablement — no per-extension boolean
 
@@ -374,9 +383,10 @@ Both are fixed by the registry plus fail-on-unknown. Neither needs the extension
 
 ## Migration
 
-**Status: steps 1–5 shipped in v0.11.0.** Implementation order differed from the
-numbering below — the yaml namespace (4) landed before unknown-key errors (3),
-because unknown-key detection needs a namespace to exist in both formats first.
+**Status: all six steps shipped in v0.11.0.** Implementation order differed from
+the numbering below — the yaml namespace (4) landed before unknown-key errors
+(3), because unknown-key detection needs a namespace to exist in both formats
+first.
 
 | # | Step | Status |
 |---|---|---|
@@ -387,7 +397,7 @@ because unknown-key detection needs a namespace to exist in both formats first.
 | 5 | Structural-parse mismatch check | shipped v0.11.0 |
 | — | `required_extensions` input | shipped v0.11.0 |
 | — | `module_version` + `make check-version` | shipped v0.11.0 |
-| 6 | Sidecar packaging (§7) | not started |
+| 6 | Sidecar packaging (§7) | shipped v0.11.0 |
 
 What shipped, and what changed from the plan:
 
@@ -432,10 +442,14 @@ Two consequences of the module not knowing its own version, both settled:
   outright. It asserts both that the version implements the extension and that
   the config actually resolved.
 
-6. **Sidecar packaging (§7)** — not started, and the only remaining piece. Gated
-   on the registry, which now exists. Order within it: sidecar parse +
-   double-definition error, then the explicit-names precondition, then the
-   companion-template generator. Stack-sourced discovery is a later enhancement.
+6. **Sidecar packaging (§7)** — `extension_sidecar_path` in the module, plus
+   `tools/extension-stack` to generate the companion stack. One design point
+   moved during implementation: **the explicit-names precondition belongs to the
+   generator, not the module.** Under Terraform the predicted names are correct,
+   so enforcing explicit names there would impose a constraint that only the
+   `sam deploy` path actually needs. The generator enforces it; the module does
+   not. Stack-sourced discovery remains the natural next step, and would lift
+   the restriction entirely.
 
 ## Open questions
 
