@@ -430,3 +430,57 @@ run "required_extension_present_but_inactive_errors" {
     error_message = "Message should name the expected config key, got: ${local.extension_required_inactive_errors[0]}"
   }
 }
+
+# --- structural-parse parameter mismatch (phase 6) -------------------------
+
+run "structural_parse_mismatch_is_reported" {
+  command = plan
+
+  variables {
+    config_path   = "tests/fixtures/sam-extensions-param-ref.yaml"
+    config_format = "sam"
+
+    # The caller passes a real topic, but does NOT declare the parameter as
+    # structural — so the alarm set resolves the Default instead and would
+    # notify the wrong topic. Silent before this check existed.
+    sam_template_parameters = {
+      AlertsTopicArn = "arn:aws:sns:us-east-1:123456789012:real-ops-topic"
+    }
+  }
+
+  expect_failures = [
+    check.extension_structural_parse_parameters,
+  ]
+
+  assert {
+    condition     = contains(local._extension_parse_mismatches, "Alarms")
+    error_message = "Alarms should be reported as resolving differently between the two parses"
+  }
+}
+
+run "structural_parse_mismatch_cleared_by_declaring_the_parameter" {
+  command = plan
+
+  variables {
+    config_path   = "tests/fixtures/sam-extensions-param-ref.yaml"
+    config_format = "sam"
+
+    sam_template_parameters = {
+      AlertsTopicArn = "arn:aws:sns:us-east-1:123456789012:real-ops-topic"
+    }
+
+    # The fix the message recommends. Both parses now agree.
+    structural_sam_parameters = ["AlertsTopicArn"]
+  }
+
+  assert {
+    condition     = length(local._extension_parse_mismatches) == 0
+    error_message = "Declaring the parameter as structural should clear the mismatch, still got: ${join(", ", local._extension_parse_mismatches)}"
+  }
+
+  # And the alarm actually points at the passed topic, not the Default.
+  assert {
+    condition     = contains(aws_cloudwatch_metric_alarm.set["lambda-Errors-param-ref-dev-ingest"].alarm_actions, "arn:aws:sns:us-east-1:123456789012:real-ops-topic")
+    error_message = "Alarm should notify the passed topic once the parameter is declared structural, got: ${join(", ", aws_cloudwatch_metric_alarm.set["lambda-Errors-param-ref-dev-ingest"].alarm_actions)}"
+  }
+}

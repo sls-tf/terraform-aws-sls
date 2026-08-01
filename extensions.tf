@@ -308,6 +308,35 @@ locals {
     ]))
   ]
 
+  # --------------------------------------------------------------------------
+  # Structural-parse parameter mismatch
+  # --------------------------------------------------------------------------
+  # Extensions declared `parse = "structural"` are read from local.sam_structure,
+  # where a template Parameter resolves to its DEFAULT unless the caller lists
+  # it in var.structural_sam_parameters. So a `!Ref AlertsTopicArn` inside an
+  # alarm set silently notifies whatever the Default is, not the value the
+  # caller passed. This was tribal knowledge that cost a silent
+  # misconfiguration to learn.
+  #
+  # The check cannot look for `!Ref` in the config: by the time either parse is
+  # readable the preprocessor has already collapsed refs to values, so the
+  # reference is gone. What survives is the CONSEQUENCE — the two parses
+  # disagree at that subtree. That is precisely the condition worth reporting,
+  # and it needs no extra parser pass.
+  #
+  # Reported as a check (warning) rather than an error: sam_raw can be unknown
+  # at plan when a parameter is fed from a co-planned resource attribute, and
+  # an unknown comparison must not be able to abort a plan.
+  _extension_parse_mismatches = var.config_format != "sam" ? [] : sort([
+    for name, meta in local.extension_registry :
+    name
+    if meta.parse == "structural" && local._extension_present[name] && (
+      jsonencode(try(local.sam_raw.Metadata.SlsTf[element(split(".", meta.sam_key), 2)], null))
+      !=
+      jsonencode(try(local.sam_structure.Metadata.SlsTf[element(split(".", meta.sam_key), 2)], null))
+    )
+  ])
+
   extensions_active = {
     for name, meta in local.extension_registry :
     name => {
@@ -413,5 +442,24 @@ check "extension_unknown_keys" {
       ["sls.tf extension problems (downgraded to a notice by extension_unknown_key_behaviour = \"warn\"):"],
       [for e in local._extension_strict_errors : "  - ${e}"]
     ))
+  }
+}
+
+# See _extension_parse_mismatches for why this is a diff of the two parses
+# rather than a search for !Ref, and why it warns rather than errors.
+check "extension_structural_parse_parameters" {
+  assert {
+    condition = length(local._extension_parse_mismatches) == 0
+    error_message = join(" ", [
+      "These extensions resolve differently in the two SAM parses:",
+      "${join(", ", local._extension_parse_mismatches)}.",
+      "They are read from the STRUCTURAL parse, where template Parameters",
+      "resolve to their Default rather than the value you pass in",
+      "sam_template_parameters — so the config being used is not the config you",
+      "think you wrote (an SNS topic Ref would notify the Default topic).",
+      "Add the referenced parameter name(s) to structural_sam_parameters.",
+      "Only do that for parameters whose values are always known at plan;",
+      "a co-planned resource attribute there would collapse every for_each key."
+    ])
   }
 }

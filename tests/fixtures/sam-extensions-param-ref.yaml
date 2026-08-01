@@ -1,0 +1,38 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Alarm set whose action is a !Ref to a template Parameter. Alarms are read
+  from the STRUCTURAL parse, where a parameter resolves to its Default unless
+  the caller lists it in structural_sam_parameters — so without that, these
+  alarms notify the Default topic rather than the one passed in.
+
+Parameters:
+  AlertsTopicArn:
+    Type: String
+    Default: arn:aws:sns:us-east-1:000000000000:default-fallback-topic
+
+Metadata:
+  SlsTf:
+    Alarms:
+      defaults:
+        actions:
+          - !Ref AlertsTopicArn
+      groups:
+        lambda:
+          resource_names: []
+          metrics:
+            - name: Errors
+              threshold: 1
+              comparisonOperator: GreaterThanThreshold
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 30
+
+Resources:
+  Ingest:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: param-ref-dev-ingest
+      Handler: handler.ingest
