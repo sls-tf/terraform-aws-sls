@@ -1,0 +1,3 @@
+# A typo in the sidecar is held to the same standard as one inline.
+Alarm:
+  groups: {}

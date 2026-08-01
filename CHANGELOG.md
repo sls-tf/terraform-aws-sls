@@ -50,6 +50,14 @@ nothing will now fail loudly, which is the point of the release.
   module arguments, so a version predating the extension fails with
   "Unsupported argument" instead of silently doing nothing. Also catches an
   extension that is implemented but whose config didn't resolve.
+- **`extension_sidecar_path`** — hold extensions in a separate file
+  (conventionally `slstf.yaml`) instead of inline, so the template stays
+  pristine and `sam deploy` on it is honest about what it deploys rather than
+  silently dropping inert vendor config. Same extension names and shapes,
+  same unknown-key checking. The path is explicit rather than discovered by
+  filename: a sidecar found by convention could be renamed and simply stop
+  applying. Defining an extension both in the sidecar and inline is an error,
+  and `extensions_active` reports `sidecar:<path>` as the source.
 - **Structural-parse mismatch check** — warns when an extension read from the
   structural parse resolves differently there than in the resolved parse, which
   means a template Parameter is falling back to its `Default`. The fix it

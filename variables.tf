@@ -434,3 +434,28 @@ variable "rest_api_description" {
   type        = string
   default     = null
 }
+
+variable "extension_sidecar_path" {
+  description = <<-DESC
+    Path to a sidecar file holding sls.tf extension config (conventionally
+    `slstf.yaml`, beside the template), instead of inline under
+    `Metadata.SlsTf` / `custom.slsTf`.
+
+    The point is that the template stays pristine: nothing in it is inert
+    vendor config, so `sam deploy` on it is honest about what it deploys, and
+    the extensions can be applied alongside by another tool rather than being
+    silently dropped. Top-level keys are extension names, cased as they are
+    inline for the config format in use (`Alarms` for SAM, `alarms` for
+    serverless yaml).
+
+    The path is explicit rather than discovered by filename: a sidecar found by
+    convention could be renamed or lost and simply stop applying, which is the
+    silence this module version exists to remove. Naming it means a missing
+    file is a plan-time error.
+
+    Defining the same extension both here and inline is an error, not a
+    precedence order.
+  DESC
+  type        = string
+  default     = null
+}

@@ -1,0 +1,18 @@
+# sls.tf extensions for template.yaml. Top-level keys are extension names,
+# cased as they are inline for the format (PascalCase for SAM).
+Alarms:
+  defaults:
+    actions:
+      - arn:aws:sns:us-east-1:123456789012:ops-alerts
+  groups:
+    lambda:
+      resource_names: []
+      metrics:
+        - name: Errors
+          threshold: 1
+          comparisonOperator: GreaterThanThreshold
+
+Dashboard:
+  name: sidecar_monitoring
+  services:
+    - lambda

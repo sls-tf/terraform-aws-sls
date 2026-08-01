@@ -1,0 +1,24 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Defines Alarms inline AND in the sidecar — one of them is dead config.
+
+Metadata:
+  SlsTf:
+    Alarms:
+      groups:
+        lambda:
+          metrics:
+            - name: Throttles
+              threshold: 1
+              comparisonOperator: GreaterThanThreshold
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+
+Resources:
+  Ingest:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sidecar-dup-dev-ingest
+      Handler: handler.ingest

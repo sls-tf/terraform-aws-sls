@@ -126,16 +126,66 @@ locals {
   # deprecation with a removal date — event-service parity is why alarm sets
   # exist. Namespaced wins where both appear, but that combination is also a
   # validation error, so the precedence never silently decides anything.
+  # --------------------------------------------------------------------------
+  # Sidecar packaging
+  # --------------------------------------------------------------------------
+  # An alternative LOCATION for the same config, not an alternative model. The
+  # template stays pristine — nobody can mistake slstf.yaml for something
+  # CloudFormation reads — which is what makes a supported `sam deploy` path
+  # possible: deploy the template with sam, apply the extensions separately,
+  # and the result is complete rather than a silent partial.
+  #
+  # Explicit path rather than convention: a sidecar discovered by filename
+  # could go missing or be renamed and simply stop applying, which is the
+  # silence this whole design removes. Naming it means a missing file is an
+  # error.
+  #
+  # Keys follow the same casing as the inline namespace for the format in use,
+  # so there is one mental model per format rather than three.
+  _extension_sidecar_missing = (
+    var.extension_sidecar_path != null && !fileexists(var.extension_sidecar_path)
+  )
+
+  # JSON-laundered for the same reason as everything else in this file: a
+  # decoded sidecar is an object with attributes and does not unify with the
+  # empty `{}` of the other branch. Encode inside both branches, decode once.
+  _extension_sidecar = jsondecode(
+    var.extension_sidecar_path != null && !local._extension_sidecar_missing
+    ? jsonencode(try(yamldecode(file(var.extension_sidecar_path)), {}))
+    : "{}"
+  )
+
+  _extension_sidecar_keys = sort(keys(local._extension_sidecar))
+
+  # Which extensions the sidecar defines, by registry name.
+  _extension_sidecar_used = sort([
+    for k in local._extension_sidecar_keys :
+    local._extension_key_to_name[k]
+    if contains(keys(local._extension_key_to_name), k)
+  ])
+
+  _extension_sidecar_alarms_key    = var.config_format == "sam" ? "Alarms" : "alarms"
+  _extension_sidecar_dashboard_key = var.config_format == "sam" ? "Dashboard" : "dashboard"
+  _extension_sidecar_domain_key    = var.config_format == "sam" ? "CustomDomain" : "customDomain"
+
   _extension_alarms_json = (
-    var.config_format == "sam"
-    ? (local.sam_structure != null ? jsonencode(try(local.sam_structure.Metadata.SlsTf.Alarms, {})) : "{}")
-    : jsonencode(try(local.parsed_config.custom.slsTf.alarms, local.parsed_config.alarms, {}))
+    contains(local._extension_sidecar_used, "Alarms")
+    ? jsonencode(local._extension_sidecar[local._extension_sidecar_alarms_key])
+    : (
+      var.config_format == "sam"
+      ? (local.sam_structure != null ? jsonencode(try(local.sam_structure.Metadata.SlsTf.Alarms, {})) : "{}")
+      : jsonencode(try(local.parsed_config.custom.slsTf.alarms, local.parsed_config.alarms, {}))
+    )
   )
 
   _extension_dashboard_json = (
-    var.config_format == "sam"
-    ? (local.sam_structure != null ? jsonencode(try(local.sam_structure.Metadata.SlsTf.Dashboard, null)) : "null")
-    : jsonencode(try(local.parsed_config.custom.slsTf.dashboard, local.parsed_config.dashboard, null))
+    contains(local._extension_sidecar_used, "Dashboard")
+    ? jsonencode(local._extension_sidecar[local._extension_sidecar_dashboard_key])
+    : (
+      var.config_format == "sam"
+      ? (local.sam_structure != null ? jsonencode(try(local.sam_structure.Metadata.SlsTf.Dashboard, null)) : "null")
+      : jsonencode(try(local.parsed_config.custom.slsTf.dashboard, local.parsed_config.dashboard, null))
+    )
   )
 
   # SAM-only, and deliberately separate from _extension_custom_domain_json
@@ -151,10 +201,17 @@ locals {
   # domain config still resolve — they did when this was provider.customDomain
   # (assembled into provider_with_defaults from the resolved config), and moving
   # the key must not quietly drop that.
+  # NOTE the sidecar does NOT feed _extension_custom_domain_sam_json above:
+  # that one is consumed by sam-parser.tf to build parsed_config, and a
+  # sidecar-sourced domain has no reason to travel through the parsed config.
   _extension_custom_domain_json = (
-    var.config_format == "sam"
-    ? local._extension_custom_domain_sam_json
-    : jsonencode(try(local.parsed_config_resolved.custom.slsTf.customDomain, null))
+    contains(local._extension_sidecar_used, "CustomDomain")
+    ? jsonencode(local._extension_sidecar[local._extension_sidecar_domain_key])
+    : (
+      var.config_format == "sam"
+      ? local._extension_custom_domain_sam_json
+      : jsonencode(try(local.parsed_config_resolved.custom.slsTf.customDomain, null))
+    )
   )
 
   # Registry-facing surface. Use this at extension implementation sites.
@@ -198,20 +255,53 @@ locals {
     if try(local.parsed_config.custom.slsTf[split(".", meta.yaml_key)[2]], null) != null
   ])
 
-  # Defining an extension at both spellings is an error rather than a silent
+  # Which extensions are configured INLINE (either yaml spelling, or under
+  # Metadata.SlsTf), regardless of the sidecar.
+  _extension_inline_used = sort(distinct(
+    var.config_format == "sam"
+    ? [
+      for k in local._extension_namespace_keys :
+      local._extension_key_to_name[k]
+      if contains(keys(local._extension_key_to_name), k)
+    ]
+    : concat(local._extension_legacy_yaml_used, local._extension_namespaced_yaml_used)
+  ))
+
+  # Defining an extension in two places is an error rather than a silent
   # precedence win — silent precedence is the failure mode this whole design
-  # exists to remove.
-  extension_duplicate_errors = [
-    for name in local._extension_legacy_yaml_used :
+  # exists to remove. Two shapes of it:
+  extension_duplicate_errors = concat(
+    [
+      for name in local._extension_legacy_yaml_used :
+      join(" ", [
+        "Extension '${name}' is defined twice: at the legacy top-level key",
+        "'${local.extension_registry[name].legacy_yaml}:' and at",
+        "'${local.extension_registry[name].yaml_key}'.",
+        "Remove one. The namespaced key is preferred; the top-level key stays",
+        "supported indefinitely, but only one of them may be present."
+      ])
+      if contains(local._extension_namespaced_yaml_used, name)
+    ],
+    [
+      for name in local._extension_sidecar_used :
+      join(" ", [
+        "Extension '${name}' is defined both in the sidecar",
+        "'${var.extension_sidecar_path}' and inline in the config.",
+        "Remove one. The sidecar exists so the template can stay pristine —",
+        "holding the same extension in both places means one of them is dead",
+        "config that nothing would tell you about."
+      ])
+      if contains(local._extension_inline_used, name)
+    ]
+  )
+
+  extension_sidecar_errors = local._extension_sidecar_missing ? [
     join(" ", [
-      "Extension '${name}' is defined twice: at the legacy top-level key",
-      "'${local.extension_registry[name].legacy_yaml}:' and at",
-      "'${local.extension_registry[name].yaml_key}'.",
-      "Remove one. The namespaced key is preferred; the top-level key stays",
-      "supported indefinitely, but only one of them may be present."
+      "extension_sidecar_path points at '${var.extension_sidecar_path}', which does not exist.",
+      "A sidecar is named explicitly rather than discovered so that a missing",
+      "one fails here instead of silently applying no extensions."
     ])
-    if contains(local._extension_namespaced_yaml_used, name)
-  ]
+  ] : []
 
   # --------------------------------------------------------------------------
   # Unknown keys under the namespace
@@ -244,10 +334,12 @@ locals {
     : (can(keys(local.parsed_config.custom.slsTf)) ? keys(local.parsed_config.custom.slsTf) : [])
   )
 
-  _extension_unknown_keys = sort([
-    for k in local._extension_namespace_keys :
+  # Sidecar keys are held against the same standard as inline ones — a typo in
+  # slstf.yaml is the same silence as a typo under Metadata.SlsTf.
+  _extension_unknown_keys = sort(distinct([
+    for k in concat(local._extension_namespace_keys, local._extension_sidecar_keys) :
     k if !contains(keys(local._extension_key_to_name), k)
-  ])
+  ]))
 
   # Nearest-match suggestion. HCL has no edit distance, so this catches the
   # cases that actually occur — wrong case (`alarm`/`ALARMS`) and a prefix
@@ -347,8 +439,12 @@ locals {
       # "did my config take effect, and which key did it come from?" is the
       # question this output exists to answer, and for a consumer with both
       # spellings in play the canonical name would be misleading.
-      source = var.config_format == "sam" ? meta.sam_key : (
-        contains(local._extension_legacy_yaml_used, name) ? meta.legacy_yaml : meta.yaml_key
+      source = (
+        contains(local._extension_sidecar_used, name)
+        ? "sidecar:${var.extension_sidecar_path}"
+        : var.config_format == "sam" ? meta.sam_key : (
+          contains(local._extension_legacy_yaml_used, name) ? meta.legacy_yaml : meta.yaml_key
+        )
       )
     }
     if local._extension_present[name]
@@ -422,6 +518,7 @@ locals {
   # required_extensions failures are always errors: the caller asked for the
   # assertion explicitly, so downgrading it would defeat the point.
   extension_validation_errors = concat(
+    local.extension_sidecar_errors,
     local.extension_duplicate_errors,
     local.extension_required_unimplemented_errors,
     local.extension_required_inactive_errors,

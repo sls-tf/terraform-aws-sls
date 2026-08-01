@@ -1,0 +1,17 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Pristine SAM template — no inert vendor config anywhere in it. Extensions
+  live in slstf.yaml beside this file, so `sam deploy` on this template is
+  honest about what it deploys.
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+
+Resources:
+  Ingest:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sidecar-dev-ingest
+      Handler: handler.ingest

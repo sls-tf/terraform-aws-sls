@@ -620,3 +620,123 @@ run "sam_custom_domain_resolves" {
     error_message = "Domain name should come from the SAM extension config"
   }
 }
+
+# --- sidecar packaging (§7) ------------------------------------------------
+# An alternative LOCATION for the same config. The template stays pristine, so
+# `sam deploy` on it is honest — the extensions are applied alongside rather
+# than silently dropped.
+
+run "sidecar_extensions_resolve" {
+  command = plan
+
+  variables {
+    config_path            = "tests/fixtures/sidecar/template.yaml"
+    config_format          = "sam"
+    extension_sidecar_path = "tests/fixtures/sidecar/slstf.yaml"
+  }
+
+  assert {
+    condition     = length(local.validation_errors) == 0
+    error_message = "A valid sidecar should not error, got: ${join(", ", local.validation_errors)}"
+  }
+
+  assert {
+    condition     = contains(keys(output.extensions_active), "Alarms") && contains(keys(output.extensions_active), "Dashboard")
+    error_message = "Sidecar extensions should report active, got: ${join(", ", keys(output.extensions_active))}"
+  }
+
+  # The output must say the config came from the sidecar — "which file is this
+  # coming from?" is exactly the question a two-file layout raises.
+  assert {
+    condition     = output.extensions_active["Alarms"].source == "sidecar:tests/fixtures/sidecar/slstf.yaml"
+    error_message = "Source should name the sidecar, got: ${output.extensions_active["Alarms"].source}"
+  }
+
+  # Reaching the implementation, not just the registry: 1 metric x 1 function.
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.set) == 1
+    error_message = "Sidecar alarms should expand like inline ones, got ${length(aws_cloudwatch_metric_alarm.set)}"
+  }
+
+  assert {
+    condition     = length(aws_cloudwatch_dashboard.generated) == 1
+    error_message = "Sidecar dashboard config should create a dashboard"
+  }
+}
+
+run "template_without_sidecar_is_unaffected" {
+  command = plan
+
+  variables {
+    config_path   = "tests/fixtures/sidecar/template.yaml"
+    config_format = "sam"
+  }
+
+  # The same pristine template with no sidecar: no extensions, no resources.
+  # This is what `sam deploy` would produce, and the module agrees with it.
+  assert {
+    condition     = length(output.extensions_active) == 0
+    error_message = "Without a sidecar the pristine template has no extensions"
+  }
+
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.set) == 0
+    error_message = "Without a sidecar there should be no alarms"
+  }
+}
+
+run "missing_sidecar_errors" {
+  command = plan
+
+  variables {
+    config_path            = "tests/fixtures/sidecar/template.yaml"
+    config_format          = "sam"
+    extension_sidecar_path = "tests/fixtures/sidecar/does-not-exist.yaml"
+  }
+
+  # Named explicitly precisely so this fails rather than silently applying
+  # nothing.
+  expect_failures = [
+    null_resource.config_validation,
+  ]
+}
+
+run "sidecar_unknown_key_errors" {
+  command = plan
+
+  variables {
+    config_path            = "tests/fixtures/sidecar/template.yaml"
+    config_format          = "sam"
+    extension_sidecar_path = "tests/fixtures/sidecar/slstf-unknown.yaml"
+  }
+
+  expect_failures = [
+    null_resource.config_validation,
+  ]
+
+  assert {
+    condition     = can(regex("Unknown sls.tf extension 'Alarm'", local.extension_unknown_key_errors[0]))
+    error_message = "A typo in the sidecar should be reported like one inline, got: ${join(" | ", local.extension_unknown_key_errors)}"
+  }
+}
+
+run "sidecar_and_inline_duplicate_errors" {
+  command = plan
+
+  variables {
+    config_path            = "tests/fixtures/sidecar/template-with-inline.yaml"
+    config_format          = "sam"
+    extension_sidecar_path = "tests/fixtures/sidecar/slstf.yaml"
+  }
+
+  # Alarms defined in both places: one of them is dead config that nothing
+  # would otherwise report.
+  expect_failures = [
+    null_resource.config_validation,
+  ]
+
+  assert {
+    condition     = length([for e in local.extension_duplicate_errors : e if can(regex("both in the sidecar", e))]) == 1
+    error_message = "Expected a sidecar/inline duplicate error, got: ${join(" | ", local.extension_duplicate_errors)}"
+  }
+}
