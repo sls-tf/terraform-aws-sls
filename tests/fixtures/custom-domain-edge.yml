@@ -5,12 +5,6 @@ provider:
   runtime: nodejs18.x
   region: us-east-1
   stage: dev
-  customDomain:
-    domainName: api.example.com
-    certificateArn: arn:aws:acm:us-east-1:123456789012:certificate/abc123
-    endpointType: EDGE
-    createRoute53Record: false
-    # No hostedZoneId - will be created via create_hosted_zone variable
 
 functions:
   hello:
@@ -19,3 +13,13 @@ functions:
       - http:
           path: /hello
           method: get
+
+custom:
+  slsTf:
+    customDomain:
+      domainName: api.example.com
+      certificateArn: arn:aws:acm:us-east-1:123456789012:certificate/abc123
+      endpointType: EDGE
+      createRoute53Record: false
+      # No hostedZoneId - created via createHostedZone below
+      createHostedZone: true

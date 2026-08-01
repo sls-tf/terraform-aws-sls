@@ -5,12 +5,6 @@ provider:
   runtime: nodejs18.x
   region: us-west-2
   stage: prod
-  customDomain:
-    domainName: api-regional.example.com
-    certificateArn: arn:aws:acm:us-west-2:123456789012:certificate/def456
-    endpointType: REGIONAL
-    createRoute53Record: false
-    stage: production
 
 functions:
   api:
@@ -19,3 +13,13 @@ functions:
       - http:
           path: /api
           method: post
+
+custom:
+  slsTf:
+    customDomain:
+      domainName: api-regional.example.com
+      certificateArn: arn:aws:acm:us-west-2:123456789012:certificate/def456
+      endpointType: REGIONAL
+      createRoute53Record: false
+      stage: production
+      createHostedZone: true

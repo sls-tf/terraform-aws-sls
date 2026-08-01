@@ -109,7 +109,12 @@ locals {
     local.parsed_config != null ? local.cloudfront_event_validation_errors : [],
 
     # TypeScript parsing errors (Roadmap #6)
-    var.config_format == "typescript" ? local.typescript_all_errors : []
+    var.config_format == "typescript" ? local.typescript_all_errors : [],
+
+    # Extension errors — unknown/misspelled keys under the sls.tf namespace,
+    # an extension declared at two spellings, or a required extension this
+    # module version does not implement (extensions.tf).
+    local.extension_validation_errors
   ))
 
   # Runtime validation errors (strict mode)

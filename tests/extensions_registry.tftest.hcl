@@ -22,7 +22,8 @@ run "yaml_alarms_reported_active" {
   command = plan
 
   variables {
-    config_path = "tests/fixtures/alarm-sets.yml"
+    config_path                 = "tests/fixtures/alarm-sets.yml"
+    extension_legacy_key_notice = false
   }
 
   assert {
@@ -55,7 +56,8 @@ run "yaml_dashboard_reported_active" {
   command = plan
 
   variables {
-    config_path = "tests/fixtures/event-service-parity.yml"
+    config_path                 = "tests/fixtures/event-service-parity.yml"
+    extension_legacy_key_notice = false
   }
 
   assert {
@@ -148,4 +150,72 @@ run "module_version_is_reported" {
     condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", output.module_version))
     error_message = "module_version should be a bare semver string, got: ${output.module_version}"
   }
+}
+
+# --- serverless-yaml namespace (custom.slsTf) ------------------------------
+
+run "namespaced_yaml_keys_resolve" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/extensions-namespaced.yml"
+  }
+
+  assert {
+    condition     = contains(keys(output.extensions_active), "Alarms") && contains(keys(output.extensions_active), "Dashboard")
+    error_message = "custom.slsTf.alarms and .dashboard should both report active, got: ${join(", ", keys(output.extensions_active))}"
+  }
+
+  assert {
+    condition     = output.extensions_active["Alarms"].source == "custom.slsTf.alarms"
+    error_message = "Alarms should report the namespaced key as its source, got: ${output.extensions_active["Alarms"].source}"
+  }
+
+  # Identical config to alarm-sets.yml, addressed differently: the namespaced
+  # spelling must produce the same 6 alarms as the top-level one.
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.set) == 6
+    error_message = "Namespaced alarms should expand identically to the top-level spelling, got ${length(aws_cloudwatch_metric_alarm.set)}"
+  }
+
+  assert {
+    condition     = length(aws_cloudwatch_dashboard.generated) == 1
+    error_message = "Namespaced dashboard config should create a dashboard"
+  }
+}
+
+run "legacy_top_level_keys_still_work" {
+  command = plan
+
+  variables {
+    config_path                 = "tests/fixtures/alarm-sets.yml"
+    extension_legacy_key_notice = false
+  }
+
+  # The pre-namespace spelling is supported indefinitely — event-service parity
+  # is why alarm sets exist. It emits a check-block notice, not an error.
+  assert {
+    condition     = length(local.validation_errors) == 0
+    error_message = "Legacy top-level alarms: must not be an error, got: ${join(", ", local.validation_errors)}"
+  }
+
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.set) == 6
+    error_message = "Legacy top-level alarms: should still expand to 6 alarms, got ${length(aws_cloudwatch_metric_alarm.set)}"
+  }
+}
+
+run "duplicate_spellings_error" {
+  command = plan
+
+  variables {
+    config_path                 = "tests/fixtures/extensions-duplicate-key.yml"
+    extension_legacy_key_notice = false
+  }
+
+  # Defining an extension at both spellings must fail rather than silently
+  # picking one — silent precedence is the failure mode the registry removes.
+  expect_failures = [
+    null_resource.config_validation,
+  ]
 }

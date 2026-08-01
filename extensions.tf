@@ -44,7 +44,8 @@ locals {
   extension_registry = {
     Alarms = {
       sam_key        = "Metadata.SlsTf.Alarms"
-      yaml_key       = "alarms"
+      yaml_key       = "custom.slsTf.alarms"
+      legacy_yaml    = "alarms"
       parse          = "structural"
       since_version  = "0.7.0"
       stability      = "stable"
@@ -53,7 +54,8 @@ locals {
     }
     Dashboard = {
       sam_key        = "Metadata.SlsTf.Dashboard"
-      yaml_key       = "dashboard"
+      yaml_key       = "custom.slsTf.dashboard"
+      legacy_yaml    = "dashboard"
       parse          = "structural"
       since_version  = "0.8.0"
       stability      = "stable"
@@ -62,10 +64,12 @@ locals {
     }
     CustomDomain = {
       # since_version is the SAM key's arrival; the serverless-yaml form
-      # (provider.customDomain) predates it and is read through the provider
-      # block rather than here — see _extension_custom_domain_present.
+      # predates it as provider.customDomain, which MOVED here in v0.11.0
+      # rather than becoming an alias — it sat inside a section Serverless
+      # Framework schema-validates, and the sole consumer was not yet live.
       sam_key        = "Metadata.SlsTf.CustomDomain"
-      yaml_key       = "provider.customDomain"
+      yaml_key       = "custom.slsTf.customDomain"
+      legacy_yaml    = ""
       parse          = "resolved"
       since_version  = "0.10.0"
       stability      = "stable"
@@ -73,6 +77,10 @@ locals {
       implementation = "http-api-domain.tf"
     }
   }
+
+  # Extension names, for iteration and for diagnostics that list what this
+  # version supports.
+  extension_names = sort(keys(local.extension_registry))
 
   # --------------------------------------------------------------------------
   # Per-extension resolution
@@ -89,9 +97,10 @@ locals {
   #
   # These are SEPARATE local values rather than fields of one map because
   # Terraform tracks dependencies per local value. sam-parser.tf reads
-  # _extension_custom_domain_json to assemble parsed_config, while the Alarms
-  # and Dashboard resolutions read parsed_config for their serverless-yaml
-  # branch. As one local that is a dependency cycle; split, it is a DAG.
+  # _extension_custom_domain_sam_json to assemble parsed_config, while the
+  # Alarms and Dashboard resolutions read parsed_config for their
+  # serverless-yaml branch. As one local that is a dependency cycle; split, it
+  # is a DAG.
 
   # NOTE the jsonencode() placement: INSIDE each branch, so every branch of
   # every conditional is a string. Encoding outside the conditional — as these
@@ -105,26 +114,47 @@ locals {
   # That aborted the plan for any SAM template with a non-empty
   # Metadata.SlsTf.Alarms. No fixture had one, so it shipped in v0.7.0 and
   # survived to v0.10.0 unnoticed. Keep the encode inside the branches.
+  #
+  # The serverless-yaml namespace is `custom.slsTf.*`, mirroring
+  # `Metadata.SlsTf.*` by MECHANISM: `custom:` is the section Serverless
+  # Framework leaves unvalidated, exactly as `Metadata` is the section
+  # CloudFormation ignores. A bare top-level `slsTf:` would mirror the visual
+  # position instead, and SF flags unknown root keys (a warning by default, a
+  # hard failure under configValidationMode: error).
+  #
+  # The pre-namespace top-level keys stay accepted PERMANENTLY, not as a
+  # deprecation with a removal date — event-service parity is why alarm sets
+  # exist. Namespaced wins where both appear, but that combination is also a
+  # validation error, so the precedence never silently decides anything.
   _extension_alarms_json = (
     var.config_format == "sam"
     ? (local.sam_structure != null ? jsonencode(try(local.sam_structure.Metadata.SlsTf.Alarms, {})) : "{}")
-    : jsonencode(try(local.parsed_config.alarms, {}))
+    : jsonencode(try(local.parsed_config.custom.slsTf.alarms, local.parsed_config.alarms, {}))
   )
 
   _extension_dashboard_json = (
     var.config_format == "sam"
     ? (local.sam_structure != null ? jsonencode(try(local.sam_structure.Metadata.SlsTf.Dashboard, null)) : "null")
-    : jsonencode(try(local.parsed_config.dashboard, null))
+    : jsonencode(try(local.parsed_config.custom.slsTf.dashboard, local.parsed_config.dashboard, null))
   )
 
-  # SAM only. The serverless-yaml form is provider.customDomain, which
-  # sam-parser.tf/locals.tf assemble into provider_with_defaults; reading that
-  # here would close the cycle described above. The yaml side moves under
-  # custom.slsTf in a later step (docs/EXTENSIONS.md migration step 4).
-  _extension_custom_domain_json = (
+  # SAM-only, and deliberately separate from _extension_custom_domain_json
+  # below: sam-parser.tf reads THIS one to assemble parsed_config, so it must
+  # not depend on parsed_config. The general local does, via the yaml branch.
+  _extension_custom_domain_sam_json = (
     var.config_format == "sam"
     ? jsonencode(try(local.sam_raw.Metadata.SlsTf.CustomDomain, null))
-    : jsonencode(null)
+    : "null"
+  )
+
+  # Read from parsed_config_RESOLVED so ${self:}/${env:} references inside the
+  # domain config still resolve — they did when this was provider.customDomain
+  # (assembled into provider_with_defaults from the resolved config), and moving
+  # the key must not quietly drop that.
+  _extension_custom_domain_json = (
+    var.config_format == "sam"
+    ? local._extension_custom_domain_sam_json
+    : jsonencode(try(local.parsed_config_resolved.custom.slsTf.customDomain, null))
   )
 
   # Registry-facing surface. Use this at extension implementation sites.
@@ -149,20 +179,39 @@ locals {
     name => !contains(["null", "{}", "\"\""], json)
   }
 
-  # CustomDomain in serverless yaml arrives via the provider block, so its
-  # presence cannot be read off _extension_custom_domain_json (which is SAM-only
-  # to avoid the dependency cycle). provider_with_defaults is downstream of
-  # parsed_config and only feeds the output, so reading it here is safe.
-  _extension_custom_domain_present = (
-    var.config_format == "sam"
-    ? local._extension_present_encoded.CustomDomain
-    : try(local.provider_with_defaults.customDomain, null) != null
-  )
+  _extension_present = local._extension_present_encoded
 
-  _extension_present = merge(
-    local._extension_present_encoded,
-    { CustomDomain = local._extension_custom_domain_present }
-  )
+  # --------------------------------------------------------------------------
+  # Legacy top-level yaml keys
+  # --------------------------------------------------------------------------
+  # Which extensions are configured at their pre-namespace top-level key. Used
+  # for the deprecation notice and for the both-defined error below.
+  _extension_legacy_yaml_used = var.config_format == "sam" ? [] : sort([
+    for name, meta in local.extension_registry :
+    name
+    if meta.legacy_yaml != "" && try(local.parsed_config[meta.legacy_yaml], null) != null
+  ])
+
+  _extension_namespaced_yaml_used = var.config_format == "sam" ? [] : sort([
+    for name, meta in local.extension_registry :
+    name
+    if try(local.parsed_config.custom.slsTf[split(".", meta.yaml_key)[2]], null) != null
+  ])
+
+  # Defining an extension at both spellings is an error rather than a silent
+  # precedence win — silent precedence is the failure mode this whole design
+  # exists to remove.
+  extension_duplicate_errors = [
+    for name in local._extension_legacy_yaml_used :
+    join(" ", [
+      "Extension '${name}' is defined twice: at the legacy top-level key",
+      "'${local.extension_registry[name].legacy_yaml}:' and at",
+      "'${local.extension_registry[name].yaml_key}'.",
+      "Remove one. The namespaced key is preferred; the top-level key stays",
+      "supported indefinitely, but only one of them may be present."
+    ])
+    if contains(local._extension_namespaced_yaml_used, name)
+  ]
 
   extensions_active = {
     for name, meta in local.extension_registry :
@@ -170,8 +219,42 @@ locals {
       since     = meta.since_version
       stability = meta.stability
       parse     = meta.parse
-      source    = var.config_format == "sam" ? meta.sam_key : meta.yaml_key
+      # Where the config was ACTUALLY read from, not the canonical spelling —
+      # "did my config take effect, and which key did it come from?" is the
+      # question this output exists to answer, and for a consumer with both
+      # spellings in play the canonical name would be misleading.
+      source = var.config_format == "sam" ? meta.sam_key : (
+        contains(local._extension_legacy_yaml_used, name) ? meta.legacy_yaml : meta.yaml_key
+      )
     }
     if local._extension_present[name]
   }
+}
+
+# Plan-time notice, not an error: the pre-namespace top-level keys are
+# supported indefinitely, so a consumer who never moves is not broken — they
+# are just told where the key now lives. Mirrors the naming-lint precedent
+# (naming-lint.tf) as the module's only other warn-don't-fail check.
+check "extension_legacy_yaml_keys" {
+  assert {
+    condition = !(var.extension_legacy_key_notice && length(local._extension_legacy_yaml_used) > 0)
+    error_message = join(" ", [
+      "These extensions are configured at their pre-v0.11.0 top-level keys:",
+      join(", ", [
+        for name in local._extension_legacy_yaml_used :
+        "${local.extension_registry[name].legacy_yaml}: (now ${local.extension_registry[name].yaml_key})"
+      ]),
+      "— these keys still work and will keep working, but Serverless Framework",
+      "flags unrecognised root keys, so prefer the namespaced form under",
+      "custom.slsTf. See docs/EXTENSIONS.md."
+    ])
+  }
+}
+
+locals {
+  # Aggregate of every extension-level error, appended to
+  # local.validation_errors (locals.tf) so extensions fail through the same
+  # null_resource.config_validation gate as everything else rather than
+  # inventing a second error channel.
+  extension_validation_errors = local.extension_duplicate_errors
 }

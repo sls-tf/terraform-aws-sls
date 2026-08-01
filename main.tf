@@ -564,12 +564,23 @@ resource "aws_api_gateway_stage" "this" {
 module "custom_domain" {
   source = "./modules/custom-domain"
 
-  count = var.enable_custom_domain && try(local.provider_with_defaults.customDomain, null) != null && length(local.http_v1_events) > 0 ? 1 : 0
+  # Presence IS enablement — there is no enable_custom_domain flag. A boolean
+  # that has to agree with the config is a second place for the config to be
+  # wrong, and it failed silently in one direction: a complete customDomain
+  # block with the flag unset created nothing, with a clean plan. See
+  # extensions.tf and docs/EXTENSIONS.md.
+  count = local._extension_present.CustomDomain && length(local.http_v1_events) > 0 ? 1 : 0
 
-  domain_config        = local.provider_with_defaults.customDomain
+  domain_config        = jsondecode(local.extension_config_json.CustomDomain)
   api_gateway_rest_api = aws_api_gateway_rest_api.this[0].id
   api_gateway_stage    = aws_api_gateway_stage.this[0].stage_name
-  create_hosted_zone   = var.create_hosted_zone
-  acm_certificate_arn  = var.acm_certificate_arn
-  aws_region           = local.provider_with_defaults.region
+
+  # createHostedZone moved into the extension config with the rest of the
+  # domain settings — it is a behaviour choice the config file can express.
+  # acm_certificate_arn stays a module variable: it is frequently
+  # aws_acm_certificate.this.arn from the caller's own configuration, which no
+  # YAML file can name.
+  create_hosted_zone  = try(jsondecode(local.extension_config_json.CustomDomain).createHostedZone, false)
+  acm_certificate_arn = var.acm_certificate_arn
+  aws_region          = local.provider_with_defaults.region
 }

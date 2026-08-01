@@ -1,0 +1,76 @@
+# Namespaced twin of alarm-sets.yml: identical extension config, addressed as
+# custom.slsTf.* rather than the pre-v0.11.0 top-level keys. Both spellings
+# must produce the same resources.
+service: alarm-sets
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+functions:
+  ingest:
+    handler: handler.ingest
+  process:
+    handler: handler.process
+
+custom:
+  slsTf:
+    alarms:
+      defaults:
+        actions:
+          - Ref: OpsTopic
+      groups:
+        lambda:
+          resource_names: []
+          metrics:
+            - name: Errors
+              period: 300
+              statistic: Sum
+              threshold: 5
+              comparisonOperator: GreaterThanOrEqualToThreshold
+              evaluationPeriods: 2
+              treatMissingData: notBreaching
+            - name: Throttles
+              threshold: 1
+              comparisonOperator: GreaterThanThreshold
+        dynamodb:
+          metrics:
+            - name: ThrottledRequests
+              threshold: 10
+              comparisonOperator: GreaterThanThreshold
+        api_gateway:
+          resource_names:
+            - my-shared-api
+          actions:
+            - arn:aws:sns:us-east-1:123456789012:apigw-alerts
+          metrics:
+            - name: 5XXError
+              statistic: Average
+              threshold: 0.05
+              comparisonOperator: GreaterThanThreshold
+
+    dashboard:
+      name: namespaced_monitoring
+      services:
+        - lambda
+
+resources:
+  Resources:
+    OpsTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: ops-alerts-dev
+
+    EventsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: events-table-dev
+        BillingMode: PAY_PER_REQUEST
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S

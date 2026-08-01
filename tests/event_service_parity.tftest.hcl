@@ -24,9 +24,10 @@ run "stage_first_naming_and_untagged_roles" {
   command = plan
 
   variables {
-    config_path          = "tests/fixtures/event-service-parity.yml"
-    generated_name_order = "stage-service"
-    role_tags_enabled    = false
+    config_path                 = "tests/fixtures/event-service-parity.yml"
+    extension_legacy_key_notice = false
+    generated_name_order        = "stage-service"
+    role_tags_enabled           = false
   }
 
   # Elemental convention: {env}-{service}-{key}
@@ -50,8 +51,9 @@ run "auto_created_dlqs" {
   command = plan
 
   variables {
-    config_path          = "tests/fixtures/event-service-parity.yml"
-    generated_name_order = "stage-service"
+    config_path                 = "tests/fixtures/event-service-parity.yml"
+    extension_legacy_key_notice = false
+    generated_name_order        = "stage-service"
   }
 
   # Function DLQs auto-created from dlq: {enabled, name}
@@ -97,7 +99,8 @@ run "db_access_grants" {
   command = plan
 
   variables {
-    config_path = "tests/fixtures/event-service-parity.yml"
+    config_path                 = "tests/fixtures/event-service-parity.yml"
+    extension_legacy_key_notice = false
   }
 
   # Only the declaring function gets the policy
@@ -116,7 +119,8 @@ run "consumer_shaped_alarm_groups" {
   command = plan
 
   variables {
-    config_path = "tests/fixtures/event-service-parity.yml"
+    config_path                 = "tests/fixtures/event-service-parity.yml"
+    extension_legacy_key_notice = false
   }
 
   # lambda: 2 scalar metrics x 4 functions = 8; anomaly group: 1 x 1 = 1
@@ -163,7 +167,8 @@ run "generated_dashboard" {
   command = plan
 
   variables {
-    config_path = "tests/fixtures/event-service-parity.yml"
+    config_path                 = "tests/fixtures/event-service-parity.yml"
+    extension_legacy_key_notice = false
   }
 
   assert {
@@ -188,7 +193,8 @@ run "secret_backed_subscription" {
   command = plan
 
   variables {
-    config_path = "tests/fixtures/event-service-parity.yml"
+    config_path                 = "tests/fixtures/event-service-parity.yml"
+    extension_legacy_key_notice = false
   }
 
   assert {
@@ -206,7 +212,8 @@ run "nested_outputs" {
   command = plan
 
   variables {
-    config_path = "tests/fixtures/event-service-parity.yml"
+    config_path                 = "tests/fixtures/event-service-parity.yml"
+    extension_legacy_key_notice = false
   }
 
   assert {
@@ -224,13 +231,14 @@ run "layer5_tag_and_dlq_parity" {
   command = plan
 
   variables {
-    config_path                = "tests/fixtures/event-service-parity.yml"
-    generated_name_order       = "stage-service"
-    role_tags_enabled          = false
-    injected_tags_enabled      = false
-    global_tags                = { ManagedBy = "terraform" }
-    function_dlq_name_template = "{prefix}-{name}-dlq"
-    target_dlq_name_template   = "{prefix}-eb-{target_id}-dlq"
+    config_path                 = "tests/fixtures/event-service-parity.yml"
+    extension_legacy_key_notice = false
+    generated_name_order        = "stage-service"
+    role_tags_enabled           = false
+    injected_tags_enabled       = false
+    global_tags                 = { ManagedBy = "terraform" }
+    function_dlq_name_template  = "{prefix}-{name}-dlq"
+    target_dlq_name_template    = "{prefix}-eb-{target_id}-dlq"
   }
 
   # No sls.tf tag signature; only the global override

@@ -501,9 +501,10 @@ locals {
       # v1 REST custom domain for SAM templates (no SAM-native surface on the
       # implicit v1 API): Metadata.SlsTf.CustomDomain, serverless-framework
       # customDomain shape. Resolved through the extension registry — the
-      # per-extension local, not local.extension_config_json, because this feeds
-      # parsed_config and the aggregate map depends on it (extensions.tf).
-      customDomain = jsondecode(local._extension_custom_domain_json)
+      # SAM-only local, not local.extension_config_json, because this feeds
+      # parsed_config and the general local reads parsed_config back for the
+      # serverless-yaml branch (extensions.tf).
+      customDomain = jsondecode(local._extension_custom_domain_sam_json)
     }
 
     functions = {

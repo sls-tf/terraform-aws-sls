@@ -104,20 +104,26 @@ variable "lambda_code_source" {
   }
 }
 
-variable "enable_custom_domain" {
-  description = "Enable custom domain configuration for API Gateway (requires provider.customDomain block in serverless.yml)"
-  type        = bool
-  default     = false
-}
-
-variable "create_hosted_zone" {
-  description = "Create Route 53 hosted zone if hostedZoneId not provided in customDomain configuration"
-  type        = bool
-  default     = false
-}
+# enable_custom_domain and create_hosted_zone were REMOVED in v0.11.0.
+#
+# The custom domain is now enabled by the presence of its config
+# (custom.slsTf.customDomain / Metadata.SlsTf.CustomDomain) like every other
+# extension, and createHostedZone moved into that config. Removal rather than
+# deprecation is deliberate: Terraform rejects unknown module arguments, so a
+# caller still passing either one fails loudly instead of silently losing a
+# setting. See docs/EXTENSIONS.md.
 
 variable "acm_certificate_arn" {
-  description = "ACM certificate ARN for custom domain (fallback if not specified in customDomain.certificateArn)"
+  description = <<-DESC
+    ACM certificate ARN for the custom domain, used when the config does not
+    specify `customDomain.certificateArn`.
+
+    This stays a module variable rather than moving into the extension config
+    because it is frequently `aws_acm_certificate.this.arn` from the caller's
+    own Terraform — a value no YAML file can name. That is the dividing line:
+    config describing what the consumer wants belongs in the extension; wiring
+    that can only come from Terraform stays a variable.
+  DESC
   type        = string
   default     = null
 }
@@ -217,6 +223,21 @@ variable "stage_override" {
   DESC
   type        = string
   default     = null
+}
+
+variable "extension_legacy_key_notice" {
+  description = <<-DESC
+    Emit a plan-time notice (check "extension_legacy_yaml_keys") when an
+    extension is configured at its pre-v0.11.0 top-level serverless-yaml key
+    (`alarms:`, `dashboard:`) rather than under `custom.slsTf`.
+
+    Those keys are supported indefinitely — event-service parity is why alarm
+    sets exist — so this is a signpost, not a deprecation clock. Set false to
+    silence it if you have made a deliberate decision to stay on the top-level
+    spelling.
+  DESC
+  type        = bool
+  default     = true
 }
 
 variable "naming_convention_warning" {

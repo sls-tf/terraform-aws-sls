@@ -5,11 +5,6 @@ provider:
   runtime: nodejs18.x
   region: us-east-1
   stage: dev
-  customDomain:
-    domainName: api.example.com
-    # EDGE endpoint requires us-east-1, but this cert is in us-west-2
-    certificateArn: arn:aws:acm:us-west-2:123456789012:certificate/wrong123
-    endpointType: EDGE
 
 functions:
   hello:
@@ -18,3 +13,11 @@ functions:
       - http:
           path: /hello
           method: get
+
+custom:
+  slsTf:
+    customDomain:
+      domainName: api.example.com
+      # EDGE endpoint requires us-east-1, but this cert is in us-west-2
+      certificateArn: arn:aws:acm:us-west-2:123456789012:certificate/wrong123
+      endpointType: EDGE

@@ -25,7 +25,8 @@ run "generated_names_reported" {
   command = plan
 
   variables {
-    config_path = "tests/fixtures/alarm-sets.yml"
+    config_path                 = "tests/fixtures/alarm-sets.yml"
+    extension_legacy_key_notice = false
   }
 
   # Both functions omit name: -> both reported with the generated convention
@@ -57,8 +58,9 @@ run "lint_warns_not_fails_under_scoped_resource_types" {
   command = plan
 
   variables {
-    config_path    = "tests/fixtures/alarm-sets.yml"
-    resource_types = ["AWS::DynamoDB::Table"]
+    config_path                 = "tests/fixtures/alarm-sets.yml"
+    extension_legacy_key_notice = false
+    resource_types              = ["AWS::DynamoDB::Table"]
   }
 
   # terraform test promotes check warnings to failures — expecting the check

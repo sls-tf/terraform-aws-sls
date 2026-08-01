@@ -8,7 +8,8 @@ run "alarm_set_expansion" {
   command = plan
 
   variables {
-    config_path = "tests/fixtures/alarm-sets.yml"
+    config_path                 = "tests/fixtures/alarm-sets.yml"
+    extension_legacy_key_notice = false
   }
 
   # lambda: 2 metrics x 2 functions = 4; dynamodb: 1 metric x 1 table = 1;
@@ -40,7 +41,8 @@ run "alarm_set_properties" {
   command = plan
 
   variables {
-    config_path = "tests/fixtures/alarm-sets.yml"
+    config_path                 = "tests/fixtures/alarm-sets.yml"
+    extension_legacy_key_notice = false
   }
 
   # Class defaults: namespace + dimension name
@@ -86,7 +88,8 @@ run "alarm_set_actions" {
   command = plan
 
   variables {
-    config_path = "tests/fixtures/alarm-sets.yml"
+    config_path                 = "tests/fixtures/alarm-sets.yml"
+    extension_legacy_key_notice = false
   }
 
   # defaults.actions (Ref to template topic) applied to groups without overrides
