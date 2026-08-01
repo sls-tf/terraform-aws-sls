@@ -5,10 +5,18 @@ and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
 ## v0.11.0
 
-Groundwork for extensions as a first-class concept — see
-[docs/EXTENSIONS.md](docs/EXTENSIONS.md). No behaviour change: every extension
-resolves to the same value it did in v0.10.0, through one code path instead of
-three scattered lookups.
+Extensions become a first-class concept — see
+[docs/EXTENSIONS.md](docs/EXTENSIONS.md). Extensions are sls.tf-only config that
+neither SAM nor Serverless Framework defines; they had arrived one at a time,
+each with its own conventions, and every lookup was a bare `try()`. That made
+"absent", "misspelled" and "not supported by this version" the same value — a
+consumer pinned below the version that added alarm sets got a clean plan and
+zero alarms.
+
+**Read the Changed section before upgrading.** Configs using extensions only
+through their documented keys are unaffected, but three module variables were
+removed and one serverless-yaml key moved. A config that was silently doing
+nothing will now fail loudly, which is the point of the release.
 
 ### Added
 
@@ -25,6 +33,44 @@ three scattered lookups.
   module cannot read its own source ref at plan time, so the version is
   hand-maintained and asserted against the newest CHANGELOG heading by
   `make check-version`.
+- **`custom.slsTf.*` serverless-yaml namespace** — mirrors `Metadata.SlsTf.*` by
+  mechanism: `custom:` is the section Serverless Framework leaves unvalidated,
+  as `Metadata` is the section CloudFormation ignores. The pre-v0.11.0
+  top-level `alarms:` / `dashboard:` keep working indefinitely, with a notice
+  behind `extension_legacy_key_notice`.
+- **Unknown extension keys fail the plan** — a key under the sls.tf namespace
+  this version doesn't recognise is now an error naming the key, the nearest
+  match, the supported set and the running version. A misspelled *namespace*
+  (`custom.slstf`, `Metadata.Slstf`) has its own check, since it would
+  otherwise stay silent. `extension_unknown_key_behaviour = "warn"` downgrades
+  both. Strictness is scoped to the sls.tf namespace, never `custom:` or
+  `Metadata` at large.
+- **`required_extensions`** — assert the extensions a config depends on. The one
+  guard that works against an older module version: Terraform rejects unknown
+  module arguments, so a version predating the extension fails with
+  "Unsupported argument" instead of silently doing nothing. Also catches an
+  extension that is implemented but whose config didn't resolve.
+- **Structural-parse mismatch check** — warns when an extension read from the
+  structural parse resolves differently there than in the resolved parse, which
+  means a template Parameter is falling back to its `Default`. The fix it
+  recommends (`structural_sam_parameters`) is verified by test to both clear the
+  warning and route the alarm to the passed value.
+
+### Changed
+
+- **BREAKING: `provider.customDomain` moves to `custom.slsTf.customDomain`.** It
+  was the one yaml key inside a section Serverless Framework schema-validates.
+  Moved rather than aliased — the sole consumer is not yet live.
+- **BREAKING: `enable_custom_domain` removed.** It defaulted to `false` and was
+  ANDed with the config, so a complete `customDomain` block with the flag unset
+  created nothing and planned clean. Presence of the config now enables the
+  domain, as it already did for every other extension. Removal rather than
+  deprecation is deliberate: Terraform rejects unknown module arguments, so a
+  caller still passing it fails loudly.
+- **BREAKING: `create_hosted_zone` removed**, moving to
+  `customDomain.createHostedZone` in the config. `acm_certificate_arn` stays a
+  variable — it is frequently a co-planned `aws_acm_certificate.this.arn`, which
+  no YAML file can name.
 
 ### Fixed
 

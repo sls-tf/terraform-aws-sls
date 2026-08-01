@@ -513,9 +513,29 @@ dashboards: a hand-written `AWS::CloudWatch::Dashboard` is portable; the
 
 | Extension | SAM key | Serverless-yaml key | Since |
 |---|---|---|---|
-| Alarm sets | `Metadata.SlsTf.Alarms` | `alarms:` | v0.7.0 |
-| Dashboard | `Metadata.SlsTf.Dashboard` | `dashboard:` | v0.8.0 |
-| Custom domain | `Metadata.SlsTf.CustomDomain` | `provider.customDomain` | v0.10.0 |
+| Alarm sets | `Metadata.SlsTf.Alarms` | `custom.slsTf.alarms` | v0.7.0 |
+| Dashboard | `Metadata.SlsTf.Dashboard` | `custom.slsTf.dashboard` | v0.8.0 |
+| Custom domain | `Metadata.SlsTf.CustomDomain` | `custom.slsTf.customDomain` | v0.10.0 |
+
+`custom:` is where Serverless Framework leaves config unvalidated, exactly as
+`Metadata` is where CloudFormation ignores it — the namespaces mirror each other
+by mechanism. The pre-v0.11.0 top-level `alarms:` and `dashboard:` keep working
+indefinitely (silence the notice with `extension_legacy_key_notice = false`);
+`provider.customDomain` was moved rather than aliased.
+
+**Unknown keys fail the plan.** A key under `Metadata.SlsTf` / `custom.slsTf`
+that this version doesn't recognise — a typo, or an extension from a newer
+release — is an error naming the key, the nearest match and the running version.
+So is a misspelled namespace (`custom.slstf`). Set
+`extension_unknown_key_behaviour = "warn"` to downgrade both to a notice while
+rolling a large estate forward. Only the sls.tf namespace is inspected: other
+tools' keys under `custom:` and `Metadata` are untouched.
+
+**Assert what you depend on** with `required_extensions = ["Alarms"]`. This is
+the only guard that works against an *older* module: Terraform rejects unknown
+module arguments, so a version predating the extension fails with "Unsupported
+argument" rather than silently doing nothing. It also catches config that is
+present but not resolving.
 
 Extensions live where the native tooling is *specified* to ignore them —
 `Metadata` for SAM — so `sam validate`, `sam build` and `sam local invoke` keep
@@ -552,6 +572,10 @@ including which parse each extension is read from and why that matters for
 | `aws_region` | string | `null` | no | Optional AWS region override. If set and differs from the config region, a warning will be displayed. |
 | `sam_template_parameters` | map(string) | `{}` | no | Parameter values for SAM templates. Keys must match names in the template `Parameters` section. |
 | `resource_types` | list(string) | `null` | no | Allowlist of CloudFormation resource types to materialise from the `resources:` section. `null` creates all types. Lambda functions, IAM roles, and event wiring are always created regardless. |
+| `required_extensions` | list(string) | `[]` | no | Extensions this config depends on, asserted at plan time. See [Extensions](#extensions). |
+| `extension_unknown_key_behaviour` | string | `"error"` | no | `"error"` or `"warn"` for unrecognised keys under the sls.tf namespace and for a misspelled namespace. |
+| `extension_legacy_key_notice` | bool | `true` | no | Emit a notice when an extension uses its pre-v0.11.0 top-level serverless-yaml key. |
+| `acm_certificate_arn` | string | `null` | no | ACM certificate ARN for the custom domain, when the config does not set `customDomain.certificateArn`. |
 
 ## Outputs
 

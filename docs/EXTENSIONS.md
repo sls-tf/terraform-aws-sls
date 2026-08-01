@@ -1,6 +1,8 @@
 # Extensions: a first-class concept for non-SAM, non-Serverless behaviour
 
-**Status:** proposal
+**Status:** implemented in v0.11.0, except §7 (sidecar packaging), which is not
+started. See [Migration](#migration) for what shipped and how it differed from
+this proposal.
 **Motivating incident:** a consumer wrote a full alarm configuration against a
 module version that predated alarm sets, and got silence — no error, no warning,
 a clean `terraform validate`, and zero alarms. Detail in
@@ -20,19 +22,21 @@ dashboard, and a self-provisioned custom domain — none of which exist in SAM o
 Serverless Framework core. Those landed as **extensions**: config that sls.tf
 understands and no other tool does.
 
-Three exist today:
+Three exist:
 
-| Extension | SAM key | Serverless-yaml key (today) | Implementation |
+| Extension | SAM key | Serverless-yaml key | Implementation |
 |---|---|---|---|
-| Alarm sets | `Metadata.SlsTf.Alarms` | `alarms:` | `alarm-sets.tf` |
-| Dashboard | `Metadata.SlsTf.Dashboard` | `dashboard:` | `dashboard.tf` |
-| Custom domain | `Metadata.SlsTf.CustomDomain` | `provider.customDomain` | `http-api-domain.tf` |
+| Alarm sets | `Metadata.SlsTf.Alarms` | `custom.slsTf.alarms` | `alarm-sets.tf` |
+| Dashboard | `Metadata.SlsTf.Dashboard` | `custom.slsTf.dashboard` | `dashboard.tf` |
+| Custom domain | `Metadata.SlsTf.CustomDomain` | `custom.slsTf.customDomain` | `http-api-domain.tf` |
 
-(Proposal §1 moves the yaml column to `custom.slsTf.*`; the first two keep their
-current spellings as permanent aliases, `provider.customDomain` does not.)
+The first two also accept their pre-v0.11.0 top-level spellings (`alarms:`,
+`dashboard:`) permanently; `provider.customDomain` was moved, not aliased.
 
-They work. The problem is that they arrived one at a time, each inventing its own
-conventions, and nothing ties them together:
+They work. **The problem this document addressed** was that they arrived one at a
+time, each inventing its own conventions, with nothing tying them together. The
+five points below describe the state before v0.11.0; each is answered by a
+numbered section under [Proposal](#proposal):
 
 1. **The namespace is inconsistent across formats.** SAM gets a vendor-scoped
    `Metadata.SlsTf.*`; serverless yaml gets bare top-level keys. So `alarms:` in
@@ -370,62 +374,68 @@ Both are fixed by the registry plus fail-on-unknown. Neither needs the extension
 
 ## Migration
 
-Additive and non-breaking except where marked:
+**Status: steps 1–5 shipped in v0.11.0.** Implementation order differed from the
+numbering below — the yaml namespace (4) landed before unknown-key errors (3),
+because unknown-key detection needs a namespace to exist in both formats first.
 
-1. Add the registry with the three existing extensions, and the
-   `extensions_active` output. No behaviour change.
-2. Route the three existing lookups through the registry. Still no behaviour
-   change; now there's one code path.
-3. Turn on unknown-key errors. **Breaking for anyone with a typo'd or stale
-   key** — which is the point, but it wants a minor-version bump and a CHANGELOG
-   note, since a config that was silently doing nothing starts failing loudly.
-4. Add `custom.slsTf.*` to the serverless-yaml parser. The two bare top-level
-   keys become permanent aliases with a `check`-block notice.
-   **`provider.customDomain` moves to `custom.slsTf.customDomain` outright** —
-   breaking, but the sole consumer is not yet live. Touches five
-   `tests/fixtures/custom-domain-*.yml`, `tests/custom_domain.tftest.hcl`, and
-   `main.tf:567`. Ships in the same minor bump as step 3, with a CHANGELOG note
-   under Changed rather than Added.
-   In the same change, **remove `enable_custom_domain`** (§8) so presence of the
-   config is what enables the domain, and move `create_hosted_zone` into
-   `customDomain.createHostedZone`. `tests/custom_domain.tftest.hcl` needs
-   reworking either way — every one of its `run` blocks currently sets
-   `enable_custom_domain = true`, and its first case asserts the
-   silent-no-op behaviour being removed (line 12: "enable_custom_domain
-   defaults to false"). That case inverts: config absent means no module,
-   config present means the module is created without any flag.
-5. Add the structural-parse validation. Note the check cannot look for `!Ref` in
-   the config as originally sketched — by the time the structural parse is
-   readable the preprocessor has already collapsed refs to their Defaults, so
-   the reference is gone. Diff the extension's subtree between `sam_raw` and
-   `sam_structure` instead: a difference means a parameter resolved differently
-   between the parses, which is exactly the misconfiguration. Ship it as a
-   `check` block first — `sam_raw` can be unknown at plan when a parameter comes
-   from a resource attribute.
-6. Sidecar packaging (§7) — independently scheduled, and gated on the registry
-   from steps 1–2 existing. Order within it: sidecar parse + double-definition
-   error, then the explicit-names precondition, then the companion-template
-   generator. Stack-sourced discovery is a later enhancement.
+| # | Step | Status |
+|---|---|---|
+| 1 | Registry + `extensions_active` output | shipped v0.11.0 |
+| 2 | Route existing lookups through the registry | shipped v0.11.0 |
+| 3 | Unknown-key and misspelled-namespace errors | shipped v0.11.0 |
+| 4 | `custom.slsTf.*` namespace, `customDomain` move | shipped v0.11.0 |
+| 5 | Structural-parse mismatch check | shipped v0.11.0 |
+| — | `required_extensions` input | shipped v0.11.0 |
+| — | `module_version` + `make check-version` | shipped v0.11.0 |
+| 6 | Sidecar packaging (§7) | not started |
 
-Steps 1–2 are pure refactor. Step 3 is the one with a blast radius, and it's the
-one that pays for the whole exercise. Step 6 is the largest and the only one
-that adds a deploy path rather than a guard rail.
+What shipped, and what changed from the plan:
 
-Two things worth deciding before step 3, both from the same observation — the
-module cannot know its own version (versions live only in git tags) and by
-definition cannot know about extensions added after it was cut:
+1. **Registry** (`extensions.tf`) with all three extensions, plus the
+   `extensions_active` output. Per-extension resolutions are separate `locals`,
+   not fields of one map: `sam-parser.tf` reads the CustomDomain one to build
+   `parsed_config`, while the Alarms and Dashboard ones read `parsed_config`
+   back — as a single local that is a dependency cycle.
+2. **Lookups routed through it.** Intended as a pure refactor, and it was —
+   except that the new SAM fixture exposed a bug the refactor then fixed:
+   `Metadata.SlsTf.Alarms` aborted the plan with *Inconsistent conditional
+   result types* whenever it was non-empty, because the lookup encoded to JSON
+   outside the conditional and an object with attributes does not unify with
+   `{}`. Broken since v0.7.0; invisible because every alarm-set test used the
+   yaml path, whose empty value is `null` and therefore unifies. **SAM alarm
+   sets had never worked.**
+3. **Unknown keys and misspelled namespaces** are plan-time errors, with
+   `extension_unknown_key_behaviour = "error" | "warn"` as the escape hatch.
+   Duplicate spellings are deliberately not downgradable. Strictness is scoped
+   to `Metadata.SlsTf` / `custom.slsTf` and never the parent, pinned by a
+   fixture carrying `webpack:`, `serverless-offline:` and `myOwnThing:` under
+   `custom:`.
+4. **`custom.slsTf.*`** is the yaml namespace; the bare top-level keys are
+   permanent, with a notice behind `extension_legacy_key_notice`.
+   `provider.customDomain`, `enable_custom_domain` and `create_hosted_zone` are
+   gone (§8).
+5. **Structural-parse mismatch** ships as a `check`, diffing the extension's
+   subtree between `sam_raw` and `sam_structure` — the `!Ref` search in §4 is
+   unbuildable, since the preprocessor collapses refs before either parse is
+   readable. Tested both ways: the mismatch is reported, and declaring the
+   parameter in `structural_sam_parameters` clears it *and* points the alarm at
+   the passed topic instead of the Default.
 
-- The error message in §3 that distinguishes "misspelled" from "not in this
-  version" is unbuildable as written. v0.6.0 has never heard of `Alarms`. The
-  achievable message names the supported set and suggests an upgrade. Naming
-  the running version at all requires a `module_version` local plus a release
-  check that it matches the tag.
-- Fail-on-unknown only protects consumers *already past* the version that adds
-  it, so it does not fix the motivating incident for anyone still on an older
-  pin. The mechanism that does is a module **input** — Terraform hard-errors on
-  `Unsupported argument`, so `required_extensions = ["Alarms"]` fails loudly on
-  v0.5.6 and precisely on newer versions. Worth promoting out of the open
-  questions below.
+Two consequences of the module not knowing its own version, both settled:
+
+- The §3 message that distinguishes "misspelled" from "not in this version" is
+  unbuildable as written — v0.6.0 has never heard of `Alarms`. What ships names
+  the offending key, the nearest match, the supported set, and the running
+  version from `local.module_version`, then points at the CHANGELOG.
+- Fail-on-unknown cannot help anyone still on an older pin. `required_extensions`
+  is the mechanism that can, because Terraform rejects unknown module arguments
+  outright. It asserts both that the version implements the extension and that
+  the config actually resolved.
+
+6. **Sidecar packaging (§7)** — not started, and the only remaining piece. Gated
+   on the registry, which now exists. Order within it: sidecar parse +
+   double-definition error, then the explicit-names precondition, then the
+   companion-template generator. Stack-sourced discovery is a later enhancement.
 
 ## Open questions
 
