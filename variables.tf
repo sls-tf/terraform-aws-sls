@@ -225,6 +225,31 @@ variable "stage_override" {
   default     = null
 }
 
+variable "required_extensions" {
+  description = <<-DESC
+    Extensions this configuration depends on, asserted at plan time. Names are
+    as they appear in `extensions_active` (e.g. `["Alarms", "Dashboard"]`).
+
+    This is the one guard that works against an OLDER module version. Fail-on-
+    unknown-key only protects consumers who already upgraded past the version
+    that added it — a module pinned before an extension existed cannot warn
+    about a key it has never heard of. Terraform, however, rejects unknown
+    module arguments outright, so passing `required_extensions` to a version
+    that predates this variable fails with "Unsupported argument" rather than
+    silently doing nothing.
+
+    Two things are asserted for each name: that this module version implements
+    the extension, and that it is actually active (its config resolved). The
+    second catches config that is present but not taking effect — the wrong
+    key, the wrong file, the wrong namespace.
+
+    Complements presence-based enablement rather than duplicating it: presence
+    enables, this asserts.
+  DESC
+  type        = list(string)
+  default     = []
+}
+
 variable "extension_unknown_key_behaviour" {
   description = <<-DESC
     What to do about a key under the sls.tf extension namespace

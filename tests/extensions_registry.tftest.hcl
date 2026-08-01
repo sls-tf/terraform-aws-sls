@@ -360,3 +360,73 @@ run "foreign_custom_keys_are_not_extensions" {
     error_message = "Foreign custom: keys must not register as extensions, got: ${join(", ", keys(output.extensions_active))}"
   }
 }
+
+# --- required_extensions (phase 4) -----------------------------------------
+
+run "required_extension_satisfied" {
+  command = plan
+
+  variables {
+    config_path         = "tests/fixtures/extensions-namespaced.yml"
+    required_extensions = ["Alarms", "Dashboard"]
+  }
+
+  assert {
+    condition     = length(local.validation_errors) == 0
+    error_message = "Configured extensions should satisfy required_extensions, got: ${join(", ", local.validation_errors)}"
+  }
+}
+
+run "required_extension_not_implemented_errors" {
+  command = plan
+
+  variables {
+    config_path         = "tests/fixtures/extensions-namespaced.yml"
+    required_extensions = ["Telemetry"]
+  }
+
+  # Standing in for "an extension added in a later version". On a module that
+  # predates required_extensions entirely, Terraform rejects the argument with
+  # "Unsupported argument" — which is the point: loud either way.
+  expect_failures = [
+    null_resource.config_validation,
+  ]
+
+  # The two failures have different fixes (upgrade vs fix the config), so the
+  # messages must be distinguishable.
+  assert {
+    condition     = length(local.extension_required_unimplemented_errors) == 1 && length(local.extension_required_inactive_errors) == 0
+    error_message = "An unimplemented extension should raise the unimplemented error only"
+  }
+
+  assert {
+    condition     = can(regex("sls.tf v${local.module_version} does not implement", local.extension_required_unimplemented_errors[0]))
+    error_message = "Message should name the running version, got: ${local.extension_required_unimplemented_errors[0]}"
+  }
+}
+
+run "required_extension_present_but_inactive_errors" {
+  command = plan
+
+  variables {
+    config_path         = "tests/fixtures/valid-minimal.yml"
+    required_extensions = ["Alarms"]
+  }
+
+  # The module implements Alarms, but nothing configured it — so it would
+  # create nothing. This is the motivating incident's shape, caught at plan.
+  expect_failures = [
+    null_resource.config_validation,
+  ]
+
+  assert {
+    condition     = length(local.extension_required_inactive_errors) == 1 && length(local.extension_required_unimplemented_errors) == 0
+    error_message = "A configured-but-absent extension should raise the inactive error only"
+  }
+
+  # The fix is a config change, so the message must say where the key belongs.
+  assert {
+    condition     = can(regex("custom.slsTf.alarms", local.extension_required_inactive_errors[0]))
+    error_message = "Message should name the expected config key, got: ${local.extension_required_inactive_errors[0]}"
+  }
+}

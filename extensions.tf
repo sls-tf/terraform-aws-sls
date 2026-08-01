@@ -347,6 +347,34 @@ check "extension_legacy_yaml_keys" {
 }
 
 locals {
+  # --------------------------------------------------------------------------
+  # required_extensions
+  # --------------------------------------------------------------------------
+  # Two distinct failures, worth distinguishing because the fixes differ: the
+  # module version cannot provide the extension (upgrade), versus it can but
+  # the config did not resolve (fix the config).
+  extension_required_unimplemented_errors = [
+    for name in var.required_extensions :
+    join(" ", [
+      "required_extensions names '${name}', which sls.tf v${local.module_version} does not implement.",
+      "Extensions in this version: ${join(", ", local.extension_names)}.",
+      "If '${name}' is a newer extension, upgrade the module; if it is a typo, correct it."
+    ])
+    if !contains(local.extension_names, name)
+  ]
+
+  extension_required_inactive_errors = [
+    for name in var.required_extensions :
+    join(" ", [
+      "required_extensions names '${name}', which this module version implements,",
+      "but no '${name}' config resolved — so it would create nothing.",
+      "Expected at ${local.extension_registry[name].sam_key} (SAM) or",
+      "${local.extension_registry[name].yaml_key} (serverless yaml).",
+      "Check the key spelling and that it is in the file this module is pointed at."
+    ])
+    if contains(local.extension_names, name) && !local._extension_present[name]
+  ]
+
   # Errors that respect var.extension_unknown_key_behaviour. In "warn" mode
   # they move to the check block below instead.
   _extension_strict_errors = concat(
@@ -362,8 +390,12 @@ locals {
   # Duplicate-spelling errors are NOT downgradable: unlike an unknown key,
   # there is no reading under which the config is right, and picking a winner
   # silently is the failure mode being removed.
+  # required_extensions failures are always errors: the caller asked for the
+  # assertion explicitly, so downgrading it would defeat the point.
   extension_validation_errors = concat(
     local.extension_duplicate_errors,
+    local.extension_required_unimplemented_errors,
+    local.extension_required_inactive_errors,
     var.extension_unknown_key_behaviour == "error" ? local._extension_strict_errors : [],
   )
 }
