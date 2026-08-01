@@ -219,3 +219,144 @@ run "duplicate_spellings_error" {
     null_resource.config_validation,
   ]
 }
+
+# --- unknown keys and misspelled namespace (phase 3) -----------------------
+
+run "unknown_key_under_namespace_errors" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/extensions-unknown-key.yml"
+  }
+
+  expect_failures = [
+    null_resource.config_validation,
+  ]
+}
+
+run "unknown_key_message_names_key_and_suggestion" {
+  command = plan
+
+  variables {
+    config_path                     = "tests/fixtures/extensions-unknown-key.yml"
+    extension_unknown_key_behaviour = "warn"
+  }
+
+  # warn mode reports through the check block rather than failing the plan.
+  expect_failures = [
+    check.extension_unknown_keys,
+  ]
+
+  # In warn mode the plan succeeds, so the message itself can be asserted.
+  # This is the diagnostic the motivating incident needed and did not get:
+  # it must name the offending key, the nearest match, and the running version.
+  assert {
+    condition     = length(local.extension_unknown_key_errors) == 1
+    error_message = "Expected exactly one unknown-key error, got ${length(local.extension_unknown_key_errors)}"
+  }
+
+  assert {
+    condition     = can(regex("Unknown sls.tf extension 'alarm' under custom.slsTf", local.extension_unknown_key_errors[0]))
+    error_message = "Message should name the offending key and namespace, got: ${local.extension_unknown_key_errors[0]}"
+  }
+
+  assert {
+    condition     = can(regex("Did you mean 'alarms'", local.extension_unknown_key_errors[0]))
+    error_message = "Message should suggest the nearest known key, got: ${local.extension_unknown_key_errors[0]}"
+  }
+
+  assert {
+    condition     = can(regex("supported by sls.tf v${local.module_version}", local.extension_unknown_key_errors[0]))
+    error_message = "Message should name the running module version, got: ${local.extension_unknown_key_errors[0]}"
+  }
+
+  # The typo'd key must not silently resolve to anything.
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.set) == 0
+    error_message = "A typo'd extension key must not create resources"
+  }
+}
+
+run "warn_mode_does_not_fail_the_plan" {
+  command = plan
+
+  variables {
+    config_path                     = "tests/fixtures/extensions-unknown-key.yml"
+    extension_unknown_key_behaviour = "warn"
+  }
+
+  # warn mode reports through the check block rather than failing the plan.
+  expect_failures = [
+    check.extension_unknown_keys,
+  ]
+
+  # The escape hatch for rolling a large estate forward: the problem is
+  # reported, but nothing blocks.
+  assert {
+    condition     = length(local.validation_errors) == 0
+    error_message = "warn mode must not put extension problems in validation_errors, got: ${join(", ", local.validation_errors)}"
+  }
+}
+
+run "misspelled_namespace_errors" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/extensions-bad-namespace.yml"
+  }
+
+  # custom.slstf.* is not "an unknown key under the namespace" — it is no
+  # namespace at all, so the unknown-key check alone would never fire.
+  expect_failures = [
+    null_resource.config_validation,
+  ]
+}
+
+run "misspelled_namespace_message" {
+  command = plan
+
+  variables {
+    config_path                     = "tests/fixtures/extensions-bad-namespace.yml"
+    extension_unknown_key_behaviour = "warn"
+  }
+
+  # warn mode reports through the check block rather than failing the plan.
+  expect_failures = [
+    check.extension_unknown_keys,
+  ]
+
+  assert {
+    condition     = length(local.extension_namespace_errors) == 1
+    error_message = "Expected one namespace error, got ${length(local.extension_namespace_errors)}"
+  }
+
+  assert {
+    condition     = can(regex("found 'slstf', expected 'slsTf'", local.extension_namespace_errors[0]))
+    error_message = "Message should name both spellings, got: ${local.extension_namespace_errors[0]}"
+  }
+}
+
+run "foreign_custom_keys_are_not_extensions" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/extensions-foreign-custom-keys.yml"
+  }
+
+  # webpack:, serverless-offline: and myOwnThing: under custom: are other
+  # tools' config. Strictness is scoped to custom.slsTf and must not touch them.
+  assert {
+    condition     = length(local.validation_errors) == 0
+    error_message = "Foreign custom: keys must not be rejected, got: ${join(", ", local.validation_errors)}"
+  }
+
+  assert {
+    condition     = contains(keys(output.extensions_active), "Dashboard")
+    error_message = "The real extension alongside foreign keys should still resolve"
+  }
+
+  assert {
+    condition     = length(output.extensions_active) == 1
+    error_message = "Foreign custom: keys must not register as extensions, got: ${join(", ", keys(output.extensions_active))}"
+  }
+}

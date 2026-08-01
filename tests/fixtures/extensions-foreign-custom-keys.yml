@@ -1,0 +1,27 @@
+# custom: carries arbitrary Serverless Framework plugin config. None of it is
+# an sls.tf extension and none of it may be rejected — strictness is scoped to
+# custom.slsTf, never custom:.
+service: foreign-custom
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+custom:
+  webpack:
+    includeModules: true
+  serverless-offline:
+    httpPort: 4000
+  myOwnThing:
+    whatever: true
+  slsTf:
+    dashboard:
+      name: foreign_ok
+      services:
+        - lambda
+
+functions:
+  ingest:
+    handler: handler.ingest

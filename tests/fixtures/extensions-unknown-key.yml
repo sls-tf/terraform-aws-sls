@@ -1,0 +1,23 @@
+# A typo'd extension key under the namespace. Before v0.11.0 this was
+# indistinguishable from no config at all: clean plan, zero alarms.
+service: unknown-key
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+functions:
+  ingest:
+    handler: handler.ingest
+
+custom:
+  slsTf:
+    alarm:                     # typo: the extension is "alarms"
+      groups:
+        lambda:
+          metrics:
+            - name: Errors
+              threshold: 5
+              comparisonOperator: GreaterThanThreshold

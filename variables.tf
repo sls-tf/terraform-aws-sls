@@ -225,6 +225,34 @@ variable "stage_override" {
   default     = null
 }
 
+variable "extension_unknown_key_behaviour" {
+  description = <<-DESC
+    What to do about a key under the sls.tf extension namespace
+    (`Metadata.SlsTf` / `custom.slsTf`) that this module version does not
+    recognise, and about a misspelled namespace (`Metadata.Slstf`).
+
+    `"error"` (default) fails the plan. Both cases are otherwise completely
+    silent — a typo'd or too-new extension key produces a clean plan and no
+    resources, which is the failure this module version exists to remove.
+
+    `"warn"` downgrades both to a plan-time notice (check
+    "extension_unknown_keys"), for rolling a large estate forward without a
+    flag day. Defining one extension at two spellings is always an error and is
+    not affected by this setting: there is no reading under which that config
+    is correct.
+
+    Only the sls.tf namespace is inspected, never its parent — `Metadata` and
+    `custom:` legitimately carry other tools' config.
+  DESC
+  type        = string
+  default     = "error"
+
+  validation {
+    condition     = contains(["error", "warn"], var.extension_unknown_key_behaviour)
+    error_message = "extension_unknown_key_behaviour must be \"error\" or \"warn\", got: \"${var.extension_unknown_key_behaviour}\"."
+  }
+}
+
 variable "extension_legacy_key_notice" {
   description = <<-DESC
     Emit a plan-time notice (check "extension_legacy_yaml_keys") when an

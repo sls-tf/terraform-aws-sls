@@ -213,6 +213,101 @@ locals {
     if contains(local._extension_namespaced_yaml_used, name)
   ]
 
+  # --------------------------------------------------------------------------
+  # Unknown keys under the namespace
+  # --------------------------------------------------------------------------
+  # Scoped STRICTLY to the sls.tf namespace and never to its parent. `Metadata`
+  # legitimately carries AWS::CloudFormation::Interface, cfn-lint config and CDK
+  # asset keys; `custom:` carries every Serverless Framework plugin's config.
+  # Rejecting unknown keys there would break configs that are perfectly correct.
+  #
+  # can(keys(...)) guards a namespace that is present but not a map (`SlsTf:
+  # "yes"`), which would otherwise abort the plan inside this diagnostic rather
+  # than reporting it.
+  _extension_key_to_name = {
+    for name, meta in local.extension_registry :
+    (var.config_format == "sam" ? element(split(".", meta.sam_key), 2) : element(split(".", meta.yaml_key), 2)) => name
+  }
+
+  _extension_namespace_path = var.config_format == "sam" ? "Metadata.SlsTf" : "custom.slsTf"
+
+  # Only worth saying when the setting would actually change something.
+  _extension_downgrade_hint = (
+    var.extension_unknown_key_behaviour == "error"
+    ? "Set extension_unknown_key_behaviour = \"warn\" to downgrade this to a plan-time notice."
+    : ""
+  )
+
+  _extension_namespace_keys = (
+    var.config_format == "sam"
+    ? (can(keys(local.sam_structure.Metadata.SlsTf)) ? keys(local.sam_structure.Metadata.SlsTf) : [])
+    : (can(keys(local.parsed_config.custom.slsTf)) ? keys(local.parsed_config.custom.slsTf) : [])
+  )
+
+  _extension_unknown_keys = sort([
+    for k in local._extension_namespace_keys :
+    k if !contains(keys(local._extension_key_to_name), k)
+  ])
+
+  # Nearest-match suggestion. HCL has no edit distance, so this catches the
+  # cases that actually occur — wrong case (`alarm`/`ALARMS`) and a prefix
+  # relationship (`Alarm` for `Alarms`, `CustomDomainName` for `CustomDomain`).
+  _extension_key_suggestion = {
+    for k in local._extension_unknown_keys :
+    k => join(", ", [
+      for known in sort(keys(local._extension_key_to_name)) :
+      known
+      if lower(known) == lower(k) || startswith(lower(known), lower(k)) || startswith(lower(k), lower(known))
+    ])
+  }
+
+  extension_unknown_key_errors = [
+    for k in local._extension_unknown_keys :
+    join(" ", compact([
+      "Unknown sls.tf extension '${k}' under ${local._extension_namespace_path}.",
+      local._extension_key_suggestion[k] != "" ? "Did you mean '${local._extension_key_suggestion[k]}'?" : "",
+      "Extensions supported by sls.tf v${local.module_version}:",
+      "${join(", ", local.extension_names)}.",
+      # A module cannot know about extensions added after it was cut, so it can
+      # never say "introduced in v0.12.0" for a key it has never heard of. The
+      # honest version of that diagnostic is to name the running version and
+      # let the reader check whether the key is newer.
+      "If '${k}' is a newer extension, this module is pinned to v${local.module_version} and does not implement it —",
+      "check the CHANGELOG for the version that introduced it.",
+      local._extension_downgrade_hint
+    ]))
+  ]
+
+  # --------------------------------------------------------------------------
+  # Misspelled namespace
+  # --------------------------------------------------------------------------
+  # Without this, `Metadata.Slstf.Alarms` is not "an unknown key under the
+  # namespace" — it is no namespace at all, so nothing fires and the silence is
+  # exactly what the unknown-key check was added to remove.
+  _extension_namespace_parent_keys = (
+    var.config_format == "sam"
+    ? (can(keys(local.sam_structure.Metadata)) ? keys(local.sam_structure.Metadata) : [])
+    : (can(keys(local.parsed_config.custom)) ? keys(local.parsed_config.custom) : [])
+  )
+
+  _extension_namespace_expected = var.config_format == "sam" ? "SlsTf" : "slsTf"
+
+  _extension_namespace_near_misses = sort([
+    for k in local._extension_namespace_parent_keys :
+    k
+    if lower(k) == "slstf" && k != local._extension_namespace_expected
+  ])
+
+  extension_namespace_errors = [
+    for k in local._extension_namespace_near_misses :
+    join(" ", compact([
+      "sls.tf extension namespace is misspelled: found '${k}', expected",
+      "'${local._extension_namespace_expected}' (as ${local._extension_namespace_path}).",
+      "Everything under '${k}' is being ignored entirely.",
+      local._extension_downgrade_hint
+    ]))
+  ]
+
   extensions_active = {
     for name, meta in local.extension_registry :
     name => {
@@ -252,9 +347,39 @@ check "extension_legacy_yaml_keys" {
 }
 
 locals {
+  # Errors that respect var.extension_unknown_key_behaviour. In "warn" mode
+  # they move to the check block below instead.
+  _extension_strict_errors = concat(
+    local.extension_unknown_key_errors,
+    local.extension_namespace_errors,
+  )
+
   # Aggregate of every extension-level error, appended to
   # local.validation_errors (locals.tf) so extensions fail through the same
   # null_resource.config_validation gate as everything else rather than
   # inventing a second error channel.
-  extension_validation_errors = local.extension_duplicate_errors
+  #
+  # Duplicate-spelling errors are NOT downgradable: unlike an unknown key,
+  # there is no reading under which the config is right, and picking a winner
+  # silently is the failure mode being removed.
+  extension_validation_errors = concat(
+    local.extension_duplicate_errors,
+    var.extension_unknown_key_behaviour == "error" ? local._extension_strict_errors : [],
+  )
+}
+
+# The escape hatch. Every other strict behaviour in this module sits behind a
+# variable with a permissive default (sam_strict_intrinsics,
+# naming_convention_warning, s3_force_destroy), and a large estate needs a way
+# to roll forward onto v0.11.0 without a flag day. Unlike those, this one
+# defaults to STRICT: a config that was silently doing nothing should start
+# failing loudly, which is the entire point of the change.
+check "extension_unknown_keys" {
+  assert {
+    condition = !(var.extension_unknown_key_behaviour == "warn" && length(local._extension_strict_errors) > 0)
+    error_message = join("\n", concat(
+      ["sls.tf extension problems (downgraded to a notice by extension_unknown_key_behaviour = \"warn\"):"],
+      [for e in local._extension_strict_errors : "  - ${e}"]
+    ))
+  }
 }

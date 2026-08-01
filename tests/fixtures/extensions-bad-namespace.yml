@@ -1,0 +1,24 @@
+# The NAMESPACE is misspelled, not a key within it. Nothing under it is read.
+# Without a dedicated check this is silent even with unknown-key detection on,
+# because there is no recognised namespace to inspect.
+service: bad-namespace
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+functions:
+  ingest:
+    handler: handler.ingest
+
+custom:
+  slstf:                       # should be slsTf
+    alarms:
+      groups:
+        lambda:
+          metrics:
+            - name: Errors
+              threshold: 5
+              comparisonOperator: GreaterThanThreshold
