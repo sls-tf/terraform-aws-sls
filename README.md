@@ -489,6 +489,59 @@ raising a validation error when they are explicitly excluded by `resource_types`
 `AWS::Serverless::LayerVersion` and `AWS::Serverless::Application` are not yet
 translated. Resources of these types are excluded from the Terraform plan silently.
 
+## Extensions
+
+Some things real deployments need are expressible in neither SAM nor Serverless
+Framework. sls.tf accepts a small set of **extensions** — config that sls.tf
+understands and no other tool does.
+
+An extension is *not* the same thing as sls.tf supporting a CloudFormation
+resource type, and the two are easy to confuse because they can produce the same
+AWS resources:
+
+> **Need a specific alarm?** Declare `AWS::CloudWatch::Alarm` in `resources:` /
+> `Resources:`. That is standard CloudFormation, portable to any tool, and
+> sls.tf translates it like any other resource type.
+>
+> **Need "one alarm per lambda, whatever the set turns out to be"?** That is not
+> expressible in CloudFormation at all. Use the `Alarms` extension, which is
+> sls.tf-only.
+
+The trade-off is portability versus dynamism, and it applies the same way to
+dashboards: a hand-written `AWS::CloudWatch::Dashboard` is portable; the
+`Dashboard` extension enumerates whatever resources the config produces.
+
+| Extension | SAM key | Serverless-yaml key | Since |
+|---|---|---|---|
+| Alarm sets | `Metadata.SlsTf.Alarms` | `alarms:` | v0.7.0 |
+| Dashboard | `Metadata.SlsTf.Dashboard` | `dashboard:` | v0.8.0 |
+| Custom domain | `Metadata.SlsTf.CustomDomain` | `provider.customDomain` | v0.10.0 |
+
+Extensions live where the native tooling is *specified* to ignore them —
+`Metadata` for SAM — so `sam validate`, `sam build` and `sam local invoke` keep
+working on the same file.
+
+> **`sam deploy` on a template with extensions is a partial deploy.** The
+> extensions are inert to CloudFormation, so it will succeed and create none of
+> them. Deploy with Terraform.
+
+An extension is active if and only if its config is present — there is no
+per-extension enable flag. The `extensions_active` output reports what resolved,
+at plan time:
+
+```hcl
+output "monitoring" {
+  value = module.service.extensions_active
+  # => { Alarms = { since = "0.7.0", stability = "stable",
+  #                 parse = "structural", source = "Metadata.SlsTf.Alarms" } }
+}
+```
+
+Use it to assert in tests that a config took effect, rather than deploying and
+looking. See [docs/EXTENSIONS.md](docs/EXTENSIONS.md) for the full design,
+including which parse each extension is read from and why that matters for
+`!Ref` in SAM templates.
+
 ## Input Variables
 
 | Name | Type | Default | Required | Description |
@@ -505,6 +558,8 @@ translated. Resources of these types are excluded from the Terraform plan silent
 ### Configuration Outputs
 | Name | Type | Description |
 |------|------|-------------|
+| `extensions_active` | map(object) | sls.tf extensions resolved from the config. Present if and only if the extension's config is present — see [Extensions](#extensions). |
+| `module_version` | string | The sls.tf version this module was resolved as. |
 | `parsed_config` | object | Complete parsed Serverless Framework configuration |
 | `service_name` | string | Service name extracted from configuration |
 | `provider_config` | object | Provider configuration with defaults applied |

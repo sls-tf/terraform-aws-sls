@@ -1,0 +1,42 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Extension registry coverage — SAM Metadata.SlsTf branch
+
+# ServiceName is a FOREIGN Metadata key: not an sls.tf extension, and must
+# never be reported as one. Metadata legitimately carries other tools' config
+# (AWS::CloudFormation::Interface, cfn-lint, CDK assets), so extension
+# handling is scoped to Metadata.SlsTf.* and never Metadata.*.
+Metadata:
+  ServiceName: extensions-svc
+
+  SlsTf:
+    Alarms:
+      defaults:
+        actions:
+          - arn:aws:sns:us-east-1:123456789012:ops-alerts
+      groups:
+        lambda:
+          resource_names: []
+          metrics:
+            - name: Errors
+              period: 300
+              statistic: Sum
+              threshold: 1
+              comparisonOperator: GreaterThanOrEqualToThreshold
+
+    Dashboard:
+      name: extensions_monitoring
+      services:
+        - lambda
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 30
+
+Resources:
+  Ingest:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: extensions-dev-ingest
+      Handler: handler.ingest

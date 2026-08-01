@@ -34,13 +34,11 @@
 # the resource set as functions/tables are added or removed.
 
 locals {
-  # JSON-laundered (same idiom as parsed_config) so the two branches don't need
-  # structurally identical object types.
-  alarm_sets_config = jsondecode(
-    var.config_format == "sam"
-    ? jsonencode(local.sam_structure != null ? try(local.sam_structure.Metadata.SlsTf.Alarms, {}) : {})
-    : jsonencode(try(local.parsed_config.alarms, {}))
-  )
+  # Resolved through the extension registry (extensions.tf) rather than reaching
+  # into the parse directly — one code path for every extension. Still
+  # JSON-laundered (same idiom as parsed_config) so the SAM and yaml branches
+  # don't need structurally identical object types.
+  alarm_sets_config = jsondecode(local.extension_config_json.Alarms)
 
   _alarm_class_defaults = {
     lambda      = { namespace = "AWS/Lambda", dimension = "FunctionName" }

@@ -17,11 +17,8 @@
 # names already declared for alarms.
 
 locals {
-  dashboard_config = jsondecode(
-    var.config_format == "sam"
-    ? jsonencode(local.sam_structure != null ? try(local.sam_structure.Metadata.SlsTf.Dashboard, null) : null)
-    : jsonencode(try(local.parsed_config.dashboard, null))
-  )
+  # Resolved through the extension registry — see extensions.tf.
+  dashboard_config = jsondecode(local.extension_config_json.Dashboard)
 
   # Default metrics charted per class.
   _dashboard_class_metrics = {

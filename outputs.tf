@@ -368,3 +368,13 @@ output "dynamodb_tables" {
     }
   }
 }
+
+output "module_version" {
+  description = "The sls.tf version this module was resolved as. Hand-maintained in version.tf and asserted against CHANGELOG.md by `make check-version` — a module cannot read its own source ref at plan time."
+  value       = local.module_version
+}
+
+output "extensions_active" {
+  description = "sls.tf extensions resolved from the config, keyed by extension name. An extension is present here if and only if its config is present — there is no separate enable flag — so this is the plan-time answer to \"did my extension config take effect?\" rather than a deploy-and-check. See docs/EXTENSIONS.md."
+  value       = local.extensions_active
+}

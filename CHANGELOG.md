@@ -3,6 +3,47 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.11.0
+
+Groundwork for extensions as a first-class concept — see
+[docs/EXTENSIONS.md](docs/EXTENSIONS.md). No behaviour change: every extension
+resolves to the same value it did in v0.10.0, through one code path instead of
+three scattered lookups.
+
+### Added
+
+- **Extension registry** (`extensions.tf`) — the three extensions (`Alarms`,
+  `Dashboard`, `CustomDomain`) are declared in one place with the parse each is
+  read from, the version that introduced it, and its stability. Implementations
+  resolve through `local.extension_config_json` rather than reaching into
+  `local.sam_structure` / `local.sam_raw` directly.
+- **`extensions_active` output** — extensions resolved from the config, keyed by
+  name. An extension is active if and only if its config is present, so this is
+  a plan-time answer to "did my extension config take effect?" instead of a
+  deploy-and-check. Assertable in `terraform test`.
+- **`module_version` output** and `local.module_version` (`version.tf`) — a
+  module cannot read its own source ref at plan time, so the version is
+  hand-maintained and asserted against the newest CHANGELOG heading by
+  `make check-version`.
+
+### Fixed
+
+- **SAM alarm sets aborted the plan** whenever `Metadata.SlsTf.Alarms` was
+  non-empty. The lookup encoded to JSON *outside* the conditional, leaving
+  Terraform to unify the two branch types — and an object with attributes does
+  not unify with `{}`:
+
+  ```
+  Error: Inconsistent conditional result types
+    The 'true' value includes object attribute "defaults", which is absent in
+    the 'false' value.
+  ```
+
+  Broken since alarm sets shipped in v0.7.0. No fixture used the SAM key —
+  every alarm-set test went through the serverless-yaml path, whose empty value
+  is `null` and therefore unifies — so it survived to v0.10.0 unnoticed.
+  `tests/fixtures/sam-extensions.yaml` now covers the SAM branch.
+
 ## v0.10.0
 
 Full-estate brownfield parity on SAM templates — verified by importing 240

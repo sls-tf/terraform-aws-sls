@@ -1,4 +1,4 @@
-.PHONY: help localstack-start localstack-stop localstack-restart localstack-status localstack-logs localstack-health localstack-clean test-local test-aws test-all
+.PHONY: help localstack-start localstack-stop localstack-restart localstack-status localstack-logs localstack-health localstack-clean test-local test-aws test-all check-version
 
 # Default target
 .DEFAULT_GOAL := help
@@ -70,3 +70,19 @@ test-aws: ## Run Terraform tests against real AWS
 	@terraform test -var="use_localstack=false"
 
 test-all: test-local ## Default to LocalStack tests
+
+check-version: ## Assert local.module_version matches the newest CHANGELOG heading
+	@tf_ver=$$(sed -n 's/^  module_version = "\(.*\)"$$/\1/p' version.tf); \
+	cl_ver=$$(sed -n 's/^## v\([0-9][0-9.]*\)$$/\1/p' CHANGELOG.md | head -1); \
+	if [ -z "$$tf_ver" ]; then echo "ERROR: could not read module_version from version.tf"; exit 1; fi; \
+	if [ -z "$$cl_ver" ]; then echo "ERROR: could not read a version heading from CHANGELOG.md"; exit 1; fi; \
+	if [ "$$tf_ver" != "$$cl_ver" ]; then \
+		echo "ERROR: version.tf says $$tf_ver, CHANGELOG.md says $$cl_ver."; \
+		echo "  local.module_version is what every extension diagnostic reports."; \
+		exit 1; \
+	fi; \
+	echo "version.tf and CHANGELOG.md agree: $$tf_ver"; \
+	tag=$$(git describe --tags --abbrev=0 2>/dev/null); \
+	if [ "$$tag" = "v$$tf_ver" ]; then \
+		echo "NOTE: v$$tf_ver is already tagged — bump version.tf and CHANGELOG.md before the next release."; \
+	fi
