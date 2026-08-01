@@ -12,6 +12,8 @@
     "generate:validation:v3": "node tools/schema-generator/bin/schema-generator.js --schema-version=3",
     "generate:validation:v4": "node tools/schema-generator/bin/schema-generator.js --schema-version=4",
     "test:schema-generator": "cd tools/schema-generator && npm test",
+    "extension-stack": "node tools/extension-stack/bin/extension-stack.js",
+    "test:extension-stack": "node --test tools/extension-stack/tests/*.test.js",
     "website:dev": "cd website && npm run dev",
     "website:build": "cd website && npm run build",
     "website:preview": "cd website && npm run preview",
