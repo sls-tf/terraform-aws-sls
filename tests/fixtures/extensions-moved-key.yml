@@ -1,0 +1,21 @@
+# Still using the pre-v0.11.0 top-level key. It is not read, so silently
+# ignoring it would look like monitoring is configured while deploying none.
+service: moved-key
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+
+functions:
+  ingest:
+    handler: handler.ingest
+
+alarms:
+  groups:
+    lambda:
+      metrics:
+        - name: Errors
+          threshold: 5
+          comparisonOperator: GreaterThanThreshold

@@ -278,21 +278,6 @@ variable "extension_unknown_key_behaviour" {
   }
 }
 
-variable "extension_legacy_key_notice" {
-  description = <<-DESC
-    Emit a plan-time notice (check "extension_legacy_yaml_keys") when an
-    extension is configured at its pre-v0.11.0 top-level serverless-yaml key
-    (`alarms:`, `dashboard:`) rather than under `custom.slsTf`.
-
-    Those keys are supported indefinitely — event-service parity is why alarm
-    sets exist — so this is a signpost, not a deprecation clock. Set false to
-    silence it if you have made a deliberate decision to stay on the top-level
-    spelling.
-  DESC
-  type        = bool
-  default     = true
-}
-
 variable "naming_convention_warning" {
   description = <<-DESC
     Emit a plan-time warning (check "lambda_naming_convention") when a

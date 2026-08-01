@@ -1,0 +1,19 @@
+# provider.customDomain moved to custom.slsTf.customDomain in v0.11.0.
+service: moved-domain
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+  customDomain:
+    domainName: api.example.com
+    certificateArn: arn:aws:acm:us-east-1:123456789012:certificate/abc123
+
+functions:
+  hello:
+    handler: index.handler
+    events:
+      - http:
+          path: /hello
+          method: get

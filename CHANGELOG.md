@@ -35,9 +35,7 @@ nothing will now fail loudly, which is the point of the release.
   `make check-version`.
 - **`custom.slsTf.*` serverless-yaml namespace** — mirrors `Metadata.SlsTf.*` by
   mechanism: `custom:` is the section Serverless Framework leaves unvalidated,
-  as `Metadata` is the section CloudFormation ignores. The pre-v0.11.0
-  top-level `alarms:` / `dashboard:` keep working indefinitely, with a notice
-  behind `extension_legacy_key_notice`.
+  as `Metadata` is the section CloudFormation ignores.
 - **Unknown extension keys fail the plan** — a key under the sls.tf namespace
   this version doesn't recognise is now an error naming the key, the nearest
   match, the supported set and the running version. A misspelled *namespace*
@@ -66,9 +64,14 @@ nothing will now fail loudly, which is the point of the release.
 
 ### Changed
 
-- **BREAKING: `provider.customDomain` moves to `custom.slsTf.customDomain`.** It
-  was the one yaml key inside a section Serverless Framework schema-validates.
-  Moved rather than aliased — the sole consumer is not yet live.
+- **BREAKING: the serverless-yaml extension keys move under `custom.slsTf`,
+  with no aliases.** `alarms:` -> `custom.slsTf.alarms`, `dashboard:` ->
+  `custom.slsTf.dashboard`, `provider.customDomain` ->
+  `custom.slsTf.customDomain`. Nothing had adopted the old spellings in a
+  deployed configuration, so keeping them would have been compatibility with
+  nobody at the cost of a permanently ambiguous namespace. A config still using
+  one is a plan-time error naming the replacement — reading it, or ignoring it
+  silently, would reproduce the failure this release removes.
 - **BREAKING: `enable_custom_domain` removed.** It defaulted to `false` and was
   ANDed with the config, so a complete `customDomain` block with the flag unset
   created nothing and planned clean. Presence of the config now enables the

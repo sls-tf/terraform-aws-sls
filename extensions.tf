@@ -45,7 +45,7 @@ locals {
     Alarms = {
       sam_key        = "Metadata.SlsTf.Alarms"
       yaml_key       = "custom.slsTf.alarms"
-      legacy_yaml    = "alarms"
+      moved_from     = "alarms"
       parse          = "structural"
       since_version  = "0.7.0"
       stability      = "stable"
@@ -55,7 +55,7 @@ locals {
     Dashboard = {
       sam_key        = "Metadata.SlsTf.Dashboard"
       yaml_key       = "custom.slsTf.dashboard"
-      legacy_yaml    = "dashboard"
+      moved_from     = "dashboard"
       parse          = "structural"
       since_version  = "0.8.0"
       stability      = "stable"
@@ -69,7 +69,7 @@ locals {
       # Framework schema-validates, and the sole consumer was not yet live.
       sam_key        = "Metadata.SlsTf.CustomDomain"
       yaml_key       = "custom.slsTf.customDomain"
-      legacy_yaml    = ""
+      moved_from     = "provider.customDomain"
       parse          = "resolved"
       since_version  = "0.10.0"
       stability      = "stable"
@@ -122,10 +122,10 @@ locals {
   # position instead, and SF flags unknown root keys (a warning by default, a
   # hard failure under configValidationMode: error).
   #
-  # The pre-namespace top-level keys stay accepted PERMANENTLY, not as a
-  # deprecation with a removal date — event-service parity is why alarm sets
-  # exist. Namespaced wins where both appear, but that combination is also a
-  # validation error, so the precedence never silently decides anything.
+  # There are no aliases for the pre-v0.11.0 top-level keys. Nothing had
+  # adopted them in a deployed configuration, so carrying two spellings forever
+  # would have been compatibility with nobody. A config still using one gets a
+  # plan-time error naming the replacement — see extension_moved_key_errors.
   # --------------------------------------------------------------------------
   # Sidecar packaging
   # --------------------------------------------------------------------------
@@ -174,7 +174,7 @@ locals {
     : (
       var.config_format == "sam"
       ? (local.sam_structure != null ? jsonencode(try(local.sam_structure.Metadata.SlsTf.Alarms, {})) : "{}")
-      : jsonencode(try(local.parsed_config.custom.slsTf.alarms, local.parsed_config.alarms, {}))
+      : jsonencode(try(local.parsed_config.custom.slsTf.alarms, {}))
     )
   )
 
@@ -184,7 +184,7 @@ locals {
     : (
       var.config_format == "sam"
       ? (local.sam_structure != null ? jsonencode(try(local.sam_structure.Metadata.SlsTf.Dashboard, null)) : "null")
-      : jsonencode(try(local.parsed_config.custom.slsTf.dashboard, local.parsed_config.dashboard, null))
+      : jsonencode(try(local.parsed_config.custom.slsTf.dashboard, null))
     )
   )
 
@@ -241,13 +241,40 @@ locals {
   # --------------------------------------------------------------------------
   # Legacy top-level yaml keys
   # --------------------------------------------------------------------------
-  # Which extensions are configured at their pre-namespace top-level key. Used
-  # for the deprecation notice and for the both-defined error below.
-  _extension_legacy_yaml_used = var.config_format == "sam" ? [] : sort([
+  # Extensions still configured at the key they were MOVED FROM in v0.11.0.
+  # Silently ignoring these would be the exact failure this release removes: a
+  # config that reads as if monitoring is configured, deploying none of it.
+  _extension_moved_keys_used = var.config_format == "sam" ? [] : sort([
     for name, meta in local.extension_registry :
     name
-    if meta.legacy_yaml != "" && try(local.parsed_config[meta.legacy_yaml], null) != null
+    if !strcontains(meta.moved_from, ".") && try(local.parsed_config[meta.moved_from], null) != null
   ])
+
+  # provider.customDomain is nested rather than top-level, so it needs its own
+  # lookup, but it is the same class of mistake.
+  _extension_moved_provider_domain = (
+    var.config_format != "sam" && try(local.parsed_config.provider.customDomain, null) != null
+  )
+
+  extension_moved_key_errors = concat(
+    [
+      for name in local._extension_moved_keys_used :
+      join(" ", [
+        "Extension '${name}' is configured at '${local.extension_registry[name].moved_from}:',",
+        "which moved to '${local.extension_registry[name].yaml_key}' in v0.11.0.",
+        "The old key is not read, so leaving it here would deploy none of this",
+        "config while looking like it does. Move it under custom.slsTf."
+      ])
+    ],
+    local._extension_moved_provider_domain ? [
+      join(" ", [
+        "'provider.customDomain' moved to 'custom.slsTf.customDomain' in v0.11.0.",
+        "It sat inside a section Serverless Framework schema-validates; the",
+        "extension namespace is custom:, which SF leaves alone. The old key is",
+        "not read, so the domain would not be created."
+      ])
+    ] : []
+  )
 
   _extension_namespaced_yaml_used = var.config_format == "sam" ? [] : sort([
     for name, meta in local.extension_registry :
@@ -264,24 +291,13 @@ locals {
       local._extension_key_to_name[k]
       if contains(keys(local._extension_key_to_name), k)
     ]
-    : concat(local._extension_legacy_yaml_used, local._extension_namespaced_yaml_used)
+    : local._extension_namespaced_yaml_used
   ))
 
   # Defining an extension in two places is an error rather than a silent
   # precedence win — silent precedence is the failure mode this whole design
   # exists to remove. Two shapes of it:
   extension_duplicate_errors = concat(
-    [
-      for name in local._extension_legacy_yaml_used :
-      join(" ", [
-        "Extension '${name}' is defined twice: at the legacy top-level key",
-        "'${local.extension_registry[name].legacy_yaml}:' and at",
-        "'${local.extension_registry[name].yaml_key}'.",
-        "Remove one. The namespaced key is preferred; the top-level key stays",
-        "supported indefinitely, but only one of them may be present."
-      ])
-      if contains(local._extension_namespaced_yaml_used, name)
-    ],
     [
       for name in local._extension_sidecar_used :
       join(" ", [
@@ -442,32 +458,10 @@ locals {
       source = (
         contains(local._extension_sidecar_used, name)
         ? "sidecar:${var.extension_sidecar_path}"
-        : var.config_format == "sam" ? meta.sam_key : (
-          contains(local._extension_legacy_yaml_used, name) ? meta.legacy_yaml : meta.yaml_key
-        )
+        : var.config_format == "sam" ? meta.sam_key : meta.yaml_key
       )
     }
     if local._extension_present[name]
-  }
-}
-
-# Plan-time notice, not an error: the pre-namespace top-level keys are
-# supported indefinitely, so a consumer who never moves is not broken — they
-# are just told where the key now lives. Mirrors the naming-lint precedent
-# (naming-lint.tf) as the module's only other warn-don't-fail check.
-check "extension_legacy_yaml_keys" {
-  assert {
-    condition = !(var.extension_legacy_key_notice && length(local._extension_legacy_yaml_used) > 0)
-    error_message = join(" ", [
-      "These extensions are configured at their pre-v0.11.0 top-level keys:",
-      join(", ", [
-        for name in local._extension_legacy_yaml_used :
-        "${local.extension_registry[name].legacy_yaml}: (now ${local.extension_registry[name].yaml_key})"
-      ]),
-      "— these keys still work and will keep working, but Serverless Framework",
-      "flags unrecognised root keys, so prefer the namespaced form under",
-      "custom.slsTf. See docs/EXTENSIONS.md."
-    ])
   }
 }
 
@@ -519,6 +513,7 @@ locals {
   # assertion explicitly, so downgrading it would defeat the point.
   extension_validation_errors = concat(
     local.extension_sidecar_errors,
+    local.extension_moved_key_errors,
     local.extension_duplicate_errors,
     local.extension_required_unimplemented_errors,
     local.extension_required_inactive_errors,

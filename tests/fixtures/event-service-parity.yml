@@ -40,34 +40,6 @@ functions:
     dlq:
       enabled: false
 
-dashboard:
-  name: event_monitoring
-  services: ["lambda", "dynamodb"]
-
-alarms:
-  defaults:
-    actions:
-      - Ref: MonitoringTopic
-  groups:
-    lambda:
-      namespace: AWS/Lambda
-      dimension_key: FunctionName
-      resource_names: []
-      metrics: ["Invocations", "Errors"]
-      period: 60
-      statistic: Sum
-      threshold: 1
-      comparison_operator: GreaterThanOrEqualToThreshold
-    metric_anomaly:
-      namespace: Texecom/Events
-      dimension_key: ServiceName
-      resource_names:
-        - events
-      anomaly_detection: true
-      metrics: ["ATPEventRecordCount"]
-      period: 300
-      statistic: Average
-
 resources:
   Resources:
     AtpHoldoffStore:
@@ -127,3 +99,32 @@ resources:
           Ref: MonitoringTopic
         Protocol: https
         EndpointSecretName: pagerduty_integration
+
+custom:
+  slsTf:
+    dashboard:
+      name: event_monitoring
+      services: ["lambda", "dynamodb"]
+    alarms:
+      defaults:
+        actions:
+          - Ref: MonitoringTopic
+      groups:
+        lambda:
+          namespace: AWS/Lambda
+          dimension_key: FunctionName
+          resource_names: []
+          metrics: ["Invocations", "Errors"]
+          period: 60
+          statistic: Sum
+          threshold: 1
+          comparison_operator: GreaterThanOrEqualToThreshold
+        metric_anomaly:
+          namespace: Texecom/Events
+          dimension_key: ServiceName
+          resource_names:
+            - events
+          anomaly_detection: true
+          metrics: ["ATPEventRecordCount"]
+          period: 300
+          statistic: Average

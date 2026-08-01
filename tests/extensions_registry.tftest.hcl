@@ -22,8 +22,7 @@ run "yaml_alarms_reported_active" {
   command = plan
 
   variables {
-    config_path                 = "tests/fixtures/alarm-sets.yml"
-    extension_legacy_key_notice = false
+    config_path = "tests/fixtures/alarm-sets.yml"
   }
 
   assert {
@@ -40,7 +39,7 @@ run "yaml_alarms_reported_active" {
   }
 
   assert {
-    condition     = output.extensions_active["Alarms"].source == "alarms"
+    condition     = output.extensions_active["Alarms"].source == "custom.slsTf.alarms"
     error_message = "Alarms in yaml format should report the yaml key as its source, got: ${output.extensions_active["Alarms"].source}"
   }
 
@@ -56,8 +55,7 @@ run "yaml_dashboard_reported_active" {
   command = plan
 
   variables {
-    config_path                 = "tests/fixtures/event-service-parity.yml"
-    extension_legacy_key_notice = false
+    config_path = "tests/fixtures/event-service-parity.yml"
   }
 
   assert {
@@ -184,40 +182,58 @@ run "namespaced_yaml_keys_resolve" {
   }
 }
 
-run "legacy_top_level_keys_still_work" {
+run "moved_top_level_key_errors" {
   command = plan
 
   variables {
-    config_path                 = "tests/fixtures/alarm-sets.yml"
-    extension_legacy_key_notice = false
+    config_path = "tests/fixtures/extensions-moved-key.yml"
   }
 
-  # The pre-namespace spelling is supported indefinitely — event-service parity
-  # is why alarm sets exist. It emits a check-block notice, not an error.
-  assert {
-    condition     = length(local.validation_errors) == 0
-    error_message = "Legacy top-level alarms: must not be an error, got: ${join(", ", local.validation_errors)}"
-  }
-
-  assert {
-    condition     = length(aws_cloudwatch_metric_alarm.set) == 6
-    error_message = "Legacy top-level alarms: should still expand to 6 alarms, got ${length(aws_cloudwatch_metric_alarm.set)}"
-  }
-}
-
-run "duplicate_spellings_error" {
-  command = plan
-
-  variables {
-    config_path                 = "tests/fixtures/extensions-duplicate-key.yml"
-    extension_legacy_key_notice = false
-  }
-
-  # Defining an extension at both spellings must fail rather than silently
-  # picking one — silent precedence is the failure mode the registry removes.
+  # The pre-v0.11.0 top-level `alarms:` is not an accepted alias — nothing had
+  # adopted it in a deployed config, so it is an error naming the replacement
+  # rather than a spelling carried forever.
   expect_failures = [
     null_resource.config_validation,
   ]
+
+  assert {
+    condition     = length(local.extension_moved_key_errors) == 1
+    error_message = "Expected one moved-key error, got: ${join(" | ", local.extension_moved_key_errors)}"
+  }
+
+  assert {
+    condition     = can(regex("moved to 'custom.slsTf.alarms' in v0.11.0", local.extension_moved_key_errors[0]))
+    error_message = "Message should name the replacement key, got: ${local.extension_moved_key_errors[0]}"
+  }
+
+  # Asserted on the resolved config rather than the resource: after an
+  # expected plan failure the resources are not in state to reference.
+  assert {
+    condition     = length(local.alarm_set_alarms) == 0
+    error_message = "The old key must not be read into the alarm set"
+  }
+}
+
+run "moved_provider_custom_domain_errors" {
+  command = plan
+
+  variables {
+    config_path = "tests/fixtures/extensions-moved-provider-domain.yml"
+  }
+
+  expect_failures = [
+    null_resource.config_validation,
+  ]
+
+  assert {
+    condition     = can(regex("'provider.customDomain' moved to 'custom.slsTf.customDomain'", local.extension_moved_key_errors[0]))
+    error_message = "Message should name both spellings, got: ${join(" | ", local.extension_moved_key_errors)}"
+  }
+
+  assert {
+    condition     = !local._extension_present.CustomDomain
+    error_message = "The old provider key must not resolve as a CustomDomain extension"
+  }
 }
 
 # --- unknown keys and misspelled namespace (phase 3) -----------------------

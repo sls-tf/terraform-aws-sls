@@ -12,40 +12,6 @@ functions:
   process:
     handler: handler.process
 
-alarms:
-  defaults:
-    actions:
-      - Ref: OpsTopic
-  groups:
-    lambda:
-      resource_names: []
-      metrics:
-        - name: Errors
-          period: 300
-          statistic: Sum
-          threshold: 5
-          comparisonOperator: GreaterThanOrEqualToThreshold
-          evaluationPeriods: 2
-          treatMissingData: notBreaching
-        - name: Throttles
-          threshold: 1
-          comparisonOperator: GreaterThanThreshold
-    dynamodb:
-      metrics:
-        - name: ThrottledRequests
-          threshold: 10
-          comparisonOperator: GreaterThanThreshold
-    api_gateway:
-      resource_names:
-        - my-shared-api
-      actions:
-        - arn:aws:sns:us-east-1:123456789012:apigw-alerts
-      metrics:
-        - name: 5XXError
-          statistic: Average
-          threshold: 0.05
-          comparisonOperator: GreaterThanThreshold
-
 resources:
   Resources:
     OpsTopic:
@@ -64,3 +30,39 @@ resources:
         AttributeDefinitions:
           - AttributeName: id
             AttributeType: S
+
+custom:
+  slsTf:
+    alarms:
+      defaults:
+        actions:
+          - Ref: OpsTopic
+      groups:
+        lambda:
+          resource_names: []
+          metrics:
+            - name: Errors
+              period: 300
+              statistic: Sum
+              threshold: 5
+              comparisonOperator: GreaterThanOrEqualToThreshold
+              evaluationPeriods: 2
+              treatMissingData: notBreaching
+            - name: Throttles
+              threshold: 1
+              comparisonOperator: GreaterThanThreshold
+        dynamodb:
+          metrics:
+            - name: ThrottledRequests
+              threshold: 10
+              comparisonOperator: GreaterThanThreshold
+        api_gateway:
+          resource_names:
+            - my-shared-api
+          actions:
+            - arn:aws:sns:us-east-1:123456789012:apigw-alerts
+          metrics:
+            - name: 5XXError
+              statistic: Average
+              threshold: 0.05
+              comparisonOperator: GreaterThanThreshold

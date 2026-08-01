@@ -29,8 +29,9 @@ Three exist:
 | Dashboard | `Metadata.SlsTf.Dashboard` | `custom.slsTf.dashboard` | `dashboard.tf` |
 | Custom domain | `Metadata.SlsTf.CustomDomain` | `custom.slsTf.customDomain` | `http-api-domain.tf` |
 
-The first two also accept their pre-v0.11.0 top-level spellings (`alarms:`,
-`dashboard:`) permanently; `provider.customDomain` was moved, not aliased.
+All three moved to this namespace in v0.11.0. There are no aliases for the old
+spellings (`alarms:`, `dashboard:`, `provider.customDomain`) — a config still
+using one gets a plan-time error naming the replacement.
 
 They work. **The problem this document addressed** was that they arrived one at a
 time, each inventing its own conventions, with nothing tying them together. The
@@ -136,15 +137,29 @@ warning under the default `configValidationMode: warn`, and a hard failure under
 declaring one key. Not worth it. Casing follows each format's own convention:
 PascalCase under `Metadata`, camelCase under `custom`.
 
-The bare serverless-yaml top-level keys (`alarms:`, `dashboard:`) stay accepted
-**permanently**, not as a deprecation with a removal date — event-service's
-`infrastructure.yaml` parity is the whole reason alarm sets exist, and breaking
-it would defeat the purpose. They emit a `check`-block notice recommending the
-namespaced form.
+**There are no aliases for the old top-level keys.** The original plan kept
+`alarms:` and `dashboard:` indefinitely for event-service parity, but nothing
+had adopted them in a deployed configuration — event-service is early and not
+deployed with any of this. Carrying two spellings forever would have been
+compatibility with nobody, at the cost of a permanently ambiguous namespace.
 
-**`provider.customDomain` moves.** It is the one existing yaml key that sits
-inside a section SF *does* schema-validate, so it has the problem this section
-exists to avoid. It becomes `custom.slsTf.customDomain`. Unlike the two bare
+A config still using one is a plan-time **error** naming the replacement, not a
+silent no-op:
+
+```
+Error: Extension 'Alarms' is configured at 'alarms:', which moved to
+'custom.slsTf.alarms' in v0.11.0. The old key is not read, so leaving it here
+would deploy none of this config while looking like it does. Move it under
+custom.slsTf.
+```
+
+Ignoring the old key silently would have reproduced the exact failure this
+document exists to remove.
+
+**`provider.customDomain` moves too**, and gets the same error. It is the one
+existing yaml key that sits inside a section SF *does* schema-validate, so it
+has the problem this section exists to avoid. It becomes
+`custom.slsTf.customDomain`. Unlike the two bare
 top-level keys this is a genuine move rather than an alias: the only consumer
 is not yet live, so there is nothing deployed to keep working. Scope is five
 fixtures under `tests/fixtures/custom-domain-*.yml`,
@@ -420,9 +435,11 @@ What shipped, and what changed from the plan:
    to `Metadata.SlsTf` / `custom.slsTf` and never the parent, pinned by a
    fixture carrying `webpack:`, `serverless-offline:` and `myOwnThing:` under
    `custom:`.
-4. **`custom.slsTf.*`** is the yaml namespace; the bare top-level keys are
-   permanent, with a notice behind `extension_legacy_key_notice`.
-   `provider.customDomain`, `enable_custom_domain` and `create_hosted_zone` are
+4. **`custom.slsTf.*`** is the yaml namespace, with no aliases: the old
+   top-level keys and `provider.customDomain` are plan-time errors naming the
+   replacement. The plan had kept them permanently for event-service parity;
+   that turned out to be compatibility with nobody, since nothing had been
+   deployed with them. `enable_custom_domain` and `create_hosted_zone` are also
    gone (§8).
 5. **Structural-parse mismatch** ships as a `check`, diffing the extension's
    subtree between `sam_raw` and `sam_structure` — the `!Ref` search in §4 is

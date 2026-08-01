@@ -519,9 +519,10 @@ dashboards: a hand-written `AWS::CloudWatch::Dashboard` is portable; the
 
 `custom:` is where Serverless Framework leaves config unvalidated, exactly as
 `Metadata` is where CloudFormation ignores it — the namespaces mirror each other
-by mechanism. The pre-v0.11.0 top-level `alarms:` and `dashboard:` keep working
-indefinitely (silence the notice with `extension_legacy_key_notice = false`);
-`provider.customDomain` was moved rather than aliased.
+by mechanism. All three keys moved here in v0.11.0 with no aliases: a config
+still using `alarms:`, `dashboard:` or `provider.customDomain` gets a plan-time
+error naming the replacement, rather than the old key being read or silently
+ignored.
 
 **Unknown keys fail the plan.** A key under `Metadata.SlsTf` / `custom.slsTf`
 that this version doesn't recognise — a typo, or an extension from a newer
@@ -589,7 +590,6 @@ including which parse each extension is read from and why that matters for
 | `resource_types` | list(string) | `null` | no | Allowlist of CloudFormation resource types to materialise from the `resources:` section. `null` creates all types. Lambda functions, IAM roles, and event wiring are always created regardless. |
 | `required_extensions` | list(string) | `[]` | no | Extensions this config depends on, asserted at plan time. See [Extensions](#extensions). |
 | `extension_unknown_key_behaviour` | string | `"error"` | no | `"error"` or `"warn"` for unrecognised keys under the sls.tf namespace and for a misspelled namespace. |
-| `extension_legacy_key_notice` | bool | `true` | no | Emit a notice when an extension uses its pre-v0.11.0 top-level serverless-yaml key. |
 | `extension_sidecar_path` | string | `null` | no | Path to a sidecar file holding extension config, instead of inline in the template. |
 | `acm_certificate_arn` | string | `null` | no | ACM certificate ARN for the custom domain, when the config does not set `customDomain.certificateArn`. |
 
