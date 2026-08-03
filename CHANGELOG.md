@@ -85,6 +85,18 @@ nothing will now fail loudly, which is the point of the release.
 
 ### Fixed
 
+- **The companion-stack generator silently dropped anomaly-detection alarms.**
+  `alarm-sets.tf` supports `anomalyDetection` / `anomalyBandWidth`, emitting an
+  `ANOMALY_DETECTION_BAND` metric query; the generator had no notion of it and
+  emitted a plain static-threshold alarm instead — a different alarm, from the
+  same config, depending on which applier you used. Caught before release by a
+  new parity test that fails when `alarm-sets.tf` reads a config field the
+  generator does not.
+- **The generator could emit an invalid CloudFormation template.** A metric
+  with no threshold produced an alarm with no `Threshold`, which CloudFormation
+  rejects — at deploy time, after the SAM stack it accompanies had already gone
+  out. It is now refused at generation time, naming the group, the metric, and
+  both ways to fix it.
 - **SAM alarm sets aborted the plan** whenever `Metadata.SlsTf.Alarms` was
   non-empty. The lookup encoded to JSON *outside* the conditional, leaving
   Terraform to unify the two branch types — and an object with attributes does

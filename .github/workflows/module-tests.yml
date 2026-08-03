@@ -25,6 +25,28 @@ env:
   TERRAFORM_VERSION: '1.8'
 
 jobs:
+
+  # The companion-stack generator (tools/extension-stack). Its parity tests
+  # read alarm-sets.tf / dashboard.tf / extensions.tf directly and fail when
+  # the module grows a field the generator does not read — without them the two
+  # appliers silently diverge, which is the failure class the extension work
+  # exists to remove.
+  extension-stack:
+    name: Extension Stack Generator
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # No install step: the generator is dependency-free by design.
+      - name: Run generator tests
+        run: npm run test:extension-stack
   # Terraform validation and formatting
   validate:
     name: Validate Terraform
@@ -43,6 +65,12 @@ jobs:
 
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
+
+      # local.module_version is what every extension diagnostic reports, and it
+      # is hand-maintained because a module cannot read its own source ref.
+      # Unenforced, it silently goes stale and starts naming the wrong version.
+      - name: Module version matches CHANGELOG
+        run: make check-version
 
       - name: Terraform Init
         run: terraform init -backend=false
@@ -352,7 +380,7 @@ jobs:
   notify-failure:
     name: Notify on Failure
     runs-on: ubuntu-latest
-    needs: [validate, test, test-typescript, test-conversion, security-scan, docs-check, integration-test]
+    needs: [validate, test, test-typescript, test-conversion, security-scan, docs-check, integration-test, extension-stack]
     if: failure()
 
     steps:
@@ -370,7 +398,7 @@ jobs:
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
-    needs: [validate, test, test-typescript, test-conversion, security-scan, docs-check, integration-test]
+    needs: [validate, test, test-typescript, test-conversion, security-scan, docs-check, integration-test, extension-stack]
     if: always()
 
     steps:
@@ -396,6 +424,7 @@ jobs:
           echo "| Security | ${{ needs.security-scan.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Documentation | ${{ needs.docs-check.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Integration | ${{ needs.integration-test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Extension Stack | ${{ needs['extension-stack'].result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [[ "${{ needs.validate.result }}" == "success" &&
@@ -404,7 +433,8 @@ jobs:
                 "${{ needs.test-conversion.result }}" == "success" &&
                 "${{ needs.security-scan.result }}" == "success" &&
                 "${{ needs.docs-check.result }}" == "success" &&
-                "${{ needs.integration-test.result }}" == "success" ]]; then
+                "${{ needs.integration-test.result }}" == "success" &&
+                "${{ needs['extension-stack'].result }}" == "success" ]]; then
             echo "## ✅ All Tests Passed!" >> $GITHUB_STEP_SUMMARY
             echo "The sls.tf module is ready for deployment." >> $GITHUB_STEP_SUMMARY
           else

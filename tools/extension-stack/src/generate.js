@@ -183,51 +183,122 @@ function buildAlarms(template, alarms) {
     for (const rawMetric of group.metrics || []) {
       const metric = normaliseMetric(rawMetric);
 
+      // Mirrors the same fallback chain as alarm-sets.tf: per-metric, then
+      // group, then the hard default.
+      const anomalyDetection = Boolean(
+        pick(
+          metric.anomalyDetection,
+          metric.anomaly_detection,
+          group.anomalyDetection,
+          group.anomaly_detection,
+          false
+        )
+      );
+      const anomalyBand = pick(
+        metric.anomalyBandWidth,
+        metric.anomaly_band_width,
+        group.anomalyBandWidth,
+        group.anomaly_band_width,
+        2
+      );
+      const threshold = pick(metric.threshold, group.threshold);
+      const period = pick(metric.period, group.period, 300);
+      const statistic = pick(metric.statistic, group.statistic, 'Sum');
+
+      // A static-threshold alarm without a threshold is not a CloudFormation
+      // template CFN will accept, and the deploy would fail AFTER the main
+      // stack had already gone out. Refuse here, where it is cheap.
+      if (!anomalyDetection && (threshold === undefined || threshold === null)) {
+        throw new GenerateError(
+          `Alarm group '${className}' metric '${metric.name}' has no threshold. CloudFormation requires Threshold on a ` +
+            'static-threshold alarm, so this template would be rejected at deploy time — after the SAM stack it ' +
+            'accompanies had already been deployed. Set a threshold, or set anomalyDetection: true to alarm on a band.'
+        );
+      }
+
       for (const resourceName of resourceNames) {
         // Same "<group>-<metric>-<resource>" alarm name the Terraform path
         // uses, so the two produce identically-named alarms.
         const alarmName = `${className}-${metric.name}-${resourceName}`;
 
+        const common = {
+          AlarmName: alarmName,
+          AlarmDescription: pick(metric.description, 'Managed by sls.tf alarm set'),
+          EvaluationPeriods: pick(
+            metric.evaluationPeriods,
+            metric.evaluation_periods,
+            group.evaluationPeriods,
+            group.evaluation_periods,
+            1
+          ),
+          DatapointsToAlarm: pick(
+            metric.datapointsToAlarm,
+            metric.datapoints_to_alarm,
+            group.datapointsToAlarm,
+            group.datapoints_to_alarm
+          ),
+          TreatMissingData: pick(
+            metric.treatMissingData,
+            metric.treat_missing_data,
+            group.treatMissingData,
+            group.treat_missing_data,
+            'missing'
+          ),
+          AlarmActions: actions.length > 0 ? actions : undefined,
+        };
+
+        // Anomaly-detection alarms compare the metric against an
+        // ANOMALY_DETECTION_BAND expression instead of a static threshold. The
+        // two forms are mutually exclusive: namespace/metric/period/statistic
+        // move inside the Metrics array, and ThresholdMetricId replaces
+        // Threshold. Mirrors the metric_query blocks in alarm-sets.tf.
+        const properties = anomalyDetection
+          ? {
+              ...common,
+              ComparisonOperator: 'LessThanLowerOrGreaterThanUpperThreshold',
+              ThresholdMetricId: 'ad1',
+              Metrics: [
+                {
+                  Id: 'm1',
+                  ReturnData: true,
+                  MetricStat: {
+                    Metric: {
+                      Namespace: namespace,
+                      MetricName: metric.name,
+                      Dimensions: [{ Name: dimension, Value: resourceName }],
+                    },
+                    Period: period,
+                    Stat: statistic,
+                  },
+                },
+                {
+                  Id: 'ad1',
+                  Expression: `ANOMALY_DETECTION_BAND(m1, ${anomalyBand})`,
+                  Label: `${metric.name} (expected band)`,
+                  ReturnData: true,
+                },
+              ],
+            }
+          : {
+              ...common,
+              Namespace: namespace,
+              MetricName: metric.name,
+              Dimensions: [{ Name: dimension, Value: resourceName }],
+              Period: period,
+              Statistic: statistic,
+              Threshold: threshold,
+              ComparisonOperator: pick(
+                metric.comparisonOperator,
+                metric.comparison_operator,
+                group.comparisonOperator,
+                group.comparison_operator,
+                'GreaterThanOrEqualToThreshold'
+              ),
+            };
+
         resources[toLogicalId('Alarm', className, metric.name, resourceName)] = {
           Type: 'AWS::CloudWatch::Alarm',
-          Properties: {
-            AlarmName: alarmName,
-            AlarmDescription: pick(metric.description, 'Managed by sls.tf alarm set'),
-            Namespace: namespace,
-            MetricName: metric.name,
-            Dimensions: [{ Name: dimension, Value: resourceName }],
-            Period: pick(metric.period, group.period, 300),
-            Statistic: pick(metric.statistic, group.statistic, 'Sum'),
-            Threshold: pick(metric.threshold, group.threshold),
-            ComparisonOperator: pick(
-              metric.comparisonOperator,
-              metric.comparison_operator,
-              group.comparisonOperator,
-              group.comparison_operator,
-              'GreaterThanOrEqualToThreshold'
-            ),
-            EvaluationPeriods: pick(
-              metric.evaluationPeriods,
-              metric.evaluation_periods,
-              group.evaluationPeriods,
-              group.evaluation_periods,
-              1
-            ),
-            DatapointsToAlarm: pick(
-              metric.datapointsToAlarm,
-              metric.datapoints_to_alarm,
-              group.datapointsToAlarm,
-              group.datapoints_to_alarm
-            ),
-            TreatMissingData: pick(
-              metric.treatMissingData,
-              metric.treat_missing_data,
-              group.treatMissingData,
-              group.treat_missing_data,
-              'missing'
-            ),
-            AlarmActions: actions.length > 0 ? actions : undefined,
-          },
+          Properties: properties,
         };
       }
     }
