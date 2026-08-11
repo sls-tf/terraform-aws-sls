@@ -3,6 +3,47 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.11.0
+
+### Added
+
+- **`lambda_code_source.keys`** — optional `{ artefact_name = "full/s3/key.zip" }`
+  map giving per-artefact S3 keys in `type = "s3"` mode.
+
+  `sha` is a single scalar shared by every function, so it cannot express
+  content-addressed artefacts, where each function's key is a hash of its own
+  build inputs. With one shared token every key rotates on every build even when
+  a single function changed, so a plan always shows every function updating and
+  genuine drift is indistinguishable from noise. With per-artefact keys an
+  unchanged function keeps its key, and therefore its ETag, and therefore shows
+  no diff.
+
+  Backwards compatible in both directions: `keys` is optional and unset by
+  default, so a `sha`-only consumer is unchanged; and lookup falls back to the
+  `<key_prefix>/<artefact>/<sha>.zip` template **per function**, so a consumer
+  can move a few artefacts onto content-addressed keys without migrating
+  everything at once.
+
+  `key_prefix` and `sha` are now required only when that template is actually
+  reachable — a consumer whose `keys` covers every function no longer has to
+  invent a meaningless `sha` to satisfy validation. `bucket` is still always
+  required.
+
+  Keys are looked up by **artefact name** (the CodeUri-derived name already used
+  to build the template key), which is what a builder's published index is keyed
+  by, so such an index can be fed straight in.
+
+### Fixed
+
+- The S3 key was built twice from the same template — once for
+  `data.aws_s3_object.lambda_artefact` and once for `aws_lambda_function` — so
+  the key a plan HEADed and the key it deployed could drift apart if either were
+  edited alone. Both now read one `local.s3_artefact_keys`, and a test asserts
+  they agree for every function.
+- An artefact resolving to neither an explicit key nor a usable `sha` template
+  produced a malformed key (`prefix/name/.zip`) that 404'd at apply with nothing
+  indicating why. A precondition now names the offending artefacts at plan time.
+
 ## v0.10.0
 
 Full-estate brownfield parity on SAM templates — verified by importing 240

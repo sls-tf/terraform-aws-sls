@@ -82,12 +82,34 @@ variable "lambda_code_source" {
     segment and taking the last path component (e.g. "jobs/foo/dist/" -> "foo").
     Use this for git-ops deployment models where artefacts are built once in
     CI and promoted between environments by bumping the SHA pin.
+
+    keys (optional, s3 only): explicit per-artefact S3 keys, as
+    { artefact_name = "full/s3/key.zip" }. Overrides the sha template for any
+    artefact present in the map; artefacts absent from it fall back to the
+    template, so the two can be mixed during a migration.
+
+    This exists for CONTENT-ADDRESSED artefacts, where each function's key is a
+    hash of its own build inputs and so differs per function. A single scalar
+    sha cannot express that: it forces one shared token across every function,
+    which means every key rotates on every build even when one function changed
+    — so a plan always shows every function updating, and genuine drift is
+    indistinguishable from noise. With per-artefact keys, an unchanged function
+    keeps its key (and therefore its ETag, and therefore no diff).
+
+    Supply it from whatever your builder publishes as an index, e.g.
+
+      keys = { for name, a in jsondecode(data.aws_s3_object.index.body).artifacts :
+               name => a.key }
+
+    sha is still required unless keys covers every function, because it remains
+    the fallback. Set sha = "" only when keys is exhaustive.
   EOT
   type = object({
     type       = string
     bucket     = optional(string)
     key_prefix = optional(string)
     sha        = optional(string)
+    keys       = optional(map(string))
   })
   default = {
     type = "local"
@@ -98,9 +120,25 @@ variable "lambda_code_source" {
     error_message = "lambda_code_source.type must be \"local\" or \"s3\"."
   }
 
+  # bucket is always required for s3. key_prefix and sha are required only when
+  # they are actually used — i.e. unless an explicit keys map is supplied — so a
+  # fully content-addressed consumer need not invent a meaningless sha, while
+  # every pre-existing sha-only consumer validates exactly as before.
   validation {
-    condition     = var.lambda_code_source.type != "s3" || (try(length(var.lambda_code_source.bucket), 0) > 0 && try(length(var.lambda_code_source.key_prefix), 0) > 0 && try(length(var.lambda_code_source.sha), 0) > 0)
-    error_message = "lambda_code_source.{bucket, key_prefix, sha} are all required when type = \"s3\"."
+    condition = var.lambda_code_source.type != "s3" || (
+      try(length(var.lambda_code_source.bucket), 0) > 0 && (
+        try(length(var.lambda_code_source.keys), 0) > 0 ||
+        (try(length(var.lambda_code_source.key_prefix), 0) > 0 && try(length(var.lambda_code_source.sha), 0) > 0)
+      )
+    )
+    error_message = "lambda_code_source requires bucket, plus either keys or both key_prefix and sha, when type = \"s3\"."
+  }
+
+  # An empty-string key would silently resolve to the bucket root and deploy the
+  # wrong object, so reject it at the variable rather than at apply.
+  validation {
+    condition     = alltrue([for k, v in coalesce(var.lambda_code_source.keys, {}) : length(trimspace(v)) > 0])
+    error_message = "lambda_code_source.keys values must be non-empty S3 keys."
   }
 }
 
