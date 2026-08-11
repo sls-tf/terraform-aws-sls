@@ -383,6 +383,39 @@ locals {
     )
   }
 
+  # Resolved S3 key per function (used only when lambda_code_source.type == "s3").
+  #
+  # Single source of truth: both data.aws_s3_object.lambda_artefact and
+  # aws_lambda_function.functions read this, so the key a plan HEADs and the key
+  # it actually deploys cannot drift apart.
+  #
+  # Precedence: an explicit entry in lambda_code_source.keys (looked up by
+  # ARTEFACT NAME, which is what a builder's index is keyed by) wins; otherwise
+  # fall back to the "<key_prefix>/<artefact>/<sha>.zip" template. Falling back
+  # per function rather than all-or-nothing lets a consumer move a few functions
+  # onto content-addressed keys without migrating everything at once.
+  # coalesce() on key_prefix/sha because this local is also evaluated in local
+  # mode, where both are null and a null in a string template is an error. The
+  # value produced there is never read (s3_key is null in local mode), and in s3
+  # mode a missing sha yields an obviously-wrong key that the precondition below
+  # rejects by name rather than letting it 404 at apply.
+  s3_artefact_keys = {
+    for func_name in local._function_names :
+    func_name => try(
+      var.lambda_code_source.keys[local.s3_artefact_names[func_name]],
+      "${var.lambda_code_source.key_prefix == null ? "" : var.lambda_code_source.key_prefix}/${local.s3_artefact_names[func_name]}/${var.lambda_code_source.sha == null ? "" : var.lambda_code_source.sha}.zip"
+    )
+  }
+
+  # Artefacts with neither an explicit key nor a usable sha template. Surfaced as
+  # a precondition rather than left to build a malformed key like
+  # "prefix/name/.zip", which 404s at apply with nothing pointing at the cause.
+  _s3_unresolved_artefacts = var.lambda_code_source.type != "s3" ? [] : [
+    for func_name in local._function_names : local.s3_artefact_names[func_name]
+    if try(var.lambda_code_source.keys[local.s3_artefact_names[func_name]], null) == null
+    && try(length(var.lambda_code_source.sha), 0) == 0
+  ]
+
 
   # Region override warning
   region_warnings = (

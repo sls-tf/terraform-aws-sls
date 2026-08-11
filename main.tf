@@ -96,7 +96,14 @@ data "aws_s3_object" "lambda_artefact" {
   }
 
   bucket = var.lambda_code_source.bucket
-  key    = "${var.lambda_code_source.key_prefix}/${local.s3_artefact_names[each.key]}/${var.lambda_code_source.sha}.zip"
+  key    = local.s3_artefact_keys[each.key]
+
+  lifecycle {
+    precondition {
+      condition     = length(local._s3_unresolved_artefacts) == 0
+      error_message = "lambda_code_source: no key for artefact(s) ${join(", ", local._s3_unresolved_artefacts)} — add them to lambda_code_source.keys, or set sha so the template applies to them."
+    }
+  }
 }
 
 # Lambda package size validation (local mode only — S3-sourced packages
@@ -207,12 +214,13 @@ resource "aws_lambda_function" "functions" {
   # Honor an explicit Role; otherwise use the per-function role created above.
   role = try(local._function_has_explicit_role[each.key], false) ? local._function_role_arn[each.key] : aws_iam_role.lambda_execution[each.key].arn
 
-  # Code source: either local zip (data.archive_file) or S3 (artefact built
-  # in CI and promoted via the SHA pin in var.lambda_code_source).
+  # Code source: either local zip (data.archive_file) or S3 (artefact built in
+  # CI, addressed either by the shared SHA pin or by a per-artefact key — see
+  # local.s3_artefact_keys, which both this and the HEAD data source read).
   filename         = var.lambda_code_source.type == "local" ? data.archive_file.lambda_code[each.key].output_path : null
   source_code_hash = var.lambda_code_source.type == "local" ? data.archive_file.lambda_code[each.key].output_base64sha256 : try(data.aws_s3_object.lambda_artefact[each.key].etag, null)
   s3_bucket        = var.lambda_code_source.type == "s3" ? var.lambda_code_source.bucket : null
-  s3_key           = var.lambda_code_source.type == "s3" ? "${var.lambda_code_source.key_prefix}/${local.s3_artefact_names[each.key]}/${var.lambda_code_source.sha}.zip" : null
+  s3_key           = var.lambda_code_source.type == "s3" ? local.s3_artefact_keys[each.key] : null
 
   # handler/runtime come from the structural template locals for SAM (always known at
   # plan); other config formats keep the resolved-config values.
