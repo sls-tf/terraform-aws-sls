@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM template exercising Metadata.SlsTf.Alarms with a non-trivial shape
+
+Parameters:
+  AlertsTopicArn:
+    Type: String
+
+Metadata:
+  SlsTf:
+    Alarms:
+      defaults:
+        actions:
+          - !Ref AlertsTopicArn
+      groups:
+        lambda:
+          resource_names: []
+          metrics:
+            - name: Errors
+              statistic: Sum
+              period: 300
+              threshold: 1
+              evaluationPeriods: 1
+              comparisonOperator: GreaterThanOrEqualToThreshold
+        custom_metric:
+          namespace: Texecom/Sample
+          dimension: Service
+          resource_names:
+            - sample-service
+          metrics:
+            - name: PartedThing
+              statistic: Sum
+              period: 300
+              threshold: 1
+              evaluationPeriods: 1
+              comparisonOperator: GreaterThanOrEqualToThreshold
+              treatMissingData: notBreaching
+
+Resources:
+  IngestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      Runtime: nodejs18.x

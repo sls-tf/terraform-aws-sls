@@ -36,9 +36,19 @@
 locals {
   # JSON-laundered (same idiom as parsed_config) so the two branches don't need
   # structurally identical object types.
+  #
+  # The sam branch used to be `sam_structure != null ? try(...Alarms, {}) : {}`
+  # — a plain `? :` conditional, which Terraform type-checks statically even
+  # though only one arm ever actually runs. Once Alarms carries a real shape
+  # (any attribute beyond {}, e.g. `defaults`), the two arms are irreconcilable
+  # object types and plan fails with "Inconsistent conditional result types"
+  # for every consumer, regardless of config content. try() has no such
+  # static unification requirement between its own attempts, so folding the
+  # null-check into it (attribute access on a null value errors, which try()
+  # catches same as a missing key) sidesteps the conditional entirely.
   alarm_sets_config = jsondecode(
     var.config_format == "sam"
-    ? jsonencode(local.sam_structure != null ? try(local.sam_structure.Metadata.SlsTf.Alarms, {}) : {})
+    ? jsonencode(try(local.sam_structure.Metadata.SlsTf.Alarms, {}))
     : jsonencode(try(local.parsed_config.alarms, {}))
   )
 
