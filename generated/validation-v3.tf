@@ -5,7 +5,6 @@
 #
 # Generator: schema-generator v0.1.0
 # Schema Version: Serverless Framework v3
-# Generated: 2025-10-28T07:59:55.589Z
 # Source Schema: schemas/serverless-framework/v3.x.json
 #
 # To regenerate this file, run:

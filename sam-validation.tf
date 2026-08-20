@@ -40,13 +40,20 @@ locals {
       # Validate memory/timeout on SAM functions match Lambda limits
       flatten([
         for logical_id, resource in try(local.sam_raw.Resources, {}) : concat(
+          # coalesce(try(EXPR, null), N) around every re-access, not just
+          # try(): `&&` doesn't shield its right operand from erroring on
+          # the left being false, and an explicit-null Properties field
+          # (present key, null value) passes the try()-based guard's own
+          # access fine, then flows a null into `<`/`>`, which reject that
+          # outright. See locals.tf's provider_field_errors for the full
+          # writeup (same fixture exercises both).
           try(resource.Properties.MemorySize, null) != null &&
-          (resource.Properties.MemorySize < 128 || resource.Properties.MemorySize > 10240) ? [
-            "SAM function '${logical_id}' MemorySize must be between 128 and 10240 MB, got: ${resource.Properties.MemorySize}."
+          (coalesce(try(resource.Properties.MemorySize, null), 0) < 128 || coalesce(try(resource.Properties.MemorySize, null), 0) > 10240) ? [
+            "SAM function '${logical_id}' MemorySize must be between 128 and 10240 MB, got: ${try(resource.Properties.MemorySize, "")}."
           ] : [],
           try(resource.Properties.Timeout, null) != null &&
-          (resource.Properties.Timeout < 1 || resource.Properties.Timeout > 900) ? [
-            "SAM function '${logical_id}' Timeout must be between 1 and 900 seconds, got: ${resource.Properties.Timeout}."
+          (coalesce(try(resource.Properties.Timeout, null), 0) < 1 || coalesce(try(resource.Properties.Timeout, null), 0) > 900) ? [
+            "SAM function '${logical_id}' Timeout must be between 1 and 900 seconds, got: ${try(resource.Properties.Timeout, "")}."
           ] : []
         )
         if try(resource.Type, "") == "AWS::Serverless::Function"

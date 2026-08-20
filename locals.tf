@@ -120,24 +120,41 @@ locals {
   ]) : []
 
   # Provider field validation errors
+  #
+  # Every raw re-access below (after the `try(..., null) != null &&` guard) is
+  # deliberately ALSO wrapped: `&&` does not protect its right-hand operand
+  # from erroring just because the left-hand operand is false, so a config
+  # that omits an optional field (or sets it explicitly to a YAML null --
+  # SAM's parser normalizes missing fields to a present `null` key, unlike
+  # plain yamldecode()) can still hard-fail here, and which of the two ways
+  # it fails depends on the Terraform version. Observed on 1.8 (passing on
+  # 1.14 for the identical config/expression):
+  #   - a genuinely ABSENT key -> "Unsupported attribute": try(EXPR, fallback)
+  #     around the re-access is what catches this (the access itself errors).
+  #   - a PRESENT key whose value is null -> the access succeeds (no error,
+  #     so try()'s fallback never kicks in) and null flows into `<`/`>`,
+  #     which reject a null operand outright. coalesce(try(EXPR, null), 0)
+  #     is what catches this one -- try() alone is not enough.
+  # Using both together handles every case on every version.
   provider_field_errors = concat(
     # Validate frameworkVersion if specified
     try(local.parsed_config.frameworkVersion, null) != null &&
-    !can(regex("^[234](\\..*)?$", local.parsed_config.frameworkVersion)) ?
-    ["Field 'frameworkVersion' must be 2.x, 3.x, or 4.x, got: '${local.parsed_config.frameworkVersion}'."] : [],
+    !can(regex("^[234](\\..*)?$", try(local.parsed_config.frameworkVersion, ""))) ?
+    ["Field 'frameworkVersion' must be 2.x, 3.x, or 4.x, got: '${try(local.parsed_config.frameworkVersion, "")}'."] : [],
 
     # Validate provider.memorySize range
     try(local.parsed_config.provider.memorySize, null) != null &&
-    (local.parsed_config.provider.memorySize < 128 || local.parsed_config.provider.memorySize > 10240) ?
-    ["Field 'provider.memorySize' must be between 128 and 10240 MB, got: ${local.parsed_config.provider.memorySize}."] : [],
+    (coalesce(try(local.parsed_config.provider.memorySize, null), 0) < 128 || coalesce(try(local.parsed_config.provider.memorySize, null), 0) > 10240) ?
+    ["Field 'provider.memorySize' must be between 128 and 10240 MB, got: ${try(local.parsed_config.provider.memorySize, "")}."] : [],
 
     # Validate provider.timeout range
     try(local.parsed_config.provider.timeout, null) != null &&
-    (local.parsed_config.provider.timeout < 1 || local.parsed_config.provider.timeout > 900) ?
-    ["Field 'provider.timeout' must be between 1 and 900 seconds, got: ${local.parsed_config.provider.timeout}."] : []
+    (coalesce(try(local.parsed_config.provider.timeout, null), 0) < 1 || coalesce(try(local.parsed_config.provider.timeout, null), 0) > 900) ?
+    ["Field 'provider.timeout' must be between 1 and 900 seconds, got: ${try(local.parsed_config.provider.timeout, "")}."] : []
   )
 
-  # Function-level validation errors
+  # Function-level validation errors (same try()-around-every-access
+  # reasoning as provider_field_errors above)
   function_validation_errors = flatten([
     for func_name, func in try(local.parsed_config.functions, {}) : concat(
       # Validate required handler field
@@ -146,13 +163,13 @@ locals {
 
       # Validate function memorySize range
       try(func.memorySize, null) != null &&
-      (func.memorySize < 128 || func.memorySize > 10240) ?
-      ["Function '${func_name}' has invalid 'memorySize'. Must be between 128 and 10240 MB, got: ${func.memorySize}."] : [],
+      (coalesce(try(func.memorySize, null), 0) < 128 || coalesce(try(func.memorySize, null), 0) > 10240) ?
+      ["Function '${func_name}' has invalid 'memorySize'. Must be between 128 and 10240 MB, got: ${try(func.memorySize, "")}."] : [],
 
       # Validate function timeout range
       try(func.timeout, null) != null &&
-      (func.timeout < 1 || func.timeout > 900) ?
-      ["Function '${func_name}' has invalid 'timeout'. Must be between 1 and 900 seconds, got: ${func.timeout}."] : []
+      (coalesce(try(func.timeout, null), 0) < 1 || coalesce(try(func.timeout, null), 0) > 900) ?
+      ["Function '${func_name}' has invalid 'timeout'. Must be between 1 and 900 seconds, got: ${try(func.timeout, "")}."] : []
     )
   ])
 
@@ -421,9 +438,9 @@ locals {
   region_warnings = (
     var.aws_region != null &&
     try(local.parsed_config.provider.region, null) != null &&
-    var.aws_region != local.parsed_config.provider.region
+    var.aws_region != try(local.parsed_config.provider.region, null)
     ) ? [
-    "WARNING: aws_region override '${var.aws_region}' differs from serverless.yml region '${local.parsed_config.provider.region}'. Using override value."
+    "WARNING: aws_region override '${var.aws_region}' differs from serverless.yml region '${try(local.parsed_config.provider.region, "")}'. Using override value."
   ] : []
 
   # IAM Role Statement Parsing (Roadmap #3)
@@ -590,7 +607,11 @@ locals {
   # self-targeted event never reaches the attach path with an unresolved ApiId.
   http_api_v2_events = [
     for event in local.http_events : event
-    if event.api_id != null && !contains(local.sam_all_http_api_ids, replace(tostring(event.api_id), local._unresolved_ref_prefix, ""))
+    # `&&` does not shield its right operand from erroring just because the
+    # left one is false (see provider_field_errors' comment above) --
+    # tostring(null) itself errors, so the contains() check needs its own
+    # try() rather than relying on the api_id != null guard to skip it.
+    if event.api_id != null && try(!contains(local.sam_all_http_api_ids, replace(tostring(event.api_id), local._unresolved_ref_prefix, "")), false)
   ]
 
   # Keyed map for the v2 path: "<function>-<METHOD>-<sanitized_path>" → event.

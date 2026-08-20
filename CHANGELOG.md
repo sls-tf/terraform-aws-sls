@@ -3,6 +3,23 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.11.1
+
+### Fixed
+
+- **`alarm-sets.tf` SAM branch: "Inconsistent conditional result types" on any
+  non-trivial `Metadata.SlsTf.Alarms`.** `alarm_sets_config`'s sam branch was
+  `local.sam_structure != null ? try(...Alarms, {}) : {}` — a plain `? :`
+  conditional, which Terraform type-checks both arms of statically even though
+  only one ever runs for a given plan. The moment `Alarms` carries a real shape
+  (any attribute beyond `{}`, e.g. a `defaults` key — i.e. basically any real
+  usage), the two arms are irreconcilable object types and plan fails for
+  every SAM consumer regardless of config content. Folded the null-check into
+  `try()` instead (attribute access on a null value errors, which `try()`
+  catches the same as a missing key), removing the conditional entirely.
+  Added `tests/alarm_sets_sam.tftest.hcl` — the yaml-format alarm tests never
+  exercised the SAM branch, which is how this shipped in v0.7.0 unnoticed.
+
 ## v0.11.0
 
 ### Added

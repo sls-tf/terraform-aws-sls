@@ -1,0 +1,70 @@
+# Exercises every conversion path in elemental-to-serverless-converter.js:
+# two lambdas (one API-fronted, one a DynamoDB-stream processor), a table
+# with a range key + GSI + TTL + stream, an EventBridge rule, and API Gateway.
+# Referenced by the "Test Conversion Tool" CI job (module-tests.yml).
+service:
+  name: comprehensive-service
+
+defaults:
+  lambda:
+    runtime: nodejs22.x
+    timeout: 30
+    memory_size: 256
+    environment:
+      LOG_LEVEL: info
+
+lambdas:
+  api:
+    description: Handles incoming API requests
+    handler: src/api.handler
+    environment:
+      TABLE_NAME: orders
+  orders-processor:
+    description: Processes order table stream events
+    handler: src/orders-processor.handler
+    memory_size: 512
+    dlq:
+      enabled: true
+      name: orders-processor-dlq
+
+dynamodb_tables:
+  orders:
+    table_name: comprehensive-service-orders
+    hash_key: pk
+    range_key: sk
+    attributes:
+      - name: pk
+        type: S
+      - name: sk
+        type: S
+      - name: status
+        type: S
+    billing_mode: PAY_PER_REQUEST
+    stream_view_type: NEW_AND_OLD_IMAGES
+    pitr_enabled: true
+    ttl_attribute: expiresAt
+    global_secondary_indexes:
+      - IndexName: status-index
+        KeySchema:
+          - AttributeName: status
+            KeyType: HASH
+        Projection:
+          ProjectionType: ALL
+
+eventbridge:
+  rules:
+    order-placed:
+      event_pattern:
+        source:
+          - comprehensive-service.orders
+        detail-type:
+          - OrderPlaced
+      targets:
+        - type: lambda
+          lambda: orders-processor
+
+api_gateway:
+  enabled: true
+
+custom:
+  owner: sls-tf-examples

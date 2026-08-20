@@ -5,6 +5,8 @@
  */
 
 const fs = require('fs');
+const os = require('os');
+const crypto = require('crypto');
 const path = require('path');
 const Handlebars = require('handlebars');
 const { execSync } = require('child_process');
@@ -29,11 +31,13 @@ function generateValidationCode(constraints, options = {}) {
     outputPath = null
   } = options;
 
-  // Generate file header
+  // Generate file header. Deliberately no timestamp: these files are
+  // committed, and a volatile "Generated: <now>" line means every re-run
+  // produces a different file even with zero schema/template changes,
+  // which is exactly what defeats a byte-for-byte sync check in CI.
   const header = renderTemplate('file-header', {
     generatorVersion,
     schemaVersion,
-    timestamp: new Date().toISOString(),
     schemaPath: `schemas/serverless-framework/v${schemaVersion}.x.json`
   });
 
@@ -284,9 +288,13 @@ function renderTemplate(templateName, data) {
  * @returns {string} Formatted code
  */
 function formatTerraform(code) {
+  // A unique-per-call filename, not a fixed shared path: the CLI can invoke
+  // this once per schema version, and jest runs test files (each spawning
+  // their own CLI subprocess) concurrently -- a shared `.temp-format.tf`
+  // meant two calls could delete/overwrite each other's temp file mid-fmt.
+  const tempFile = path.join(os.tmpdir(), `sls-tf-schema-gen-${crypto.randomBytes(8).toString('hex')}.tf`);
   try {
     // Write to temp file
-    const tempFile = path.join(__dirname, '../.temp-format.tf');
     fs.writeFileSync(tempFile, code, 'utf8');
 
     // Run terraform fmt

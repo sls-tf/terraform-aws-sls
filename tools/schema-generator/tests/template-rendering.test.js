@@ -64,14 +64,16 @@ describe('Template Rendering', () => {
     const result = renderTemplate('file-header', {
       generatorVersion: '0.1.0',
       schemaVersion: '3',
-      timestamp: '2025-10-28T12:00:00.000Z',
       schemaPath: 'schemas/serverless-framework/v3.x.json'
     });
 
     expect(result).toContain('AUTO-GENERATED FILE');
     expect(result).toContain('v0.1.0');
     expect(result).toContain('v3');
-    expect(result).toContain('2025-10-28');
+    expect(result).toContain('schemas/serverless-framework/v3.x.json');
+    // No timestamp field: see code-generator.js's comment on why the header
+    // must stay deterministic across regenerations.
+    expect(result).not.toContain('Generated:');
   });
 
   test('renderTemplate for required-field', () => {

@@ -68,7 +68,11 @@ locals {
     merge(event, {
       self_api_logical_id = replace(tostring(event.api_id), local._unresolved_ref_prefix, "")
     })
-    if event.api_id != null && contains(local.sam_all_http_api_ids, replace(tostring(event.api_id), local._unresolved_ref_prefix, ""))
+    # `&&` doesn't shield its right operand from erroring when the left is
+    # false -- tostring(null) itself errors, so this needs its own try()
+    # rather than relying on the api_id != null guard (see locals.tf's
+    # http_api_v2_events, which hit the identical bug).
+    if event.api_id != null && try(contains(local.sam_all_http_api_ids, replace(tostring(event.api_id), local._unresolved_ref_prefix, "")), false)
   ]
 
   # The set of self HttpApi logical IDs to actually CREATE — derived from the

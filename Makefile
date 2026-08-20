@@ -1,4 +1,4 @@
-.PHONY: help localstack-start localstack-stop localstack-restart localstack-status localstack-logs localstack-health localstack-clean test-local test-aws test-all
+.PHONY: help localstack-start localstack-stop localstack-restart localstack-status localstack-logs localstack-logs-dump localstack-health localstack-clean test-local test-aws test-all
 
 # Default target
 .DEFAULT_GOAL := help
@@ -19,7 +19,7 @@ help: ## Display this help message
 
 localstack-start: ## Start LocalStack container with health check
 	@echo "Starting LocalStack..."
-	@docker-compose -f $(COMPOSE_FILE) up -d
+	@docker compose -f $(COMPOSE_FILE) up -d
 	@echo "Waiting for LocalStack to be healthy..."
 	@timeout=$(HEALTH_TIMEOUT); \
 	elapsed=0; \
@@ -33,12 +33,12 @@ localstack-start: ## Start LocalStack container with health check
 		elapsed=$$((elapsed + $(HEALTH_INTERVAL))); \
 	done; \
 	echo "ERROR: LocalStack health check failed after $$timeout seconds"; \
-	docker-compose -f $(COMPOSE_FILE) logs; \
+	docker compose -f $(COMPOSE_FILE) logs; \
 	exit 1
 
 localstack-stop: ## Stop LocalStack container gracefully
 	@echo "Stopping LocalStack..."
-	@docker-compose -f $(COMPOSE_FILE) stop
+	@docker compose -f $(COMPOSE_FILE) stop
 	@echo "LocalStack stopped"
 
 localstack-restart: ## Restart LocalStack container
@@ -47,10 +47,13 @@ localstack-restart: ## Restart LocalStack container
 	@$(MAKE) localstack-start
 
 localstack-status: ## Show LocalStack container status
-	@docker-compose -f $(COMPOSE_FILE) ps
+	@docker compose -f $(COMPOSE_FILE) ps
 
 localstack-logs: ## Tail LocalStack container logs
-	@docker-compose -f $(COMPOSE_FILE) logs -f
+	@docker compose -f $(COMPOSE_FILE) logs -f
+
+localstack-logs-dump: ## Dump LocalStack container logs once and exit (CI-safe: no -f)
+	@docker compose -f $(COMPOSE_FILE) logs
 
 localstack-health: ## Check LocalStack health endpoint
 	@echo "Checking LocalStack health..."
@@ -58,7 +61,7 @@ localstack-health: ## Check LocalStack health endpoint
 
 localstack-clean: ## Stop container and remove volumes
 	@echo "Cleaning up LocalStack..."
-	@docker-compose -f $(COMPOSE_FILE) down -v
+	@docker compose -f $(COMPOSE_FILE) down -v
 	@echo "LocalStack cleaned up"
 
 test-local: ## Run Terraform tests with LocalStack
