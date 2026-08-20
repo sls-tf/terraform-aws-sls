@@ -85,7 +85,7 @@ jobs:
         if: failure()
         run: |
           echo "LocalStack container logs:"
-          make localstack-logs
+          make localstack-logs-dump
 
       - name: Upload test results
         if: always()

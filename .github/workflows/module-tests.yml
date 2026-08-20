@@ -54,6 +54,19 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate
 
+    # A real `terraform plan` against the real hashicorp/aws provider needs
+    # SOME credential source and a live endpoint to talk to. Pointing it at
+    # LocalStack (fake static creds, AWS_ENDPOINT_URL) keeps this an offline,
+    # secrets-free smoke test — same reason nothing here should ever get the
+    # real AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY secrets: those are
+    # deliberately reserved for the manually-triggered aws-testing job in
+    # test.yml, not wired into anything that runs automatically on a PR.
+    env:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://localhost:4566
+
     strategy:
       matrix:
         config-file:
@@ -79,6 +92,9 @@ jobs:
           restore-keys: |
             terraform-
 
+      - name: Start LocalStack
+        run: make localstack-start
+
       - name: Terraform Init
         run: terraform init -backend=false
 
@@ -88,6 +104,10 @@ jobs:
             -var="config_path=${{ matrix.config-file }}" \
             -var="lambda_code_path=tests/fixtures" \
             -out=tfplan
+
+      - name: Stop LocalStack
+        if: always()
+        run: make localstack-clean
 
       - name: Show Plan Summary
         run: |
@@ -252,6 +272,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate, test]
 
+    # Same reasoning as the `test` job above: LocalStack + fake static creds,
+    # never the real AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY secrets.
+    env:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://localhost:4566
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -310,6 +338,9 @@ jobs:
                     cors: true
           EOF
 
+      - name: Start LocalStack
+        run: make localstack-start
+
       - name: Terraform Init
         run: terraform init -backend=false
 
@@ -331,6 +362,10 @@ jobs:
           else
             echo "✅ Integration test passed: $resources resources planned"
           fi
+
+      - name: Stop LocalStack
+        if: always()
+        run: make localstack-clean
 
   # Notify on failure
   notify-failure:
