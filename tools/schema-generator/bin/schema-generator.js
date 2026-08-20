@@ -116,13 +116,19 @@ async function main() {
 
       // Generate code
       console.log(chalk.gray('  Generating Terraform code...'));
+      const outputFile = path.join(outputDir, `validation-v${version}.tf`);
       const code = generateValidationCode(constraints, {
         schemaVersion: version,
-        generatorVersion: packageJson.version
+        generatorVersion: packageJson.version,
+        // Truthy outputPath is what gates the terraform-fmt pass in
+        // generateValidationCode -- without it, the raw Handlebars output
+        // (whose comment indentation doesn't match fmt's) gets written
+        // as-is, permanently out of sync with what `terraform fmt` (and the
+        // Validate Generated Code CI check) expects.
+        outputPath: outputFile
       });
 
       // Write to file
-      const outputFile = path.join(outputDir, `validation-v${version}.tf`);
       fs.writeFileSync(outputFile, code, 'utf8');
       console.log(chalk.green(`  ✓ Generated ${outputFile}`));
       console.log(chalk.gray(`    ${stats.total} validation rules, ${code.split('\n').length} lines\n`));
@@ -144,7 +150,6 @@ async function main() {
 # Common validation rules that apply to all Serverless Framework versions
 #
 # Generator: schema-generator v${packageJson.version}
-# Generated: ${new Date().toISOString()}
 
 locals {
   # Common validation errors (applicable to all versions)

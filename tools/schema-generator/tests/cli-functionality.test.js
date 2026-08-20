@@ -125,7 +125,10 @@ describe('CLI Execution', () => {
     expect(content).toContain('AUTO-GENERATED FILE');
     expect(content).toContain('Generator:');
     expect(content).toContain('Schema Version:');
-    expect(content).toContain('Generated:');
-    expect(content).toMatch(/\d{4}-\d{2}-\d{2}/); // Date format
+    expect(content).toContain('Source Schema:');
+    // Deliberately no timestamp: a volatile "Generated: <now>" line would
+    // make every regeneration produce a different file even with zero
+    // schema/template changes, defeating a byte-for-byte CI sync check.
+    expect(content).not.toContain('Generated:');
   });
 });

@@ -122,6 +122,16 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate
 
+    # Same reasoning as the `test` job: a real `terraform plan` against the
+    # real hashicorp/aws provider needs LocalStack + fake static creds, never
+    # the real AWS secrets (those stay reserved for test.yml's manually-
+    # triggered aws-testing job).
+    env:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://localhost:4566
+
     strategy:
       matrix:
         config-file:
@@ -149,6 +159,9 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
+      - name: Start LocalStack
+        run: make localstack-start
+
       - name: Terraform Init
         run: terraform init -backend=false
 
@@ -159,6 +172,10 @@ jobs:
             -var="config_format=typescript" \
             -var="lambda_code_path=tests/fixtures" \
             -out=tfplan
+
+      - name: Stop LocalStack
+        if: always()
+        run: make localstack-clean
 
   # Conversion tool tests
   test-conversion:
@@ -185,7 +202,7 @@ jobs:
       - name: Test Conversion Tool
         run: |
           node scripts/elemental-to-serverless-converter.js \
-            ../infra/events/elemental-event-driven-service/examples/comprehensive-service.yaml \
+            scripts/examples/comprehensive-service.yaml \
             /tmp/converted-service.yml
 
       - name: Validate Converted Configuration
