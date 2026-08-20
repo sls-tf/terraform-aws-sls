@@ -20,6 +20,21 @@ and are published as git tags (`vMAJOR.MINOR.PATCH`).
   Added `tests/alarm_sets_sam.tftest.hcl` — the yaml-format alarm tests never
   exercised the SAM branch, which is how this shipped in v0.7.0 unnoticed.
 
+- **Six more spots relying on `&&` short-circuiting away an error, which it
+  doesn't in every Terraform version.** `try(EXPR, null) != null && (EXPR <
+  128 || ...)` re-accesses `EXPR` raw on the right, unguarded — the left
+  operand being `false` doesn't protect it. Confirmed version-dependent by
+  testing against 1.8.5 directly (passes on 1.14, fails on 1.8 for the
+  identical config/expression): `provider.memorySize`/`timeout` and per-
+  function `memorySize`/`timeout` range checks, `region_warnings`, and the
+  two HTTP-API-v2 `event.api_id` attach-vs-self checks (`tostring(null)`
+  errors the same way). SAM configs hit an extra variant: SAM's parser
+  normalizes an unspecified field to a *present* null-valued key rather than
+  omitting it, so `try()`'s fallback never engages (the access itself doesn't
+  error) and a bare `null` reaches `<`/`>`, which reject it outright —
+  `coalesce(try(EXPR, null), fallback)` alongside `try()` is what catches
+  that case. Applied both together at every affected site.
+
 ## v0.11.0
 
 ### Added
