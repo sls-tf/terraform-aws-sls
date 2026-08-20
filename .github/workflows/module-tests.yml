@@ -21,7 +21,10 @@ on:
   workflow_dispatch:
 
 env:
-  NODE_VERSION: '20'
+  # >=22.7: TypeScript config files run on Node's native type-stripping
+  # (scripts/package.json's own comment) -- test-typescript needs this to
+  # actually exercise native TS execution rather than hard-failing every run.
+  NODE_VERSION: '22'
   TERRAFORM_VERSION: '1.8'
 
 jobs:
