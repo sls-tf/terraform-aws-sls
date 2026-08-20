@@ -206,8 +206,10 @@ jobs:
             /tmp/converted-service.yml
 
       - name: Validate Converted Configuration
+        working-directory: scripts
         run: |
-          # Check if the converted file is valid YAML
+          # Check if the converted file is valid YAML (js-yaml lives in
+          # scripts/node_modules -- this must run from scripts/ to resolve it)
           node -e "
             const yaml = require('js-yaml');
             const fs = require('fs');

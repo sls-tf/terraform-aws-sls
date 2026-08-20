@@ -31,6 +31,16 @@ jobs:
         working-directory: tools/schema-generator
         run: npm ci
 
+      # Must run BEFORE "Regenerate validation code": generateValidationCode's
+      # terraform-fmt post-processing step (code-generator.js formatTerraform)
+      # silently falls back to unformatted output if `terraform` isn't on
+      # PATH yet, which is exactly what made every regeneration here diverge
+      # from the properly-fmt'd committed files regardless of any real drift.
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.0"
+
       - name: Store current generated files checksum
         run: |
           echo "Computing checksums of existing generated files..."
@@ -70,11 +80,6 @@ jobs:
             exit 1
           fi
           echo "✓ Generated files are in sync!"
-
-      - name: Verify Terraform formatting
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.5.0"
 
       - name: Check generated code formatting
         run: |
