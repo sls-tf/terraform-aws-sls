@@ -26,7 +26,7 @@ run "sam_alarms_with_defaults_and_custom_group" {
 
   variables {
     config_path               = "tests/fixtures/sam-alarm-sets.yaml"
-    config_format              = "sam"
+    config_format             = "sam"
     sam_template_parameters   = { AlertsTopicArn = "arn:aws:sns:eu-west-2:534294601285:alerts" }
     structural_sam_parameters = ["AlertsTopicArn"]
   }
