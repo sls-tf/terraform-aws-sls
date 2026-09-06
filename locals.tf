@@ -169,7 +169,15 @@ locals {
       # Validate function timeout range
       try(func.timeout, null) != null &&
       (coalesce(try(func.timeout, null), 0) < 1 || coalesce(try(func.timeout, null), 0) > 900) ?
-      ["Function '${func_name}' has invalid 'timeout'. Must be between 1 and 900 seconds, got: ${try(func.timeout, "")}."] : []
+      ["Function '${func_name}' has invalid 'timeout'. Must be between 1 and 900 seconds, got: ${try(func.timeout, "")}."] : [],
+
+      # Validate function reservedConcurrency. -1 is AWS's "unreserved"
+      # sentinel and stays legal; 0 is legal too (it stops the function being
+      # invoked), so only values below -1 are rejected. coalesce() around the
+      # re-access for the same reason as memorySize/timeout above.
+      try(func.reservedConcurrency, null) != null &&
+      coalesce(try(func.reservedConcurrency, null), 0) < -1 ?
+      ["Function '${func_name}' has invalid 'reservedConcurrency'. Must be -1 (unreserved) or >= 0, got: ${try(func.reservedConcurrency, "")}."] : []
     )
   ])
 

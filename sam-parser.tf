@@ -524,6 +524,16 @@ locals {
         memorySize  = try(resource.Properties.MemorySize, null)
         timeout     = try(resource.Properties.Timeout, null)
 
+        # Reserved concurrency: function-level ReservedConcurrentExecutions,
+        # falling back to Globals.Function (SAM allows it in both places).
+        # coalesce() picks the first NON-NULL, so an explicit 0 (function
+        # disabled) survives instead of being read as "unset"; the outer try()
+        # covers neither being present, since coalesce errors on all-null.
+        reserved_concurrency = try(coalesce(
+          try(tonumber(resource.Properties.ReservedConcurrentExecutions), null),
+          try(tonumber(local.sam_function_globals.ReservedConcurrentExecutions), null),
+        ), null)
+
         # Architectures: ["arm64"] or ["x86_64"]; null defers to Lambda default (x86_64)
         architectures = try(tolist(resource.Properties.Architectures), null)
 

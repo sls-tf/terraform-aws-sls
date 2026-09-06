@@ -3,6 +3,38 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.12.0
+
+### Added
+
+- **Reserved concurrency on functions.** `aws_lambda_function` now sets
+  `reserved_concurrent_executions` from SAM
+  `Properties.ReservedConcurrentExecutions` (with `Globals.Function`
+  inheritance, which SAM permits) or yaml `functions.<name>.reservedConcurrency`.
+  Previously the property was silently dropped: a template asking for a
+  reservation got an unreserved function, and — worse for the case that
+  prompted this — a brownfield function that HAD a reservation lost it on
+  adoption, turning a capped consumer of a rate-limited downstream (SES, a
+  third-party API) into an uncapped one with no plan line saying so.
+
+  Unset stays `null` rather than `-1`, so functions that never had a
+  reservation import diff-free.
+
+  `0` is preserved as `0`. It is a real value — a reservation of zero, which
+  stops the function being invoked at all — and is NOT the same as absent, so
+  the lookup uses `coalesce()` (first non-null) rather than anything that
+  treats zero as falsy. Both meanings are covered by
+  `tests/reserved_concurrency.tftest.hcl`, including a function-level `0`
+  overriding a non-zero `Globals` value.
+
+  Validation rejects values below `-1` in both the yaml
+  (`function_validation_errors`) and SAM (`sam-validation.tf`) paths; `-1` is
+  AWS's own "unreserved" sentinel and stays legal.
+
+  Also corrects the docs site, which showed a `reservedConcurrencyLimit` key
+  that has never existed in serverless-framework or in this module, alongside
+  a `provisionedConcurrency` key the module does not implement.
+
 ## v0.11.1
 
 ### Fixed

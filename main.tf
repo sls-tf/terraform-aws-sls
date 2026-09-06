@@ -236,6 +236,20 @@ resource "aws_lambda_function" "functions" {
   description   = try(each.value.description, null)
   architectures = try(each.value.architectures, null)
 
+  # Reserved concurrency (SAM ReservedConcurrentExecutions, incl. Globals.Function;
+  # yaml reservedConcurrency). Null when unset — that is the provider default
+  # (unreserved, -1), so a brownfield function that never had a reservation
+  # imports diff-free rather than showing a spurious change.
+  #
+  # 0 is a real, meaningful value (it stops the function being invoked at all),
+  # so the lookup must not treat it as absent: coalesce() returns the first
+  # NON-NULL argument, which preserves 0, and the outer try() covers "neither
+  # key present" (coalesce errors when every argument is null).
+  reserved_concurrent_executions = try(coalesce(
+    try(each.value.reserved_concurrency, null),
+    try(each.value.reservedConcurrency, null),
+  ), null)
+
   # Lambda layers + env-var encryption key (SAM Layers/KmsKeyArn, yaml
   # layers/kmsKeyArn).
   layers      = try(each.value.layers, null)

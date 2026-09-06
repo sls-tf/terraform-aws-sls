@@ -54,6 +54,12 @@ locals {
           try(resource.Properties.Timeout, null) != null &&
           (coalesce(try(resource.Properties.Timeout, null), 0) < 1 || coalesce(try(resource.Properties.Timeout, null), 0) > 900) ? [
             "SAM function '${logical_id}' Timeout must be between 1 and 900 seconds, got: ${try(resource.Properties.Timeout, "")}."
+          ] : [],
+          # -1 is AWS's "unreserved" sentinel and 0 legitimately disables the
+          # function, so only values below -1 are invalid.
+          try(resource.Properties.ReservedConcurrentExecutions, null) != null &&
+          coalesce(try(resource.Properties.ReservedConcurrentExecutions, null), 0) < -1 ? [
+            "SAM function '${logical_id}' ReservedConcurrentExecutions must be -1 (unreserved) or >= 0, got: ${try(resource.Properties.ReservedConcurrentExecutions, "")}."
           ] : []
         )
         if try(resource.Type, "") == "AWS::Serverless::Function"

@@ -99,9 +99,10 @@ resource "aws_lambda_function" "hello" {
     layers:
       - arn:aws:lambda:us-east-1:123456789:layer:shared-libraries:1
 
-    # Concurrency settings
-    reservedConcurrencyLimit: 10
-    provisionedConcurrency: 5
+    # Reserved concurrency: caps this function AND reserves that share of the
+    # account pool for it. Omit to leave it unreserved; 0 disables invocation.
+    # SAM equivalent: Properties.ReservedConcurrentExecutions (Globals too).
+    reservedConcurrency: 10
 
     # Dead Letter Queue
     deadLetterArn: arn:aws:sqs:us-east-1:123456789:queue/dead-letter-queue

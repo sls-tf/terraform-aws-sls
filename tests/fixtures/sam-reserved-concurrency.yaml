@@ -1,0 +1,32 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM application exercising ReservedConcurrentExecutions
+
+Globals:
+  Function:
+    Runtime: nodejs18.x
+    MemorySize: 512
+    Timeout: 15
+    ReservedConcurrentExecutions: 5
+
+Resources:
+  # Inherits the Globals reservation.
+  InheritFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/inherit.handler
+
+  # Function-level value overrides Globals.
+  OverrideFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/override.handler
+      ReservedConcurrentExecutions: 2
+
+  # 0 is a real value — the function cannot be invoked at all. It must NOT be
+  # read as "unset" and fall back to the Globals value.
+  DisabledFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/disabled.handler
+      ReservedConcurrentExecutions: 0
