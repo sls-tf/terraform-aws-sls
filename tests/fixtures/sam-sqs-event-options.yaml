@@ -1,0 +1,52 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM application exercising SQS event source mapping options
+
+Globals:
+  Function:
+    Runtime: nodejs24.x
+    MemorySize: 256
+    Timeout: 30
+
+Resources:
+  # Every optional SQS event property set explicitly.
+  ProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handler.handler
+      Events:
+        EmailQueue:
+          Type: SQS
+          Properties:
+            Queue: arn:aws:sqs:eu-west-2:123456789012:email-queue
+            BatchSize: 10
+            Enabled: true
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+            MaximumBatchingWindowInSeconds: 5
+            ScalingConfig:
+              MaximumConcurrency: 20
+
+  # Queue + batch size only: everything else must fall back to the module's
+  # own defaults rather than being pinned to an explicit null.
+  MinimalFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handler.handler
+      Events:
+        PlainQueue:
+          Type: SQS
+          Properties:
+            Queue: arn:aws:sqs:eu-west-2:123456789012:plain-queue
+
+  # Enabled: false is a real value and must not be read as "unset".
+  DisabledMappingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handler.handler
+      Events:
+        PausedQueue:
+          Type: SQS
+          Properties:
+            Queue: arn:aws:sqs:eu-west-2:123456789012:paused-queue
+            Enabled: false

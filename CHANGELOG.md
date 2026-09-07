@@ -3,6 +3,34 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.13.0
+
+### Added
+
+- **SAM SQS events: `Enabled`, `FunctionResponseTypes`,
+  `MaximumBatchingWindowInSeconds` and `ScalingConfig.MaximumConcurrency` are
+  now translated.** The SAM → sls event mapping carried only `Queue` and
+  `BatchSize`, so every other property on an `Events` entry of `Type: SQS` was
+  dropped before `event_source_mappings.tf` ever saw it — even though the
+  resource has supported all four for yaml consumers since the event-source
+  work landed.
+
+  `FunctionResponseTypes` is the damaging one on a brownfield adoption: a
+  mapping deployed with `[ReportBatchItemFailures]` came back without it, and
+  partial-batch failure reporting silently reverted to whole-batch retries with
+  nothing in the plan naming the change. `Enabled: false` likewise came back
+  enabled.
+
+  Optional properties are emitted only when present, so unset ones still fall
+  through to the module's own defaults rather than being pinned to an explicit
+  null. `Enabled: false` is preserved as `false`, not read as absent. Covered
+  by `tests/sam_sqs_event_options.tftest.hcl`.
+
+  Not yet translated from SAM: `FilterCriteria` (the SAM shape carries each
+  pattern as a pre-encoded JSON string, which the resource's `filterPatterns`
+  would double-encode), and the DynamoDB-stream branch still maps only
+  `StartingPosition`/`BatchSize`.
+
 ## v0.12.0
 
 ### Added

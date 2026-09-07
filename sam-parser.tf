@@ -345,10 +345,33 @@ locals {
         # !Ref references (e.g. "MyQueue") are preserved as strings;
         # ARN format validation is skipped for SAM format in locals.tf.
         try(event.Type, "") == "SQS" ? jsonencode({
-          sqs = {
-            arn       = tostring(try(event.Properties.Queue, ""))
-            batchSize = try(event.Properties.BatchSize, 10)
-          }
+          sqs = merge(
+            {
+              arn       = tostring(try(event.Properties.Queue, ""))
+              batchSize = try(event.Properties.BatchSize, 10)
+            },
+            # Optional settings are emitted ONLY when set, so an unset property
+            # leaves the event_source_mappings.tf try() probes to their own
+            # defaults rather than handing them an explicit null (which SAM's
+            # parser produces for absent keys — see the v0.11.1 notes).
+            #
+            # Dropping these silently was a brownfield hazard: a queue consumer
+            # adopting the module lost Enabled and, worse, FunctionResponseTypes
+            # — so partial-batch reporting reverted to whole-batch retries with
+            # nothing in the plan naming it.
+            try(event.Properties.Enabled, null) != null ? {
+              enabled = tobool(event.Properties.Enabled)
+            } : {},
+            try(event.Properties.FunctionResponseTypes, null) != null ? {
+              functionResponseTypes = [for t in tolist(event.Properties.FunctionResponseTypes) : tostring(t)]
+            } : {},
+            try(event.Properties.MaximumBatchingWindowInSeconds, null) != null ? {
+              maximumBatchingWindowInSeconds = tonumber(event.Properties.MaximumBatchingWindowInSeconds)
+            } : {},
+            try(event.Properties.ScalingConfig.MaximumConcurrency, null) != null ? {
+              scalingConfig = { maximumConcurrency = tonumber(event.Properties.ScalingConfig.MaximumConcurrency) }
+            } : {},
+          )
         }) :
 
         # Schedule → schedule. Name/Description are SAM-native; TargetId and
