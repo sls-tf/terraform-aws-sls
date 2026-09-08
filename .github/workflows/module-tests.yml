@@ -234,6 +234,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate
 
+    # upload-sarif writes to the code-scanning API, which the default read-only
+    # GITHUB_TOKEN cannot reach — the step failed with "Resource not accessible
+    # by integration" on every run, which is what has kept this workflow red on
+    # main since v0.11.1 despite every test job passing.
+    permissions:
+      contents: read
+      security-events: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
