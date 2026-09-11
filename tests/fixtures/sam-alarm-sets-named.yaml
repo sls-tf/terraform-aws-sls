@@ -1,0 +1,46 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  SAM template whose functions carry an explicit, parameterised FunctionName AND
+  whose parameters include one fed from a co-planned resource attribute (unknown
+  at plan). Alarm-set names must come from the STRUCTURAL parse, so the alarm
+  for_each keys stay plan-known.
+
+Parameters:
+  AlertsTopicArn:
+    Type: String
+  Environment:
+    Type: String
+    Default: dev
+  # Stands in for the real-world trigger: a secret created in the same apply, so
+  # its ARN is unknown at plan. Referenced only as an env var, never structurally.
+  CoPlannedSecretArn:
+    Type: String
+
+Metadata:
+  SlsTf:
+    Alarms:
+      defaults:
+        actions:
+          - !Ref AlertsTopicArn
+      groups:
+        lambda:
+          resource_names: []
+          metrics:
+            - name: Errors
+              statistic: Sum
+              period: 300
+              threshold: 1
+              evaluationPeriods: 1
+              comparisonOperator: GreaterThanOrEqualToThreshold
+
+Resources:
+  IngestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ingest-${Environment}
+      Handler: index.handler
+      Runtime: nodejs18.x
+      Environment:
+        Variables:
+          SECRET_ARN: !Ref CoPlannedSecretArn

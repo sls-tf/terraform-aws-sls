@@ -3,6 +3,42 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.13.1
+
+### Fixed
+
+- **Alarm sets: lambda alarm names are read from the structural template parse.**
+  `_alarm_class_all_names.lambda` took each function's name from the RESOLVED
+  config object (`functions_with_defaults[fn].name`). Those names are the
+  `for_each` KEYS of `aws_cloudwatch_metric_alarm.set`, and the resolved object
+  is unknown at plan whenever any `sam_template_parameters` value is a
+  co-planned resource attribute — the ARN of a secret created in the same apply,
+  say. One unknown leaf renders the whole parsed object unknown, so every alarm
+  key went unknown and the plan aborted outright:
+
+      Error: Invalid for_each argument
+        on alarm-sets.tf line 143, in resource "aws_cloudwatch_metric_alarm" "set":
+        local.alarm_set_alarms will be known only after apply
+
+  Nothing in the configuration was wrong, and the error named neither the
+  parameter nor the function. Worse, it was self-sustaining: the plan that would
+  have created the resource is the plan that could not run, so the ARN stayed
+  unknown forever and the environment wedged — no apply, and every downstream
+  pipeline gated on it red.
+
+  The lambda class was the only one reading a resolved value; every other class
+  (dynamodb, sqs, sns, s3, eventbridge, athena) already sourced its names
+  structurally, as did `_function_handler` / `_function_runtime` for the same
+  stated reason. It now does too, via `local._function_name_structural`. Other
+  config formats are plan-known and keep reading the resolved name.
+
+  ⚠️ Behaviour change for SAM templates whose `FunctionName` interpolates a
+  parameter (`!Sub my-fn-${Environment}`): the structural parse resolves
+  parameters against template Defaults unless they are listed in
+  `structural_sam_parameters`. Such a parameter must now be declared there or
+  the alarm will track the Default-derived name. This is the same contract every
+  other alarm class has always had; check the plan for renamed alarms on upgrade.
+
 ## v0.13.0
 
 ### Added

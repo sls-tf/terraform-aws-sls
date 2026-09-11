@@ -67,7 +67,15 @@ locals {
   # fallback, from plan-known (structural) sources — these names become
   # for_each keys.
   _alarm_class_all_names = {
-    lambda = [
+    # SAM reads the name structurally (local._function_name_structural) and must
+    # never fall back to the resolved function object here: these strings are
+    # for_each KEYS, and the resolved object is unknown at plan whenever any
+    # sam_template_parameter is a co-planned resource attribute. Other config
+    # formats are plan-known, so they keep reading the resolved name.
+    lambda = var.config_format == "sam" ? [
+      for fn in local._function_names :
+      try(local._function_name_structural[fn], null) != null ? tostring(local._function_name_structural[fn]) : "${local._generated_name_prefix}-${fn}"
+      ] : [
       for fn in local._function_names :
       try(local.functions_with_defaults[fn].name, null) != null ? tostring(local.functions_with_defaults[fn].name) : "${local._generated_name_prefix}-${fn}"
     ]
