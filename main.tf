@@ -226,13 +226,7 @@ resource "aws_lambda_function" "functions" {
   # disagree and leave every alarm watching a function name that was never
   # created. Other config formats are plan-known and keep reading the resolved
   # name.
-  function_name = var.config_format == "sam" ? (
-    try(local._function_name_structural[each.key], null) != null
-    ? tostring(local._function_name_structural[each.key])
-    : "${local._generated_name_prefix}-${each.key}"
-    ) : (
-    try(each.value.name, null) != null ? each.value.name : "${local._generated_name_prefix}-${each.key}"
-  )
+  function_name = local._function_name_effective[each.key]
   # Honor an explicit Role; otherwise use the per-function role created above.
   role = try(local._function_has_explicit_role[each.key], false) ? local._function_role_arn[each.key] : aws_iam_role.lambda_execution[each.key].arn
 

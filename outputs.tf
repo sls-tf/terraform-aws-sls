@@ -56,9 +56,13 @@ output "function_names" {
   description = "Map of Lambda function names keyed by function name"
   # Compute from config rather than resource attribute to avoid AWS provider sensitivity on
   # aws_lambda_function.function_name (which trickles through environment.variables).
+  # Shares _function_name_effective with the resource, so this output names the
+  # function that is actually created. Read from the resolved object it went
+  # unknown whenever a sam_template_parameter was co-planned, and consumers feed
+  # it to aws_lambda_permission.function_name (ForceNew) — which then planned a
+  # destroy/recreate of every permission.
   value = nonsensitive({
-    for k, func in local.functions_with_defaults :
-    k => try(func.name, "${local._generated_name_prefix}-${k}")
+    for k in local._function_names : k => local._function_name_effective[k]
   })
 }
 

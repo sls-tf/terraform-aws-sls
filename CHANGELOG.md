@@ -7,6 +7,18 @@ and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
 ### Fixed
 
+- **One shared definition for the name a function is created with
+  (`local._function_name_effective`), used by the resource, the `function_names`
+  output and the alarm dimension.** All three derived the name independently and
+  could disagree; a divergence meant alarms watched, and consumers granted
+  permissions against, a name that was never created.
+
+  The `function_names` output was the remaining resolved reader. Consumers feed
+  it to `aws_lambda_permission.function_name`, which is also ForceNew, so an
+  unknown there planned a destroy and recreate of every permission — 76 of them
+  on the module that surfaced this — even once the functions themselves were
+  stable.
+
 - **`aws_lambda_function.function_name` is read from the structural template
   parse for SAM.** It came from the RESOLVED config object, which goes unknown
   at plan the moment any `sam_template_parameters` value is a co-planned

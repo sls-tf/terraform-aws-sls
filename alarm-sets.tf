@@ -72,13 +72,9 @@ locals {
     # for_each KEYS, and the resolved object is unknown at plan whenever any
     # sam_template_parameter is a co-planned resource attribute. Other config
     # formats are plan-known, so they keep reading the resolved name.
-    lambda = var.config_format == "sam" ? [
-      for fn in local._function_names :
-      try(local._function_name_structural[fn], null) != null ? tostring(local._function_name_structural[fn]) : "${local._generated_name_prefix}-${fn}"
-      ] : [
-      for fn in local._function_names :
-      try(local.functions_with_defaults[fn].name, null) != null ? tostring(local.functions_with_defaults[fn].name) : "${local._generated_name_prefix}-${fn}"
-    ]
+    # Shares _function_name_effective with the resource and the function_names
+    # output, so an alarm can only ever name a function that is created.
+    lambda = [for fn in local._function_names : local._function_name_effective[fn]]
     dynamodb = [
       for lid in keys(local.dynamodb_tables) :
       tostring(try(local._custom_resources_structure[lid].Properties.TableName, "${local.to_snake_case[lid]}-${local.provider_with_defaults.stage}"))

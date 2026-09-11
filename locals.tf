@@ -334,6 +334,31 @@ locals {
     fn => try(tostring(local.sam_structure.Resources[fn].Properties.FunctionName), null)
   } : {}
 
+  # The name each function is actually CREATED with. One definition, shared by
+  # the resource (main.tf), the function_names output, and the alarm dimension
+  # (alarm-sets.tf), so the three cannot disagree — a divergence between them
+  # means alarms watch, and consumers grant permissions against, a name that was
+  # never created.
+  #
+  # SAM reads the structural parse: the resolved object goes unknown at plan
+  # whenever a sam_template_parameter is a co-planned resource attribute, and
+  # this name reaches ForceNew arguments (aws_lambda_function.function_name, and
+  # aws_lambda_permission.function_name in consumers), so an unknown here plans
+  # destroy/recreate rather than deferring a value. Other config formats are
+  # plan-known and read the resolved name.
+  _function_name_effective = {
+    for fn in local._function_names :
+    fn => var.config_format == "sam" ? (
+      try(local._function_name_structural[fn], null) != null
+      ? tostring(local._function_name_structural[fn])
+      : "${local._generated_name_prefix}-${fn}"
+      ) : (
+      try(local.functions_with_defaults[fn].name, null) != null
+      ? tostring(local.functions_with_defaults[fn].name)
+      : "${local._generated_name_prefix}-${fn}"
+    )
+  }
+
   # Structural CodeUri per function (drives the S3 artefact key). Sourced from the
   # template so the lambda's s3_key stays known at plan regardless of unknown params.
   _function_code_uri = {

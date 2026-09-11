@@ -28,6 +28,13 @@ run "greenfield_plan_with_unknown_param" {
   # then plans a DESTROY AND RECREATE of every function — taking each one's ARN,
   # permissions and event wiring with it. The name depends only on the template
   # and on plan-known parameters, so it must stay known.
+  # The function_names OUTPUT must be known too: consumers feed it to
+  # aws_lambda_permission.function_name, which is also ForceNew.
+  assert {
+    condition     = output.function_names_out["HelloFunction"] == "hello-dev"
+    error_message = "function_names output must be plan-time known; consumers pass it to ForceNew arguments"
+  }
+
   assert {
     condition     = output.function_name_planned == "hello-dev"
     error_message = "function_name must be plan-time known (got an unknown or wrong value); an unknown here force-replaces every function"
