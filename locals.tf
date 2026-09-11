@@ -320,6 +320,20 @@ locals {
     ), null)
   } : {}
 
+  # Structural FunctionName per function. Same reasoning as the handler/runtime
+  # pair above, and load-bearing for a different reason: these names become the
+  # for_each KEYS of the alarm sets (alarm-sets.tf, `_alarm_class_all_names.lambda`).
+  # Read from the resolved function object they go unknown as soon as any
+  # sam_template_parameter is a co-planned resource attribute — a secret ARN
+  # created in the same apply, say — and an unknown for_each key aborts the whole
+  # plan with "Invalid for_each argument". Every other alarm class already reads
+  # its names structurally; this one did not. null means the template declares no
+  # explicit FunctionName, so the caller falls back to the generated name.
+  _function_name_structural = var.config_format == "sam" && local.sam_structure != null ? {
+    for fn in local._function_names :
+    fn => try(tostring(local.sam_structure.Resources[fn].Properties.FunctionName), null)
+  } : {}
+
   # Structural CodeUri per function (drives the S3 artefact key). Sourced from the
   # template so the lambda's s3_key stays known at plan regardless of unknown params.
   _function_code_uri = {

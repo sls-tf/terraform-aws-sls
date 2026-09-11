@@ -50,3 +50,75 @@ run "sam_alarms_with_defaults_and_custom_group" {
     error_message = "custom_metric group namespace override not applied"
   }
 }
+
+# Regression: the lambda alarm class used to take its resource names from the
+# RESOLVED function object (local.functions_with_defaults[fn].name). Those names
+# are the alarm for_each KEYS, and the resolved object goes unknown the moment
+# any sam_template_parameter is a co-planned resource attribute — an ARN for a
+# secret created in the same apply, say — so the whole plan aborted with
+# "Invalid for_each argument: local.alarm_set_alarms will be known only after
+# apply". Reading the name from the structural parse keeps the keys plan-known.
+#
+# `Environment` is listed as structural so the !Sub in FunctionName resolves to
+# the caller's value rather than the template Default — the documented contract
+# for any parameter that appears in a resource name.
+run "sam_alarm_names_come_from_the_structural_parse" {
+  command = plan
+
+  variables {
+    config_path   = "tests/fixtures/sam-alarm-sets-named.yaml"
+    config_format = "sam"
+    sam_template_parameters = {
+      AlertsTopicArn     = "arn:aws:sns:eu-west-2:534294601285:alerts"
+      Environment        = "develop"
+      CoPlannedSecretArn = "arn:aws:secretsmanager:eu-west-2:534294601285:secret:co-planned-AbCdEf"
+    }
+    structural_sam_parameters = ["AlertsTopicArn", "Environment"]
+  }
+
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.set) == 1
+    error_message = "Expected 1 lambda alarm, got ${length(aws_cloudwatch_metric_alarm.set)}: ${jsonencode(keys(aws_cloudwatch_metric_alarm.set))}"
+  }
+
+  # The key is the template's explicit FunctionName, !Sub-resolved against the
+  # caller's Environment — not the generated "<prefix>-IngestFunction" fallback.
+  assert {
+    condition     = contains(keys(aws_cloudwatch_metric_alarm.set), "lambda-Errors-ingest-develop")
+    error_message = "Alarm key did not use the template's explicit FunctionName: ${jsonencode(keys(aws_cloudwatch_metric_alarm.set))}"
+  }
+
+  # The alarm must point at the same name the lambda resource actually gets.
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.set["lambda-Errors-ingest-develop"].dimensions["FunctionName"] == aws_lambda_function.functions["IngestFunction"].function_name
+    error_message = "Alarm dimension does not match the created function's name"
+  }
+}
+
+# The guard with teeth. Identical to the run above except `Environment` is NOT
+# declared structural, so the structural parse resolves the !Sub against the
+# template Default ("dev") while the resolved parse would give the caller's
+# value ("develop"). Asserting the Default-derived name is what proves the alarm
+# name is read from the structural parse — the property the plan-time-known
+# for_each keys depend on. It also pins the footgun this implies, and which
+# structural_sam_parameters exists to close: a parameter that appears in a
+# resource NAME must be declared structural or the alarm tracks the wrong name.
+run "sam_alarm_names_ignore_undeclared_parameters" {
+  command = plan
+
+  variables {
+    config_path   = "tests/fixtures/sam-alarm-sets-named.yaml"
+    config_format = "sam"
+    sam_template_parameters = {
+      AlertsTopicArn     = "arn:aws:sns:eu-west-2:534294601285:alerts"
+      Environment        = "develop"
+      CoPlannedSecretArn = "arn:aws:secretsmanager:eu-west-2:534294601285:secret:co-planned-AbCdEf"
+    }
+    structural_sam_parameters = ["AlertsTopicArn"]
+  }
+
+  assert {
+    condition     = contains(keys(aws_cloudwatch_metric_alarm.set), "lambda-Errors-ingest-dev")
+    error_message = "Alarm name was not taken from the structural parse: ${jsonencode(keys(aws_cloudwatch_metric_alarm.set))}"
+  }
+}
