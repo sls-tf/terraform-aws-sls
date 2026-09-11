@@ -23,6 +23,16 @@ run "greenfield_plan_with_unknown_param" {
     error_message = "function for_each keys must be plan-time known"
   }
 
+  # function_name is ForceNew. Read from the resolved config object it goes
+  # unknown as soon as any sam_template_parameter is co-planned, and Terraform
+  # then plans a DESTROY AND RECREATE of every function — taking each one's ARN,
+  # permissions and event wiring with it. The name depends only on the template
+  # and on plan-known parameters, so it must stay known.
+  assert {
+    condition     = output.function_name_planned == "hello-dev"
+    error_message = "function_name must be plan-time known (got an unknown or wrong value); an unknown here force-replaces every function"
+  }
+
   assert {
     condition = (
       output.custom_resource_counts.s3_buckets == 1 &&

@@ -210,7 +210,29 @@ resource "aws_lambda_function" "functions" {
   for_each = local.functions_with_defaults
 
   # Explicit FunctionName from SAM template overrides the auto-generated name.
-  function_name = try(each.value.name, null) != null ? each.value.name : "${local._generated_name_prefix}-${each.key}"
+  #
+  # SAM reads it from the STRUCTURAL parse for the same reason s3_key does
+  # (local._function_code_uri) and alarm names do (alarm-sets.tf): the resolved
+  # function object goes unknown at plan as soon as any sam_template_parameter
+  # is a co-planned resource attribute — a secret ARN created in the same apply,
+  # say. function_name is ForceNew, so an unknown name does not merely defer a
+  # value: it makes Terraform plan a DESTROY AND RECREATE of every function in
+  # the template, taking each one's ARN, permissions and event wiring with it.
+  # The name itself never depends on those parameters, only on the template and
+  # on parameters listed in structural_sam_parameters.
+  #
+  # It also keeps this name and the alarm dimension in agreement. Alarm names
+  # became structural in 0.13.1 while this stayed resolved, so the two could
+  # disagree and leave every alarm watching a function name that was never
+  # created. Other config formats are plan-known and keep reading the resolved
+  # name.
+  function_name = var.config_format == "sam" ? (
+    try(local._function_name_structural[each.key], null) != null
+    ? tostring(local._function_name_structural[each.key])
+    : "${local._generated_name_prefix}-${each.key}"
+    ) : (
+    try(each.value.name, null) != null ? each.value.name : "${local._generated_name_prefix}-${each.key}"
+  )
   # Honor an explicit Role; otherwise use the per-function role created above.
   role = try(local._function_has_explicit_role[each.key], false) ? local._function_role_arn[each.key] : aws_iam_role.lambda_execution[each.key].arn
 

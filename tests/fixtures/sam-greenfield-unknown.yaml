@@ -9,11 +9,20 @@ Parameters:
   LambdaSecurityGroupId:
     Type: String
     Description: SG id from the same plan (unknown at greenfield plan)
+  Stage:
+    Type: String
+    Description: Plan-known parameter interpolated into FunctionName.
+    Default: dev
 
 Resources:
   HelloFunction:
     Type: AWS::Serverless::Function
     Properties:
+      # Explicit name interpolating a plan-known parameter, alongside an
+      # UNKNOWN parameter in Environment below. function_name is ForceNew, so
+      # if it is read from the resolved object the unknown env var renames it
+      # to (known after apply) and Terraform plans a destroy/recreate.
+      FunctionName: !Sub hello-${Stage}
       Handler: src/index.handler
       Runtime: nodejs18.x
       MemorySize: 256

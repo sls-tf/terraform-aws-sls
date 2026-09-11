@@ -41,3 +41,10 @@ output "function_keys" {
 output "custom_resource_counts" {
   value = module.sls.custom_resources_count
 }
+
+# The planned function_name. Must be the plan-known "hello-dev" even though an
+# unknown parameter reaches the same function's Environment: function_name is
+# ForceNew, so an unknown here plans a destroy/recreate of every function.
+output "function_name_planned" {
+  value = module.sls.lambda_functions["HelloFunction"].function_name
+}

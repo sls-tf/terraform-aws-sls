@@ -3,6 +3,44 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.13.2
+
+### Fixed
+
+- **`aws_lambda_function.function_name` is read from the structural template
+  parse for SAM.** It came from the RESOLVED config object, which goes unknown
+  at plan the moment any `sam_template_parameters` value is a co-planned
+  resource attribute — the ARN of a secret created in the same apply, say. One
+  unknown leaf renders the whole parsed object unknown, and the function's own
+  name went with it, even though the name depends on none of those parameters.
+
+  `function_name` is ForceNew, so this did not merely defer a value. Terraform
+  planned a **destroy and recreate of every function in the template**, taking
+  each one's ARN, permissions and event wiring with it:
+
+      ~ function_name = "identity-auth-develop" -> (known after apply) # forces replacement
+
+  v0.13.1 fixed the same root cause for alarm *names* (they are `for_each` keys,
+  so an unknown aborted the plan outright) but left the function's own name
+  resolved. That also left the two able to disagree: alarms watched the
+  structural name while the function was created with the resolved one, so a
+  divergence pointed every alarm at a function that was never created. They are
+  now sourced identically and agree by construction.
+
+  `_function_code_uri` already took this approach for `s3_key`, for the same
+  stated reason. Other config formats are plan-known and keep reading the
+  resolved name.
+
+  Covered by `tests/greenfield_unknown_params.tftest.hcl`, which asserts the
+  planned `function_name` is a known string while an unknown parameter reaches
+  the same function's `Environment`. Without the fix the test does not merely
+  fail an equality — Terraform reports `Unknown condition value`.
+
+  ⚠️ Same contract as v0.13.1: a parameter interpolated into `FunctionName`
+  (`!Sub my-fn-${Environment}`) must be listed in `structural_sam_parameters`,
+  or the name resolves against the template Default. Check the plan for renamed
+  functions on upgrade — a rename here is a replacement, not an update.
+
 ## v0.13.1
 
 ### Fixed
