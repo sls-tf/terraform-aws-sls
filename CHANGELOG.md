@@ -3,7 +3,7 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
-## v0.13.2
+## v0.13.3
 
 ### Fixed
 
@@ -18,6 +18,10 @@ and are published as git tags (`vMAJOR.MINOR.PATCH`).
   unknown there planned a destroy and recreate of every permission — 76 of them
   on the module that surfaced this — even once the functions themselves were
   stable.
+
+## v0.13.2
+
+### Fixed
 
 - **`aws_lambda_function.function_name` is read from the structural template
   parse for SAM.** It came from the RESOLVED config object, which goes unknown
