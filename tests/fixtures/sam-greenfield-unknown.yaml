@@ -42,6 +42,17 @@ Resources:
               Action: secretsmanager:GetSecretValue
               Resource: !Ref RelaySecretArn
 
+  # No explicit FunctionName: its name comes from _generated_name_prefix, which
+  # must stay plan-known even though RelaySecretArn below is unknown.
+  PlainFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/plain.handler
+      Runtime: nodejs18.x
+      Environment:
+        Variables:
+          RELAY_SECRET_ARN: !Ref RelaySecretArn
+
   UploadBucket:
     Type: AWS::S3::Bucket
     Properties:

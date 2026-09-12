@@ -19,7 +19,7 @@ run "greenfield_plan_with_unknown_param" {
 
   # Keys must be plan-time known even though the parameter value is unknown.
   assert {
-    condition     = tolist(output.function_keys) == tolist(["HelloFunction"])
+    condition     = tolist(output.function_keys) == tolist(["HelloFunction", "PlainFunction"])
     error_message = "function for_each keys must be plan-time known"
   }
 
@@ -28,6 +28,16 @@ run "greenfield_plan_with_unknown_param" {
   # then plans a DESTROY AND RECREATE of every function — taking each one's ARN,
   # permissions and event wiring with it. The name depends only on the template
   # and on plan-known parameters, so it must stay known.
+  # A function with no explicit FunctionName falls back to
+  # "${_generated_name_prefix}-${key}". The prefix is also what names every
+  # execution role and policy, and those names are ForceNew — so an unknown
+  # prefix replaces all of them. Probed here because the role name itself is a
+  # resource attribute, unknown on any create plan either way.
+  assert {
+    condition     = output.function_names_out["PlainFunction"] == "sam-service-dev-PlainFunction"
+    error_message = "generated name prefix must be plan-time known; an unknown prefix replaces every role, policy and attachment"
+  }
+
   # The function_names OUTPUT must be known too: consumers feed it to
   # aws_lambda_permission.function_name, which is also ForceNew.
   assert {
@@ -80,7 +90,7 @@ run "greenfield_plan_functions_only_allowlist" {
   }
 
   assert {
-    condition     = tolist(output.function_keys) == tolist(["HelloFunction"])
+    condition     = tolist(output.function_keys) == tolist(["HelloFunction", "PlainFunction"])
     error_message = "functions must still be created under the allowlist"
   }
 }

@@ -22,10 +22,31 @@ locals {
   # with platform modules that put the environment first.
   # try() on stage: on invalid-config paths provider_with_defaults is null and
   # this local must stay evaluable so config_validation reports the REAL error.
+  # Sourced from parsed_config (file-derived, plan-known), NOT
+  # parsed_config_resolved. The resolved parse goes unknown whenever a
+  # sam_template_parameter is a co-planned resource attribute, and try() catches
+  # errors, not unknowns — so the unknown passed straight through and every
+  # generated name went with it. Those names are ForceNew (aws_iam_role.name,
+  # aws_iam_policy.name), so an unknown did not defer a value: it planned a
+  # destroy and recreate of every execution role and policy, and their
+  # attachments with them. var.stage_override keeps precedence: it comes from
+  # the caller and is plan-known.
+  # SAM reads both from narrow, single-purpose sources. parsed_config is one
+  # large object built from the whole template, so one unknown leaf renders
+  # every field unknown — including service and stage. SAM sets provider.stage
+  # to the literal "dev" (sam-parser.tf), so var.stage_override, itself
+  # caller-supplied and plan-known, is the only other input.
+  _name_prefix_service = var.config_format == "sam" ? local._sam_service_name : try(local.parsed_config.service, "unknown")
+  _name_prefix_stage = coalesce(replace(coalesce(
+    var.stage_override,
+    var.config_format == "sam" ? "dev" : try(local.parsed_config.provider.stage, null),
+    "dev"
+  ), "/\\$\\{[^}]*\\}/", ""), "dev")
+
   _generated_name_prefix = var.generated_name_order == "stage-service" ? (
-    "${try(local.provider_with_defaults.stage, "dev")}-${try(local.parsed_config_resolved.service, "unknown")}"
+    "${local._name_prefix_stage}-${local._name_prefix_service}"
     ) : (
-    "${try(local.parsed_config_resolved.service, "unknown")}-${try(local.provider_with_defaults.stage, "dev")}"
+    "${local._name_prefix_service}-${local._name_prefix_stage}"
   )
 
   # Presence from the STRUCTURAL parse so the check condition stays plan-known

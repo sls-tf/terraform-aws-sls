@@ -501,14 +501,22 @@ locals {
   # This single translation point lets all existing resource blocks work with
   # SAM templates without any changes to downstream code.
 
+  # Service name, read straight off the raw template so it stays plan-known.
+  # It must NOT be reached through sam_as_sls_config / parsed_config: those are
+  # single large objects, and one unknown leaf anywhere in them (a function
+  # env var built from a co-planned resource attribute) renders the whole
+  # object unknown — service included. The name feeds _generated_name_prefix,
+  # which names execution roles and policies, and those names are ForceNew.
+  _sam_service_name = try(
+    length(try(local.sam_structure.Metadata.ServiceName, "")) > 0 ? local.sam_structure.Metadata.ServiceName : "sam-service",
+    "sam-service"
+  )
+
   sam_as_sls_config = var.config_format == "sam" && local.sam_raw != null ? {
     # SAM has no "service" field; prefer Metadata.ServiceName (short, stable),
     # then fall back to "sam-service". Description is intentionally NOT used here
     # because it is often too long for IAM role names (64-char limit).
-    service = try(
-      length(try(local.sam_raw.Metadata.ServiceName, "")) > 0 ? local.sam_raw.Metadata.ServiceName : "sam-service",
-      "sam-service"
-    )
+    service = local._sam_service_name
 
     provider = {
       name = "aws"

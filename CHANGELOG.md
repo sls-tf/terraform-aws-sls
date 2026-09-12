@@ -3,6 +3,39 @@
 All notable changes to this module are documented here. Versions follow semver
 and are published as git tags (`vMAJOR.MINOR.PATCH`).
 
+## v0.13.4
+
+### Fixed
+
+- **Generated resource names (`_generated_name_prefix`) are built from
+  plan-known sources.** The prefix names every execution role and policy, and
+  `aws_iam_role.name` is ForceNew — so an unknown prefix planned a destroy and
+  recreate of all of them, plus their attachments.
+
+  Two layers were at fault. The prefix read `parsed_config_resolved`, a single
+  large object assembled from the whole template: one unknown leaf anywhere in
+  it (a function env var built from a co-planned resource attribute) rendered
+  every field unknown, `service` and `stage` included. `try()` does not help —
+  it catches errors, not unknowns, so the unknown passed straight through the
+  fallback.
+
+  Narrowing to `parsed_config` was not enough, because the SAM service name
+  was itself read from `sam_raw`, which comes from `data.external.sam_yaml` and
+  is unknown at plan. It now reads `sam_structure`, the plan-known structural
+  twin the module already documents as *"Always known at plan. Use this (and
+  only this) for anything that feeds for_each/count keys"*. SAM sets
+  `provider.stage` to the literal `"dev"`, so `var.stage_override` —
+  caller-supplied and plan-known — is the only other input.
+
+  Covered by `tests/greenfield_unknown_params.tftest.hcl`, which gains a
+  function with no explicit `FunctionName` so its name falls back to the
+  prefix. Without the fix Terraform reports `Unknown condition value`.
+
+  ⚠️ Names change only if a template's `Metadata.ServiceName` or
+  `provider.stage` was being supplied through `${self:}` / `${env:}`
+  resolution. A rename of an IAM role is a replacement — check the plan on
+  upgrade.
+
 ## v0.13.3
 
 ### Fixed
